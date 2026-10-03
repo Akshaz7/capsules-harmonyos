@@ -40,6 +40,7 @@ single log is preferred.
 | 2026-10-03 | Claude Code sub-agent | Cloud relay client for the firmware, a fake relay and its test script | `main/relay.c`, `main/relay_sync.c`, `main/capsule_json.c`, `main/ui.c` (QR code and phrase), `mock_relay.py`, `test_relay.sh`, `RELAY.md`, `tests/` | On the real board against the fake: register, pair by phrase, capsule and action from the relay, state back, offline and recovery. QR decoded from a board screenshot. Host tests 1,646 C checks; `test_relay.sh` 106/106 |
 | 2026-10-03 | Claude Code sub-agent (independent reviewer, read-only) | Review the relay client | none; a findings list | No memory-safety or secret findings. One high (re-register loop without backoff), three medium, several low; all fixed and re-checked on the board |
 | 2026-10-03 | Claude Code sub-agent | Make the board's hardware id unguessable | `main/relay.c`, `main/relay_sync.c`, `RELAY.md` | Prompted by a security review of the server: the id was derived from the Wi-Fi MAC alone. Now mixes in a random secret kept on the board; verified across two reboots |
+| 2026-10-03 | Claude Code sub-agent | Board against the deployed relay | serial health line every five minutes (`main/relay.c`) | TLS certificate validated, pairing by phrase, counter, timer and actions through production. 30-minute soak: 814 polls and 176 state reports ok, no reboot, free heap steady at about 50 KB |
 
 ## Unsuccessful approaches
 
@@ -52,8 +53,8 @@ single log is preferred.
 
 ## Known limitations
 
-- The relay client has only talked to a local fake over plain HTTP. HTTPS was checked as a
-  handshake, not as sustained polling, and the real backend is not deployed yet.
+- The relay client has polled the deployed relay over HTTPS for 30 minutes; nothing longer, and
+  no Wi-Fi drop during a TLS session, has been tried.
 - No person has scanned the QR code off the board's screen with a phone yet.
 
 - Motion rep counting is untuned; its thresholds are guesses and it is off by default.

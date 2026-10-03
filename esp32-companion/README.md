@@ -44,14 +44,13 @@ The app does **not** talk to the board directly. It talks to a small cloud relay
 board, or a browser tab open at `/device`) fetch their capsule from the relay and report back.
 That way the phone and the device need no shared Wi-Fi and no IP address.
 
-> **Status, 2026-10-03 22:00:** the relay is **built but not live**. The server routes are an open
-> pull request on `SimpsonLWH/harmoniser-web` and are not deployed; nothing here has run against
-> the real deployment yet. What does run today is the local fake below, which the board and the
-> server code are both tested against (`test_relay.sh`). Cut-off agreed with the team: live and
-> working end to end by 01:00, otherwise the demo sends capsules to the board over local Wi-Fi.
+> **Status, 2026-10-03 22:15:** the relay is **live** at `https://harmoniser.keanuc.net` (also
+> `https://harmoniser-web.vercel.app`). `test_relay.sh` passes 106 of 106 against production, and
+> the board has polled it over HTTPS for 30 minutes with no gap, reboot or failed request. The real
+> app has not yet been run against it.
 
-**Base URL:** `https://harmoniser-web.vercel.app` (a custom domain may replace it). Keep it in one
-constant. Until it is live, run the fake and point the app at it:
+**Base URL:** `https://harmoniser.keanuc.net`. Keep it in one constant. To work offline, run the fake
+and point the app at it:
 
 ```sh
 python3 esp32-companion/mock_relay.py --port 8090 --host 0.0.0.0
