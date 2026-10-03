@@ -91,10 +91,4 @@ This project uses AI-assisted development. Keep this document current and public
 
 ## AI feature disclosure
 
-Complete this section only if AI is part of the product itself; otherwise write "Not applicable."
-
-- Model or service: [Name/version/provider]
-- Inference flow: [On-device, remote, or hybrid; inputs and outputs]
-- Data handling and privacy: [What leaves the device, retention, consent, and safeguards]
-- Failure and fallback behavior: [How errors, latency, offline use, and unsafe output are handled]
-- Evaluation: [Test cases, quality measures, human review, and known model limitations]
+AI is part of the product: Harmoniser turns plain-language requests into capsules. It uses a rule parser, then LFM2-VL-450M on-device through our Cactus port, then Mistral `ministral-14b-latest` (EU) or, if the user opts in, Claude `claude-sonnet-5-5`. The full disclosure covers models, inference flow, data handling and privacy, failure and fallback behaviour, evaluation and limitations. It is in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
