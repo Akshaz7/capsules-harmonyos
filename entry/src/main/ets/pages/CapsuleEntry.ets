@@ -17,6 +17,11 @@ export class CapsuleEntry {
   }
 }
 
+/** 'cloud', 'cloud-eu:<provider>' or 'cloud:<provider>'. */
+export function isCloudOrigin(origin: string): boolean {
+  return origin === 'cloud' || origin.startsWith('cloud-eu:') || origin.startsWith('cloud:');
+}
+
 /** Badge text for a stored GenerateResult.origin; '' for capsules saved before origins were kept. */
 export function originBadge(origin: string): string {
   switch (origin) {
@@ -24,8 +29,13 @@ export function originBadge(origin: string): string {
       return 'Made by rules';
     case 'on-device':
       return 'Made on-device';
-    case 'cloud':
+    case 'cloud-eu:mistral':
+    case 'cloud': // saved before core named the provider; only Mistral was used then
       return 'Made with Mistral (EU)';
+    case 'cloud:anthropic':
+      return 'Made with Claude';
+    case 'cloud:openai':
+      return 'Made with OpenAI';
     case 'imported':
       return 'From someone else';
     default:
@@ -37,7 +47,7 @@ export function originIcon(origin: string): Resource {
   if (origin === 'rules') {
     return $r('sys.symbol.list_bullet');
   }
-  if (origin === 'cloud') {
+  if (isCloudOrigin(origin)) {
     return $r('sys.symbol.cloud');
   }
   if (origin === 'imported') {
