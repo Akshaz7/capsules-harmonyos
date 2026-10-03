@@ -13,6 +13,8 @@ The safety principle behind the whole design: **no model output ever runs as cod
 | 0 | **Template library** (`core/templates/`), 108 templates | On the device | After the rules. Fills a matching template by rule; unclear slots go to the on-device model (grounded values only). Badge "Made on your phone · no internet". The templates were generated with Claude ahead of time and validated; no model runs at request time unless a slot is unclear. | Our code, Apache-2.0 |
 | 1 | **LFM2-VL-450M** (Liquid AI), 4-bit `cq4` build, on the **Cactus** engine v2.2.2, which we ported to HarmonyOS (arm64-v8a, Node-API) | On the device. Weights are in the app sandbox (about 480 MB), not in the `.hap`. | Simple requests no rule matches. Skipped if the model isn't installed. | LFM Open License v1.0; Cactus Compute licence (see [`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 | 2 | **Mistral `ministral-14b-latest`** (Mistral AI, EU), JSON output mode | Mistral API (EU) | Requests that need logic (maths, scoring, converters, quizzes, streaks, inputs), or ones tier 1 rejects. **Default cloud provider.** | Mistral API terms |
+| 0 | **System OCR** (Core Vision Kit `textRecognition`) | On the device | Photos: reads the text first, then the local tiers build from it | HarmonyOS platform API |
+| 2 | **Mistral `pixtral-12b-latest`** (Mistral AI, EU) | Mistral API (EU) | Photos only, when OCR found no text and the cloud is allowed | Mistral API terms |
 | 2 | **Claude `claude-sonnet-5-5`** (Anthropic) | Anthropic API (outside the EU) | Only if **Settings → Advanced → Allow non-EU providers** is on | Anthropic API terms |
 | 2 | Any OpenAI-compatible endpoint | That provider | Same rule as Claude (non-EU unless it is Mistral) | Provider's terms |
 
@@ -50,14 +52,14 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 **After generation, for every source:** the validator rejects unknown fields, types, actions and permissions, type-checks every expression, rejects computed cycles and enforces size limits. The gatekeeper then shows a consent sheet, where each declared permission can be allowed or denied. Anything that needs a denied permission is drawn as blocked, refused when tapped, and logged.
 
-**Shared text** (from the system share panel) uses the same path. Recipes, bills, workouts and lists are converted without a model (`core/SharedText.ets`, max 2,000 characters). Other text goes to the cloud as a quoted request, under the same consent rules. Requests that mention photos or receipts are no longer refused: they are planned as the capsule they describe. In the app, shared text currently goes through the normal request flow; the dedicated converter isn't wired in yet. **Photos (Snap button, wired but not yet seen working end to end):** `generateCapsuleFromImage` tries the device first, then (only with cloud consent) sends the photo to the chosen provider, EU first, to be transcribed, and the cloud capsule model builds from the transcript. On-device OCR (T5-6) is planned as the first step. On-device vision is blocked: LFM2-VL-450M on Cactus v2.2.2 never returns on an image prompt.
+**Shared text** (from the system share panel) uses the same path. Recipes, bills, workouts and lists are converted without a model (`core/SharedText.ets`, max 2,000 characters). Other text goes to the cloud as a quoted request, under the same consent rules. Requests that mention photos or receipts are no longer refused: they are planned as the capsule they describe. In the app, shared text currently goes through the normal request flow; the dedicated converter isn't wired in yet. **Photos (Snap button or a shared image):** `generateCapsuleFromImage` first reads the photo with the system OCR on the phone (Core Vision Kit `textRecognition`, offline), then builds from that text locally (shared-text converters, rules, templates, on-device model). Only if no local build is possible does the OCR text go to the cloud; the photo itself goes only if OCR finds no text. Both need the same cloud consent as text, EU first; for Mistral, photos are read by `pixtral-12b-latest`. LFM2-VL on-device vision is off (no answer within 15 s on the phone). The core path was checked on a real phone; picking a photo through the Snap button in the app has not been checked yet.
 
 ## Data handling
 
 | What | Where it goes |
 | --- | --- |
 | Request text, tiers 0–1 | Stays on the device |
-| Photo (Snap button or a shared image) | Sent to the chosen cloud provider only after the same consent as text; never to a non-EU provider unless that switch is on. |
+| Photo (Snap button or a shared image) | Read by the system OCR on the phone. Only if no local build is possible: the OCR text is sent, or the photo itself if OCR found no text, to the chosen provider after the same consent as text; never to a non-EU provider unless that switch is on. |
 | Edit instruction ("Change it…"), cloud | Rule edits stay on the device. Otherwise the instruction and the capsule's definition (its JSON) go to the chosen provider under the same consent rules; the capsule's state values (counts, inputs) are never sent. |
 | Request text, tier 2 | Sent to the chosen provider, along with our fixed system prompt. **Nothing else**: no capsule data, no app state, no identifiers. A unit test checks that the HTTP body holds only the system prompt and the request. |
 | Consent | Before a provider's first request, a one-time notice names that provider and says whether it is outside the EU. Consent is stored per provider, so agreeing to Mistral does not cover Claude. **On-device only** mode never calls the cloud. |
@@ -81,7 +83,8 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 | Cloud, current two-step pipeline: tuning (15) / held-out (5) / refusal (2) | Mistral 14/15, 4/5, 2/2 · Claude 14/15, 5/5, 2/2 |
 | Cloud, hard logic requests (4), earlier single-step prompt | Mistral 2/4 · Claude 4/4. Mistral's two failures were rejected by the validator; no wrong capsule was shown. |
 | On-device, 15 requests (emulator) | 9/15 correct; 11/15 with the rule parser in front |
-| Photo → capsule, 10 synthetic photos (`scripts/eval-images.mjs`, the app's core photo path) | Claude 10/10 valid, 9/10 correct · Mistral 9/10 valid, 5/10 correct · on-device 0/10 (vision blocked) |
+| Photo → capsule, 10 synthetic photos, cloud path only (`scripts/eval-images.mjs`, before OCR was added) | Claude 10/10 valid, 9/10 correct · Mistral 9/10 valid, 5/10 correct · on-device 0/10 (vision blocked) |
+| Photo → capsule on a real phone, same 10 photos, OCR first (T5-6) | 10/10 valid, 6/10 correct, all built on the phone with no internet, 0.35–1 s per photo. The 4 misses are text-converter issues (bill total, workout read as a recipe, no scoreboard converter), being fixed in T4-18. |
 | On-device speed (emulator, Apple M4 Pro host) | 92–114 tokens/s decode, about 0.3 s to first token, about 380 MB RSS |
 
 Known limitations:
