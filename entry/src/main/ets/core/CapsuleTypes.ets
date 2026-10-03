@@ -56,3 +56,37 @@ export interface Capsule {
   permissions: Permission[];
   ui: CapsuleComponent[];
 }
+
+// ---- Shared constants and result types used by the core (validator, parser, generator). ----
+
+export const SCHEMA_VERSION: number = 0;
+
+export const PERMISSIONS: string[] = ['reminders', 'notifications', 'vibration', 'motion', 'location', 'widget'];
+
+export const COMPONENT_TYPES: string[] = ['text', 'timer', 'counter', 'checklist', 'number', 'button'];
+
+export const COUNTER_SOURCES: string[] = ['manual', 'motion'];
+
+export type ActionKind = 'startTimer' | 'startAllTimers' | 'increment' | 'reset' | 'notify';
+
+// A parsed Action. `arg` is the target id (or the text for notify); empty for startAllTimers.
+export interface ParsedAction {
+  kind: ActionKind;
+  arg: string;
+}
+
+export interface ValidationResult {
+  ok: boolean;
+  capsule?: Capsule; // present only when ok
+  errors: string[]; // each prefixed with a JSON path, e.g. "$.ui[2].action: ..."; empty when ok
+}
+
+export type CapsuleOrigin = 'rules' | 'model';
+
+export interface GenerateResult {
+  ok: boolean;
+  capsule?: Capsule; // present only when ok; always validated
+  origin?: CapsuleOrigin;
+  error?: string; // one clear message when not ok
+  details: string[]; // validator errors behind `error`, if any
+}
