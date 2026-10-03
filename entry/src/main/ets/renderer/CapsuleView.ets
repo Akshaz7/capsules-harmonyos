@@ -248,7 +248,8 @@ struct CapsuleNode {
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
-      TextInput({ text: this.runtime.inputValue(c.bind), placeholder: c.kind === 'number' ? '0' : '' })
+      // The current value is the placeholder, so typing replaces it instead of appending ("0" + "100" = "0100").
+      TextInput({ text: this.runtime.inputDraft(c.bind), placeholder: this.runtime.inputPlaceholder(c.bind) })
         .type(c.kind === 'number' ? InputType.NUMBER_DECIMAL : InputType.Normal)
         .width('100%')
         .onChange((value: string) => this.runtime.setInputValue(c.bind, value))

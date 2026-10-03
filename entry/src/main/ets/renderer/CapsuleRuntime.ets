@@ -192,6 +192,17 @@ export class CapsuleRuntime {
     return listItems(this.values, source);
   }
 
+  /** What the user has typed into an input since the last button press; '' if nothing. */
+  inputDraft(name: string): string {
+    const draft = this.drafts[name];
+    return draft !== undefined ? draft : '';
+  }
+
+  /** The bound state value as text, shown as the input's placeholder until the user types. */
+  inputPlaceholder(name: string): string {
+    return inputText(this.values, name);
+  }
+
   /** The text an input shows: what the user is typing, else the bound state value. */
   inputValue(name: string): string {
     const draft = this.drafts[name];
