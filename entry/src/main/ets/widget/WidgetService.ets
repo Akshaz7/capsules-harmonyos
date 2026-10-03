@@ -121,7 +121,9 @@ export function bindNewForm(ctx: common.Context, formId: string, wide: boolean):
     return s;
   });
   const chosen = pickCapsuleForNewWidget(saved, (id: string) => gate.isRemoved(id));
-  const binding: FormBinding = { formId: formId, capsuleId: chosen === null ? '' : chosen.id, wide: wide };
+  const binding: FormBinding = {
+    formId: formId, capsuleId: chosen === null ? '' : chosen.id, wide: wide, addedAt: Date.now()
+  };
   putBinding(ctx, binding);
   hilog.info(DOMAIN, TAG, 'form %{public}s -> capsule %{public}s', formId, binding.capsuleId);
   return binding;

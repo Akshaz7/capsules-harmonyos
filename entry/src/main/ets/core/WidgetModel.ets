@@ -374,6 +374,8 @@ export interface WidgetBindingFact {
   formId: string;
   capsuleId: string;
   wide: boolean;
+  /** When the widget was added (ms). Missing on bindings saved before it was recorded: those count as oldest. */
+  addedAt?: number;
 }
 
 export class AssignmentPlan {
@@ -385,10 +387,11 @@ export class AssignmentPlan {
   seen: string[] = [];
 }
 
-/** Widgets in the order they were added (form ids are increasing numbers). */
+/** Widgets in the order they were added (form ids are not ordered, so addedAt decides; formId breaks ties). */
 function widgetOrder(a: WidgetBindingFact, b: WidgetBindingFact): number {
-  if (a.formId.length !== b.formId.length) {
-    return a.formId.length - b.formId.length;
+  const byTime = (a.addedAt ?? 0) - (b.addedAt ?? 0);
+  if (byTime !== 0) {
+    return byTime;
   }
   return a.formId < b.formId ? -1 : (a.formId > b.formId ? 1 : 0);
 }
@@ -409,7 +412,7 @@ export function planWidgetAssignments(bindings: WidgetBindingFact[], saved: Caps
   const known = seen ?? saved.map((c: Capsule) => c.id);
   const sorted = bindings.slice().sort(widgetOrder);
   sorted.forEach((b: WidgetBindingFact) => {
-    const next: WidgetBindingFact = { formId: b.formId, capsuleId: b.capsuleId, wide: b.wide };
+    const next: WidgetBindingFact = { formId: b.formId, capsuleId: b.capsuleId, wide: b.wide, addedAt: b.addedAt };
     if (next.capsuleId.length > 0 && !aliveIds.includes(next.capsuleId)) {
       next.capsuleId = '';
       plan.changed.push(next.formId);

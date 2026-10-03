@@ -28,8 +28,8 @@ function msg(op: string, id: string, index: number): WidgetMessage {
   return parseWidgetMessage(`{"op":"${op}","id":"${id}","index":${index}}`) as WidgetMessage;
 }
 
-function blank(formId: string): WidgetBindingFact {
-  return { formId: formId, capsuleId: '', wide: false };
+function blank(formId: string, addedAt?: number): WidgetBindingFact {
+  return { formId: formId, capsuleId: '', wide: false, addedAt: addedAt };
 }
 
 function shown(bindings: WidgetBindingFact[]): string {
@@ -154,13 +154,14 @@ export default function widgetModelTest() {
       const coffees = rules('count coffees');
       const meds = rules('medication 8am and 8pm');
       // Two blank widgets; nothing seen yet except what existed before.
-      const first = planWidgetAssignments([blank('20'), blank('9')], [coffees], [], never);
-      expect(shown(first.bindings)).assertEqual('9=count-coffees 20=-');
-      expect(first.changed.join()).assertEqual('9');
+      // Form ids are not ordered: '20' was added first even though '3428806' is shorter.
+      const first = planWidgetAssignments([blank('3428806', 200), blank('20', 100)], [coffees], [], never);
+      expect(shown(first.bindings)).assertEqual('20=count-coffees 3428806=-');
+      expect(first.changed.join()).assertEqual('20');
       // Second capsule created (saved list is newest first).
       const second = planWidgetAssignments(first.bindings, [meds, coffees], first.seen, never);
-      expect(shown(second.bindings)).assertEqual('9=count-coffees 20=schedule-medication');
-      expect(second.changed.join()).assertEqual('20');
+      expect(shown(second.bindings)).assertEqual('20=count-coffees 3428806=schedule-medication');
+      expect(second.changed.join()).assertEqual('3428806');
       // Nothing new: nothing changes.
       const again = planWidgetAssignments(second.bindings, [meds, coffees], second.seen, never);
       expect(again.changed.length).assertEqual(0);
@@ -199,8 +200,9 @@ export default function widgetModelTest() {
     });
 
     it('finds the first blank widget and says "Tap to choose a capsule"', 0, () => {
-      expect(firstBlank([{ formId: '30', capsuleId: 'x', wide: false }, blank('31'), blank('4')])?.formId)
-        .assertEqual('4');
+      expect(firstBlank([{ formId: '30', capsuleId: 'x', wide: false }, blank('4', 9), blank('31', 5)])?.formId)
+        .assertEqual('31');
+      expect(firstBlank([blank('4', 9), blank('77')])?.formId).assertEqual('77'); // no addedAt: oldest
       expect(firstBlank([{ formId: '1', capsuleId: 'x', wide: false }])).assertNull();
       expect(emptyView(false).message).assertEqual(BLANK_WIDGET_MESSAGE);
       expect(BLANK_WIDGET_MESSAGE).assertEqual('Tap to choose a capsule');
