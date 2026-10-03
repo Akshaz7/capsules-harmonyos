@@ -134,6 +134,7 @@ export struct MarketplaceView {
         }
         .layoutWeight(1)
         .scrollBar(BarState.Off)
+        .contentEndOffset(this.embedded ? 120 : 0) // as a tab: scrolls under the floating bar, last card stays visible
       }
     }
     .width('100%')
@@ -159,8 +160,6 @@ export struct MarketplaceView {
       }
       .width('100%')
       .height('100%')
-      .padding({ bottom: 96 })
-      .backgroundColor($r('sys.color.background_secondary'))
     } else {
       NavDestination() {
         this.content()

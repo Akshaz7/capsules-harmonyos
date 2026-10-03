@@ -78,6 +78,7 @@ export struct LogView {
       .height('100%')
       .padding({ left: 16, right: 16, bottom: 16 })
       .scrollBar(BarState.Off)
+      .contentEndOffset(this.embedded ? 120 : 0)
     }
   }
 
@@ -99,8 +100,6 @@ export struct LogView {
       }
       .width('100%')
       .height('100%')
-      .padding({ bottom: 96 })
-      .backgroundColor($r('sys.color.background_secondary'))
     } else {
       NavDestination() {
         this.content()
