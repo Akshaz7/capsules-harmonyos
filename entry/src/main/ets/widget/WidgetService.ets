@@ -64,6 +64,23 @@ export function bindingData(view: WidgetView): formBindingData.FormBindingData {
   return formBindingData.createFormBindingData(data);
 }
 
+/**
+ * The binding for a widget the launcher (re)adds. The launcher calls onAddForm again with the
+ * same formId after an app update, so an existing binding is kept and only its size is updated.
+ */
+export function bindForm(ctx: common.Context, formId: string, wide: boolean): FormBinding {
+  const existing = getBinding(ctx, formId);
+  if (existing === null || existing.capsuleId.length === 0) {
+    return bindNewForm(ctx, formId, wide);
+  }
+  if (existing.wide !== wide) {
+    existing.wide = wide;
+    putBinding(ctx, existing);
+  }
+  hilog.info(DOMAIN, TAG, 'form %{public}s keeps capsule %{public}s', formId, existing.capsuleId);
+  return existing;
+}
+
 /** Binds a new widget to the most recent widget-suitable capsule (or none yet). */
 export function bindNewForm(ctx: common.Context, formId: string, wide: boolean): FormBinding {
   const capsules = savedCapsules(ctx);
@@ -108,6 +125,7 @@ export async function refreshCapsuleWidgets(ctx: common.Context, capsuleId?: str
 export async function handleWidgetMessage(ctx: common.Context, formId: string, message: string): Promise<void> {
   const binding = getBinding(ctx, formId);
   const msg = parseWidgetMessage(message);
+  hilog.info(DOMAIN, TAG, 'message for form %{public}s: %{public}s', formId, message);
   if (binding === null || msg === null) {
     hilog.warn(DOMAIN, TAG, 'ignored message for form %{public}s', formId);
     return;

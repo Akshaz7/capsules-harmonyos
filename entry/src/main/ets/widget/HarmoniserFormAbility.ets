@@ -2,7 +2,7 @@ import { Want } from '@kit.AbilityKit';
 import { formBindingData, FormExtensionAbility, formInfo } from '@kit.FormKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { removeBinding } from './WidgetStore';
-import { bindingData, bindNewForm, handleWidgetMessage, refreshCapsuleWidgets, viewFor } from './WidgetService';
+import { bindForm, bindingData, handleWidgetMessage, refreshCapsuleWidgets, viewFor } from './WidgetService';
 
 const DOMAIN = 0x0002;
 const TAG = 'HarmoniserForm';
@@ -13,7 +13,7 @@ export default class HarmoniserFormAbility extends FormExtensionAbility {
     const params = want.parameters ?? {};
     const formId = String(params[formInfo.FormParam.IDENTITY_KEY] ?? '');
     const wide = params[formInfo.FormParam.DIMENSION_KEY] === formInfo.FormDimension.Dimension_2_4;
-    const binding = bindNewForm(this.context, formId, wide);
+    const binding = bindForm(this.context, formId, wide);
     hilog.info(DOMAIN, TAG, 'onAddForm %{public}s wide=%{public}s', formId, String(wide));
     return bindingData(viewFor(this.context, binding));
   }

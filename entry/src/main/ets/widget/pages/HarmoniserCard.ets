@@ -71,54 +71,11 @@ struct HarmoniserCard {
     });
   }
 
-  private send(op: string, id: string, index: number): void {
-    postCardAction(this, { action: 'message', params: { op: op, id: id, index: index } });
-  }
-
-  @Builder
-  counterRow(r: CardRow) {
-    Row({ space: 6 }) {
-      Text(r.label).fontSize(12).fontColor(TEXT).layoutWeight(1).maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(`${r.value}`).fontSize(16).fontWeight(FontWeight.Bold).fontColor(TEXT)
-      if (r.canIncrement) {
-        Button('+')
-          .fontSize(14)
-          .width(28)
-          .height(24)
-          .backgroundColor(ACCENT)
-          .onClick(() => this.send('increment', r.id, -1))
-      }
-    }
-    .width('100%')
-    .height(28)
-  }
-
   @Builder
   checklistRow(r: CardRow, wide: boolean) {
     Flex({ wrap: FlexWrap.Wrap }) {
       ForEach(r.items, (item: CardCheckItem) => {
-        Row({ space: 2 }) {
-          Checkbox({ name: `${r.id}-${item.index}` })
-            .select(item.checked)
-            .width(14)
-            .height(14)
-            .selectedColor(ACCENT)
-            .onChange((value: boolean) => {
-              if (value !== item.checked) {
-                this.send('toggle', r.id, item.index);
-              }
-            })
-          Text(item.text)
-            .fontSize(11)
-            .fontColor(item.checked ? MUTED : TEXT)
-            .decoration({ type: item.checked ? TextDecorationType.LineThrough : TextDecorationType.None })
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-        }
-        .width(wide ? '50%' : '100%')
-        .height(20)
+        CheckRow({ listId: r.id, item: item, wide: wide })
       }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
     }
     .width('100%')
@@ -148,7 +105,7 @@ struct HarmoniserCard {
         } else if (r.kind === 'timer') {
           TimerRow({ row: r })
         } else if (r.kind === 'counter') {
-          this.counterRow(r)
+          CounterRow({ row: r })
         } else if (r.kind === 'checklist') {
           this.checklistRow(r, parseView(this.viewJson).wide)
         }
@@ -199,15 +156,91 @@ struct TimerRow {
           .fontWeight(FontWeight.Bold)
           .fontColor(this.row.endAt > 0 ? ACCENT : TEXT)
         if (this.row.canStart) {
-          Button('▶')
+          Text('▶')
             .fontSize(11)
+            .fontColor(Color.White)
+            .textAlign(TextAlign.Center)
             .width(28)
             .height(24)
+            .borderRadius(12)
             .backgroundColor(ACCENT)
             .onClick(() => {
               postCardAction(this, { action: 'message', params: { op: 'start', id: this.row.id, index: -1 } });
             })
         }
+      }
+    }
+    .width('100%')
+    .height(28)
+  }
+}
+
+/**
+ * One checklist item. Its own component, so the tap handler reads this item's own index
+ * (a closure inside the builder's ForEach picked up another item's index on the device).
+ */
+@Component
+struct CheckRow {
+  @Prop listId: string;
+  @Prop item: CardCheckItem;
+  @Prop wide: boolean;
+
+  build() {
+    Row({ space: 2 }) {
+      // A drawn tick box: the whole row is the tap target and the state always comes from the provider.
+      Text(this.item.checked ? '✓' : '')
+        .fontSize(10)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(Color.White)
+        .textAlign(TextAlign.Center)
+        .width(14)
+        .height(14)
+        .borderRadius(7)
+        .border({ width: this.item.checked ? 0 : 1.5, color: MUTED })
+        .backgroundColor(this.item.checked ? ACCENT : Color.Transparent)
+        .margin({ right: 4 })
+      Text(this.item.text)
+        .fontSize(11)
+        .fontColor(this.item.checked ? MUTED : TEXT)
+        .decoration({ type: this.item.checked ? TextDecorationType.LineThrough : TextDecorationType.None })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+    }
+    .width(this.wide ? '50%' : '100%')
+    .height(20)
+    .onClick(() => {
+      postCardAction(this, {
+        action: 'message',
+        params: { op: 'toggle', id: this.listId, index: this.item.index }
+      });
+    })
+  }
+}
+
+/** A counter with its value and, when the capsule allows it, a + control. */
+@Component
+struct CounterRow {
+  @Prop row: CardRow;
+
+  build() {
+    Row({ space: 6 }) {
+      Text(this.row.label).fontSize(12).fontColor(TEXT).layoutWeight(1).maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(`${this.row.value}`).fontSize(16).fontWeight(FontWeight.Bold).fontColor(TEXT)
+      if (this.row.canIncrement) {
+        Text('+')
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+          .width(28)
+          .height(24)
+          .borderRadius(12)
+          .backgroundColor(ACCENT)
+          .onClick(() => {
+            postCardAction(this, { action: 'message', params: { op: 'increment', id: this.row.id, index: -1 } });
+          })
       }
     }
     .width('100%')
