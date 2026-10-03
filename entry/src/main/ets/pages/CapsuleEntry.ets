@@ -6,7 +6,8 @@ import { CapsuleRuntime } from '../renderer/CapsuleRuntime';
 export class CapsuleEntry {
   /** Traced: editing a capsule's triggers swaps it in place, and an open capsule page must follow. */
   @Trace capsule: Capsule;
-  readonly route: CapsuleRoute;
+  /** Traced: an edit (Change it…) can change where the capsule fits. */
+  @Trace route: CapsuleRoute;
   readonly origin: string;
   @Trace runtime: CapsuleRuntime;
 

@@ -2,7 +2,12 @@ import { common } from '@kit.AbilityKit';
 import { curves } from '@kit.ArkUI';
 import {
   Capsule,
+  carryState,
+  editCapsule,
+  EditResult,
+  EDIT_NO_CHANGE,
   GenerateResult,
+  StateValues,
   Permission,
   generateCapsule,
   getModelStatus,
@@ -61,6 +66,14 @@ import { deviceName, DeviceStore } from '../adapters/DeviceStore';
 import { getInstallToken, getMarketplaceToken } from '../adapters/InstallToken';
 import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
+import { ChangeCard } from './ChangeCard';
+import { CapsuleState, TimerRun } from '../core/WidgetModel';
+
+/** The version before the last applied change, with its state, for "Undo last change". */
+interface UndoPoint {
+  capsule: Capsule;
+  state: CapsuleState;
+}
 
 const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
@@ -212,6 +225,18 @@ struct Index {
   /** Marketplace (T3-10/T3-11): live when marketplace.baseUrl is configured, else the shipped examples. */
   private market: MarketplaceClient = new MarketplaceClient('', '', '');
   @Local marketConfigured: boolean = false;
+  /** "Change it…" (T3-16): which capsule the card's state belongs to, and what it shows. */
+  @Local changeId: string = '';
+  @Local changeBusy: boolean = false;
+  @Local changeSummary: string[] = [];
+  @Local changeIssue: string = '';
+  @Local changeIssueText: string = '';
+  /** Capsules with a change that "Undo last change" can take back (this session). */
+  @Local undoIds: string[] = [];
+  private changeResult: EditResult | undefined = undefined;
+  private undoPoints: Map<string, UndoPoint> = new Map();
+  /** True while the consent sheet is for an edit that asks for new permissions. */
+  private consentForEdit: boolean = false;
   /** The marketplace item behind `pending`, for the install count once the user runs it. */
   private pendingMarketItem: MarketItem | undefined = undefined;
   /** Capsule ids this install has published, to show "Remove from marketplace". */
@@ -935,6 +960,15 @@ struct Index {
     if (!capsule || !this.gate) {
       return;
     }
+    if (this.consentForEdit) {
+      // An edit that asks for new permissions: same capsule id, so the new answers replace the old grants.
+      this.gate.decide(capsule, allowed);
+      this.consentForEdit = false;
+      this.pending = undefined;
+      this.showSheet = false;
+      this.applyChange();
+      return;
+    }
     this.gate.decide(capsule, allowed);
     this.store?.setOrigin(capsule.id, this.pendingOriginRaw);
     if (this.pendingRequest.length > 0) {
@@ -970,6 +1004,7 @@ struct Index {
   }
 
   private cancelPending(): void {
+    this.consentForEdit = false; // the change stays proposed; nothing was applied
     this.pending = undefined;
     this.pendingMarketItem = undefined;
     this.showSheet = false;
@@ -1065,6 +1100,156 @@ struct Index {
   private toggleHint(id: string): void {
     this.hintOpenIds = this.hintOpenIds.includes(id) ? this.hintOpenIds.filter((x: string) => x !== id) :
       this.hintOpenIds.concat([id]);
+  }
+
+  /** T3-16: the card's state is per capsule; opening another one starts clean. */
+  private resetChange(id: string): void {
+    this.changeId = id;
+    this.changeBusy = false;
+    this.changeSummary = [];
+    this.changeIssue = '';
+    this.changeIssueText = '';
+    this.changeResult = undefined;
+  }
+
+  /** "Change it…": English gate, rules, then the cloud under the same consent as creating. Never throws. */
+  private async proposeChange(entry: CapsuleEntry, text: string, allowCloud?: boolean): Promise<void> {
+    const ctx = this.ctx;
+    if (!ctx || this.changeBusy) {
+      return;
+    }
+    this.resetChange(entry.capsule.id);
+    this.changeBusy = true;
+    const smart = this.settings.aiMode === 'smart';
+    const consent = this.settings.hasCloudConsent(this.cloudKey());
+    const r = await editCapsule(ctx, entry.capsule, text, {
+      mode: smart ? 'smart' : 'on-device-only',
+      allowNonEu: this.settings.allowNonEu,
+      allowCloud: allowCloud ?? (smart && consent)
+    });
+    this.changeBusy = false;
+    if (this.changeId !== entry.capsule.id) {
+      return; // the user opened another capsule meanwhile
+    }
+    if (!r.ok && r.needsCloud === true && smart && !consent && this.cloudUsable()) {
+      this.showCloudNotice(() => this.proposeChange(entry, text, true), () => {
+        this.changeIssue = 'failed';
+      });
+      return;
+    }
+    if (r.failure === 'unsupported-language') {
+      hilog.info(0x0001, 'Index', 'change refused by the English-only gate');
+      this.changeIssue = 'language';
+      return;
+    }
+    if (!r.ok || !r.capsule) {
+      hilog.error(0x0001, 'Index', 'change "%{private}s" failed: %{public}s [%{public}s]', text, r.error ?? '',
+        r.details.join('; '));
+      this.changeIssue = 'failed';
+      this.changeIssueText = r.error === EDIT_NO_CHANGE ? "That wouldn't change anything." :
+        r.failure === 'not-an-app' ? (r.error ?? '') : '';
+      return;
+    }
+    hilog.info(0x0001, 'Index', 'change proposed by %{public}s: %{public}s', r.origin ?? '-', r.summary.join(' | '));
+    this.changeResult = r;
+    this.changeSummary = r.summary.length > 0 ? r.summary : ['Small changes'];
+  }
+
+  /** Apply: new permissions go through the gatekeeper sheet first; otherwise the change is saved now. */
+  private confirmChange(): void {
+    const r = this.changeResult;
+    if (!r || !r.capsule) {
+      return;
+    }
+    if (r.needsConsent) {
+      this.pending = r.capsule;
+      this.pendingOriginRaw = this.store?.origin(r.capsule.id) ?? '';
+      this.pendingOrigin = originBadge(this.pendingOriginRaw);
+      this.pendingRequest = '';
+      this.replacingId = '';
+      this.consentForEdit = true;
+      this.showSheet = true;
+      return;
+    }
+    this.applyChange();
+  }
+
+  private applyChange(): void {
+    const r = this.changeResult;
+    const entry = this.entries.find((e: CapsuleEntry) => e.capsule.id === this.changeId);
+    if (!r || !r.capsule || !entry) {
+      return;
+    }
+    const before = entry.runtime.exportState();
+    this.undoPoints.set(entry.capsule.id, { capsule: entry.capsule, state: before });
+    this.swapVersion(entry, r.capsule, carryState(entry.capsule, r.capsule, before), before);
+    if (!this.undoIds.includes(r.capsule.id)) {
+      this.undoIds = this.undoIds.concat([r.capsule.id]);
+    }
+    this.resetChange(r.capsule.id);
+    this.toast('Changed');
+  }
+
+  /** "Undo last change": the version before the last Apply, with the state it had then. */
+  private undoChange(entry: CapsuleEntry): void {
+    const point = this.undoPoints.get(entry.capsule.id);
+    if (!point) {
+      return;
+    }
+    this.undoPoints.delete(entry.capsule.id);
+    this.undoIds = this.undoIds.filter((id: string) => id !== entry.capsule.id);
+    this.swapVersion(entry, point.capsule, point.state, entry.runtime.exportState());
+    this.resetChange(entry.capsule.id);
+    this.toast('Undid the last change');
+  }
+
+  /**
+   * Saves `capsule` (same id) with `state`, rebuilds the entry in place (the open page holds it), cancels the
+   * calendar reminders of timers that no longer run, and refreshes the widgets.
+   */
+  private swapVersion(entry: CapsuleEntry, capsule: Capsule, state: CapsuleState, old: CapsuleState): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.store) {
+      return;
+    }
+    this.store.replace(capsule);
+    saveState(ctx, state);
+    if (capsule.state !== undefined) {
+      const values: StateValues = state.values ?? {};
+      this.store.setValues(capsule.id, values);
+    }
+    const now = Date.now();
+    old.timers.filter((run: TimerRun) => run.endAt > now &&
+      !state.timers.some((kept: TimerRun) => kept.id === run.id && kept.endAt === run.endAt))
+      .forEach((run: TimerRun) => {
+        this.timers?.cancelTimer(capsule.id, run.id);
+      });
+    entry.runtime.stop();
+    const fresh = this.makeEntry(capsule);
+    entry.capsule = fresh.capsule;
+    entry.runtime = fresh.runtime;
+    entry.route = fresh.route;
+    if (this.gate?.isAllowed(capsule, 'reminders')) {
+      this.timers?.prepare().then(() => this.notifications?.ensureEnabled());
+    }
+    refreshCapsuleWidgets(ctx, capsule.id);
+    this.checkTriggers();
+  }
+
+  @Builder
+  changeCard(entry: CapsuleEntry) {
+    ChangeCard({
+      busy: this.changeId === entry.capsule.id && this.changeBusy,
+      summary: this.changeId === entry.capsule.id ? this.changeSummary : [],
+      issue: this.changeId === entry.capsule.id ? this.changeIssue : '',
+      issueText: this.changeId === entry.capsule.id ? this.changeIssueText : '',
+      canUndo: this.undoIds.includes(entry.capsule.id),
+      onSubmit: (text: string) => this.proposeChange(entry, text),
+      onApply: () => this.confirmChange(),
+      onCancel: () => this.resetChange(entry.capsule.id),
+      onUndo: () => this.undoChange(entry),
+      onLimits: () => this.nav.pushPath({ name: SETTINGS_PAGE })
+    })
   }
 
   @Builder
@@ -1690,6 +1875,7 @@ struct Index {
         Column({ space: 16 }) {
           this.originPill(entry.origin)
           CapsuleView({ runtime: entry.runtime })
+          this.changeCard(entry)
           if ((entry.capsule.triggers ?? []).length > 0) {
             TriggerCard({
               triggers: entry.capsule.triggers ?? [],

@@ -117,9 +117,13 @@ function withKey(rec: Record<string, string>, key: string, value: string): Recor
 }
 
 /** Live state for one rendered capsule. Buttons go through press(), which uses core's interpreter. */
+let runtimeSerial: number = 0;
+
 @ObservedV2
 export class CapsuleRuntime {
   readonly capsule: Capsule;
+  /** Unique per runtime: views key their nodes on it, so a new version (an edit) never reuses old nodes. */
+  readonly serial: number = ++runtimeSerial;
   @Trace timers: TimerState[] = [];
   @Trace counters: CounterState[] = [];
   @Trace checklists: ChecklistState[] = [];

@@ -202,7 +202,10 @@ export function editChecklist(capsule: Capsule, instruction: string): Capsule | 
     if (fresh.length === 0) {
       return null;
     }
-    list.items = list.items.concat(fresh);
+    // Match the list's style: rule-made lists start each item with a capital ("Eggs", so "milk" -> "Milk").
+    const capitalised = list.items.every((i: string) => i.charAt(0) !== i.charAt(0).toLowerCase());
+    list.items = list.items.concat(capitalised ?
+      fresh.map((i: string) => i.charAt(0).toUpperCase() + i.substring(1)) : fresh);
     return next;
   }
   if (remove !== null) {

@@ -49,7 +49,7 @@ export struct CapsuleView {
     Column({ space: 12 }) {
       ForEach(this.runtime.capsule.ui, (c: CapsuleComponent) => {
         CapsuleNode({ runtime: this.runtime, component: c })
-      }, (c: CapsuleComponent, i: number) => `${i}-${c.type}`)
+      }, (c: CapsuleComponent, i: number) => `${this.runtime.serial}-${i}-${c.type}`)
       if (this.runtime.message.length > 0) {
         Text(this.runtime.message)
           .fontSize($r('sys.float.Body_M'))

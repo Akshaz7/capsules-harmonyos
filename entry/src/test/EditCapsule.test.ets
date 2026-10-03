@@ -71,6 +71,9 @@ export default function editCapsuleTest() {
       expect(r.ok).assertTrue();
       expect(((r.capsule as Capsule).ui[0] as ChecklistComponent).items.join(',')).assertEqual('eggs,bread,milk');
       expect(r.summary.join('|')).assertEqual('List: added milk');
+      const titled = capsuleOf(SHOPPING.replace('"eggs","bread"', '"Eggs","Bread"'));
+      const t = await editCapsuleWith(titled, 'add milk and butter', []);
+      expect(((t.capsule as Capsule).ui[0] as ChecklistComponent).items.join(',')).assertEqual('Eggs,Bread,Milk,Butter');
     });
 
     it('adds a third player Sam with the cloud (mocked) and keeps the id', 0, async () => {
