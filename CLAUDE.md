@@ -34,4 +34,9 @@ $HDC -t 127.0.0.1:5555 file send -b com.hackyeah.capsules config.local.json data
 
 With no config file anywhere, the app runs rules-only and reports "AI fallback not configured."
 
+`config.local.json` holds one provider (`{"provider":"mistral","apiKey":"...","model":"..."}`) or several, with the one the app uses named in `default`:
+`{"default":"mistral","providers":{"mistral":{"apiKey":"...","model":"ministral-14b-latest"},"anthropic":{"apiKey":"..."}}}`. Providers: `anthropic`, `openai` (any OpenAI-compatible endpoint), `mistral` (JSON output mode). Which Mistral models a key may call depends on its tier.
+
+To compare providers, `node scripts/eval-providers.mjs` runs the same 15 requests through every provider in the root `config.local.json` (with the app's own prompt and validator) and prints valid/correct counts.
+
 `build-profile.json5` has no `signingConfigs`, so hvigor skips signing and outputs an unsigned HAP. The emulator accepts it. A physical device needs signing (`devecocli auth login` then `devecocli signature generate`). Never commit the generated signing material.

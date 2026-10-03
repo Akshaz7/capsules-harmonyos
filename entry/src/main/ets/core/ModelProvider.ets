@@ -58,8 +58,12 @@ export interface ModelProvider {
 export const DEFAULT_ANTHROPIC_MODEL: string = 'claude-sonnet-5-5';
 const DEFAULT_ANTHROPIC_URL: string = 'https://api.anthropic.com';
 const DEFAULT_OPENAI_URL: string = 'https://api.openai.com/v1';
-/** Mistral Large 3; Mistral's JSON mode docs use it in their example. */
-export const DEFAULT_MISTRAL_MODEL: string = 'mistral-large-latest';
+/**
+ * Mistral Medium 3.5 (v26.04), Mistral's newest generalist model. Which models a key may call depends on
+ * its subscription tier (HTTP 403 tier_not_allowed, or a 0 requests/minute limit); set "model" in the
+ * config to one the key allows, e.g. "ministral-14b-latest".
+ */
+export const DEFAULT_MISTRAL_MODEL: string = 'mistral-medium-latest';
 const DEFAULT_MISTRAL_URL: string = 'https://api.mistral.ai/v1';
 const DEFAULT_TIMEOUT_MS: number = 30000;
 const MAX_TOKENS: number = 2048;
