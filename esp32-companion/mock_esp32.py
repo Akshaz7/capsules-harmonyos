@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Stand-in for the Harmoniser wrist companion (ESP32-S3), for wiring the app without hardware.
 
-Same HTTP API, same JSON and same status codes as the firmware in main/ (see README.md):
+Same HTTP API, same JSON and same status codes as the firmware in main/ (README.md lists
+the few known differences):
 
     POST /capsule   {"type":"timer","label":"Pasta","seconds":540}
                     {"type":"counter","label":"Squats","count":0}
@@ -33,10 +34,14 @@ LABEL_MAX_BYTES = 47  # UTF-8 bytes; longer labels are cut, as on the board
 MAX_SECONDS = 359999  # 99:59:59
 MAX_COUNT = 999999
 MAX_BODY_BYTES = 1024
+MAX_JSON_DEPTH = 8  # the board's parser recurses, so nesting is limited before parsing
 
 ERR_BAD_JSON = "body must be a JSON object"
 ERR_BAD_TYPE = 'type must be "timer" or "counter"'
-ERR_BAD_LABEL = "label must be a string"
+ERR_BAD_LENGTH = "Content-Length must be a number from 0 to 1024"
+ERR_TOO_DEEP = "JSON nested too deeply"
+ERR_HAS_NUL = "body must not contain a NUL character"
+ERR_BAD_LABEL = "label must be a UTF-8 string"
 ERR_BAD_SECONDS = "seconds must be a number from 1 to 359999"
 ERR_BAD_COUNT = "count must be a number from 0 to 999999"
 ERR_BAD_RUNNING = "running must be true or false"
@@ -58,14 +63,100 @@ class ApiError(Exception):
         self.message = message
 
 
-def cut_label(label: str) -> str:
-    raw = label.encode("utf-8")
+def json_scan(raw: bytes, max_depth: int = MAX_JSON_DEPTH) -> str:
+    """Looks at a JSON text without parsing it: "ok", "deep" (more than max_depth arrays or
+    objects open at once) or "nul" (a NUL byte, or the escape \\u0000 inside a string).
+
+    Byte for byte the same as json_scan() in main/validate.c; tests/vectors/json_scan.txt
+    holds both to it.
+    """
+    depth = 0
+    in_string = False
+    i = 0
+    while i < len(raw):
+        c = raw[i]
+        if c == 0:
+            return "nul"
+        if in_string:
+            if c == 0x5C:  # backslash
+                if raw[i + 1 : i + 6] == b"u0000":
+                    return "nul"
+                i += 1  # whatever is escaped, it cannot end the string
+            elif c == 0x22:  # "
+                in_string = False
+        elif c == 0x22:
+            in_string = True
+        elif c in b"[{":
+            depth += 1
+            if depth > max_depth:
+                return "deep"
+        elif c in b"]}" and depth > 0:
+            depth -= 1
+        i += 1
+    return "ok"
+
+
+def utf8_valid(raw: bytes) -> bool:
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def cut_label_bytes(raw: bytes) -> bytes:
+    """Mirrors copy_label() in main/capsule.c; tests/vectors/labels.txt holds both to it."""
     end = len(raw)
     if end > LABEL_MAX_BYTES:
         end = LABEL_MAX_BYTES
         while end > 0 and (raw[end] & 0xC0) == 0x80:  # do not cut a UTF-8 sequence in half
             end -= 1
-    return raw[:end].decode("utf-8")
+    return raw[:end]
+
+
+def clean_label(label: str) -> str:
+    """The label as it will be stored. Raises ApiError for one that is not text."""
+    if "\x00" in label:
+        raise ApiError(400, ERR_HAS_NUL)
+    try:
+        # surrogateescape turns what parse_json_object() let through back into the raw bytes
+        raw = label.encode("utf-8", "surrogateescape")
+    except UnicodeEncodeError:  # a lone surrogate such as "\ud83d"
+        raise ApiError(400, ERR_BAD_LABEL)
+    if not utf8_valid(raw):
+        raise ApiError(400, ERR_BAD_LABEL)
+    return cut_label_bytes(raw).decode("utf-8")
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"{name} is not JSON")  # Python would accept NaN and Infinity; the board does not
+
+
+def parse_json_object(raw: bytes) -> Json:
+    """The request body as a dict, refusing what the board refuses. Raises ApiError."""
+    scan = json_scan(raw)
+    if scan == "deep":
+        raise ApiError(400, ERR_TOO_DEEP)
+    if scan == "nul":
+        raise ApiError(400, ERR_HAS_NUL)
+    try:
+        text = raw.decode("utf-8")
+        is_utf8 = True
+    except UnicodeDecodeError:
+        # The board's parser passes such bytes through; only a label is checked (clean_label).
+        text = raw.decode("utf-8", "surrogateescape")
+        is_utf8 = False
+    try:
+        # strict=False: like the board, allow raw control characters (a tab, say) in strings
+        body = json.loads(text, strict=False, parse_constant=_reject_constant)
+        if is_utf8:
+            # Fails on a lone surrogate escape ("\ud83d") anywhere: the board refuses those bodies.
+            json.dumps(body, ensure_ascii=False).encode("utf-8")
+    except ValueError:  # includes UnicodeEncodeError
+        raise ApiError(400, ERR_BAD_JSON)
+    if not isinstance(body, dict):
+        raise ApiError(400, ERR_BAD_JSON)
+    return body
 
 
 def read_int(body: Json, key: str, low: int, high: int, default: Optional[int], error: str) -> Optional[int]:
@@ -94,8 +185,9 @@ class Capsule:
         self._clear("idle", "")
 
     def _clear(self, kind: str, label: str) -> None:
+        """Cannot fail: everything that can be refused is checked before the state is touched."""
         self.type = kind
-        self.label = cut_label(label)
+        self.label = label
         self.count = 0
         self.seconds = 0
         self.remaining = 0.0  # timer: seconds left while paused
@@ -188,6 +280,7 @@ class Capsule:
             raise ApiError(400, ERR_BAD_TYPE)
         if not isinstance(label, str):
             raise ApiError(400, ERR_BAD_LABEL)
+        label = clean_label(label)
         if kind == "timer":
             seconds = read_int(body, "seconds", 1, MAX_SECONDS, None, ERR_BAD_SECONDS)
             if seconds is None:
@@ -241,17 +334,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
-            raise ApiError(400, ERR_BAD_JSON)
-        if length > MAX_BODY_BYTES:
-            self.close_connection = True
+            length = -1
+        if length < 0 or length > MAX_BODY_BYTES:
+            self.close_connection = True  # the body, if there is one, stays unread
+            if length < 0:
+                raise ApiError(400, ERR_BAD_LENGTH)
             raise ApiError(413, "body too large")
-        try:
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
-        except ValueError:  # bad UTF-8 or bad JSON
-            raise ApiError(400, ERR_BAD_JSON)
-        if not isinstance(body, dict):
-            raise ApiError(400, ERR_BAD_JSON)
-        return body
+        return parse_json_object(self.rfile.read(length))
 
     def _screenshot(self) -> Json:
         raise ApiError(503, "display not available")  # the board answers with a BMP
@@ -272,8 +361,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, handler())
         except ApiError as error:
             self._send(error.status, {"error": error.message})
+        except Exception:  # a bug in the mock: say so instead of dropping the connection
+            log.exception("%s %s failed", self.command, self.path)
+            self.close_connection = True
+            self._send(500, {"error": "internal error"})
 
-    do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _route
+    # The board answers any method, HEAD and OPTIONS included, with the same JSON (and a body).
+    do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = _route
 
     def log_message(self, format: str, *args: Any) -> None:  # _send() logs one line per request
         pass
