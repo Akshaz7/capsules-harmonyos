@@ -60,6 +60,11 @@ export class NumberState {
   }
 }
 
+/** Receives timer starts, e.g. to schedule a system reminder. */
+export interface TimerScheduler {
+  scheduleTimer(capsuleId: string, t: TimerState): void;
+}
+
 /** Live state for one rendered capsule. Actions from buttons go through dispatch(). */
 @ObservedV2
 export class CapsuleRuntime {
@@ -68,6 +73,7 @@ export class CapsuleRuntime {
   @Trace counters: CounterState[] = [];
   @Trace checklists: ChecklistState[] = [];
   @Trace numbers: NumberState[] = [];
+  scheduler?: TimerScheduler;
   private tickHandle: number = -1;
 
   constructor(capsule: Capsule) {
@@ -156,6 +162,7 @@ export class CapsuleRuntime {
     t.running = true;
     t.done = false;
     this.ensureTicking();
+    this.scheduler?.scheduleTimer(this.capsule.id, t);
   }
 
   private ensureTicking(): void {
