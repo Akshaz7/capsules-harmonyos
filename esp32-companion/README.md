@@ -11,6 +11,9 @@ It is a stretch goal. Nothing in the app should depend on it being there.
 | --- | --- |
 | `mock_esp32.py` | Stand-in for the board. Python 3.8+, standard library only. |
 | `test_api.sh` | curl script that checks the API. Same script for the mock and the board. |
+| `RELAY.md` | Contract between the board, the cloud relay and the app (`/api/devices/**`). |
+| `mock_relay.py` | Stand-in for the cloud relay, in memory. Python 3.8+, standard library only. |
+| `test_relay.sh` | curl script that checks a relay against `RELAY.md`. Same script for the fake and the real backend. |
 | `find_esp32.sh` | Finds the board's IP on the local network (mDNS, then MAC lookup). |
 | `main/` | The firmware (ESP-IDF, C). |
 | `main/secrets.h.example` | Template for the Wi-Fi credentials (`main/secrets.h` is git-ignored). |
@@ -24,12 +27,13 @@ As of 2026-10-03.
 | | State |
 | --- | --- |
 | Mock server | Passes `test_api.sh` (72 checks) and its unit tests. |
-| Host unit tests | `make -C tests test`: 1,108 checks in C on the firmware's own source files, 19 Python tests on the mock. All pass. |
-| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,533,616 bytes, 82% of the app partition free. |
+| Host unit tests | `make -C tests test`: 1,448 checks in C on the firmware's own source files, 19 Python tests on the mock and 33 on the fake relay. All pass. |
+| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,717,472 bytes, 80% of the app partition free. |
 | Boot on hardware | One board (revision V2): boots, display and touch drivers start, accelerometer and audio codec answer, HTTP server starts. |
 | Wi-Fi on hardware | Joins the phone hotspot (WPA3) and the venue network `HackYeah2026`, which it sees on 2.4 GHz channel 1. Joining the venue network often takes several attempts. |
 | HTTP API on hardware | **Confirmed**: `./test_api.sh http://<board ip>` passes 72 of 72 against the board over the venue Wi-Fi. JSON nested 300 and 1024 levels deep gets a 400 and the board keeps running (it used to reboot). |
 | Screen, touch, beep | **Confirmed on hardware** by the owner: the screen shows the UI, a tap on + raises the count, the speaker beeps when a timer ends. `/screenshot` works on the board. |
+| Cloud relay client | **Confirmed on hardware against the fake** (`mock_relay.py` on a laptop, plain HTTP): registration, pairing QR code and phrase, capsules and actions from the relay, state reports, "cloud offline" and recovery. The real backend does not exist yet; HTTPS was only checked as a handshake. See [Cloud relay](#cloud-relay). |
 | Rep counting | Experimental and **still untuned**. Off unless asked for. |
 
 Full list in [Tested and not tested](#tested-and-not-tested).
@@ -405,6 +409,44 @@ the magnitude rises above `REP_HIGH_G` and then falls below `REP_LOW_G`, at most
 guesses: **nobody has done a squat with it yet.** Each counted rep is logged on serial with
 the acceleration, which is what to watch while tuning.
 
+## Cloud relay
+
+Optional. With `RELAY_URL` set in `main/secrets.h` the board also registers itself with a
+cloud relay, shows a QR code and a three-word phrase to pair it with the app, and then
+fetches capsules from the relay and reports its state to it, with outbound requests only.
+The phone and the board then need no shared network. The local API above keeps working;
+whichever side sent a capsule last is the one on the screen. Without `RELAY_URL` nothing
+of this is started.
+
+The contract, for the backend and the app, is in [`RELAY.md`](RELAY.md).
+
+```sh
+python3 mock_relay.py --port 8090 --host 0.0.0.0   # the fake; it prints nothing secret
+./test_relay.sh http://localhost:8090              # 90 checks, with a simulated board
+```
+
+Put `#define RELAY_URL "http://<laptop ip>:8090"` into `main/secrets.h`, build and flash.
+The idle screen then shows the QR code, "or type:" with the phrase, and the IP address.
+Scan it with a phone on the same network, or:
+
+```sh
+T='Authorization: Bearer any-token'      # the fake takes any install token
+curl -X POST http://localhost:8090/api/devices/claim -H "$T" -d '{"code":"brave otter lamp"}'
+curl -X PUT http://localhost:8090/api/devices/<id>/capsule -H "$T" -d '{"type":"counter","label":"Squats","count":0}'
+curl http://localhost:8090/api/devices/<id>/state -H "$T"
+```
+
+On the screen: "cloud" in the small line at the top once the board is paired, "cloud
+offline" when the relay has not answered twice in a row, "pair: …" above a capsule while
+the board is not paired. The fake forgets everything when it stops; the board notices (401)
+and registers again, with a new QR code.
+
+Measured on the board (internal RAM; the largest free block stayed 31,744 bytes throughout):
+about 83 KB free with the relay client polling over plain HTTP, about 50 KB free while one
+HTTPS connection is open (handshakes with `vercel.com`, `harmoniser-web.vercel.app` and
+`example.com` succeeded against the certificate bundle; a self-signed certificate was
+refused), lowest ever 39 KB. The relay task used about 4 KB of its 10 KB stack.
+
 ## Two-minute check with the board in your hand
 
 The serial log cannot show what is on the glass. With the board powered and the hotspot on:
@@ -449,7 +491,25 @@ Tested:
 - `find_esp32.sh`: the not-found path, and the MAC lookup using another device's MAC
   (before the change that makes it check the API; not re-run since).
 
+- Cloud relay client, on the same board against `mock_relay.py` on a laptop: registers,
+  keeps its registration over a reboot, shows the QR code (decoded from `/screenshot` with
+  OpenCV: exactly the `pair_url`, version 4, 7 pixels per module, quiet zone 5 modules) and
+  the phrase; after a claim a counter and a timer sent to the relay appear, `increment` and
+  `pause` sent to the relay are applied once, a count changed on the board reaches the
+  relay within three seconds, a running timer is reported every 10 seconds; a capsule set
+  over the local API is reported with `version` 0; with the fake stopped the screen says
+  "cloud offline", the retries back off to 30 seconds and `test_api.sh` still passes 72 of
+  72; with the fake started again the board gets a 401, registers again and carries on;
+  unpairing gives the board a new phrase.
+
 Not tested:
+
+- The cloud relay client against a real backend, and any request beyond the TLS handshake
+  over HTTPS (polling over a kept-alive TLS connection, for hours). A relay that accepts
+  the connection and then says nothing (the 4 second timeout): the fake was either up or
+  refusing connections. A pairing code expiring on the board after 10 minutes (host tests
+  only). Scanning the QR code off the glass with a phone: it was decoded from the
+  screenshot, which shows what LVGL draws, not what the panel displays.
 
 - The 408 path on the board (a body that stops arriving), and a body more than 8192 bytes
   over the limit. Both are covered by the host tests only.
