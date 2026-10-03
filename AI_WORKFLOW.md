@@ -118,6 +118,7 @@ Generated code was accepted only after it passed the gates below. Product-visibl
 - The OHOS NDK's Clang 15 lacks C++20 parenthesised aggregate init (`emplace_back` on an aggregate). Brace-init with `push_back(T{...})` fixes it.
 - Small models copy prompt examples verbatim. Rejecting slots whose words or numbers are not in the request, then retrying once, turned wrong answers into clean failures.
 - Several sessions share one emulator. Drive automated runs with `aa start ... --ps key value` and read result files over hdc, rather than with foreground UI clicks that another session can steal.
+- Photo input (T5, 2026-10-03): LFM2-VL-450M image prompts never returned with Cactus v2.2.2 (over 7 minutes on the emulator even for a 448×159 image, and stuck on a macOS build too), so on-device photo reading is switched off and photos use the consent-gated cloud path. Before relying on a model's vision support, time one tiny image end to end. Also, `mkdir` from `hdc shell` is denied inside an app sandbox, so push a whole folder with `hdc file send -b` instead.
 
 ## AI feature disclosure
 
