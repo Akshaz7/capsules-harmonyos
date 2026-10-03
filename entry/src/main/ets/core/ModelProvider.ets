@@ -12,6 +12,8 @@
  * OpenAI-compatible endpoint with JSON output mode.
  */
 
+import { CloudOrigin } from './CapsuleTypes';
+
 export interface HttpResponse {
   status: number;
   body: string;
@@ -51,6 +53,8 @@ export interface ChatMessage {
 }
 
 export interface ModelProvider {
+  /** Which provider this is; decides the EU routing policy and the capsule's origin. */
+  readonly name: ProviderName;
   /** Returns the model's text reply. Throws an Error with a clear, key-free message on failure. */
   complete(system: string, messages: ChatMessage[]): Promise<string>;
 }
@@ -231,8 +235,22 @@ interface AnthropicBody {
   messages: ChatMessage[];
 }
 
+/** Providers hosted in the EU. Only these are used for cloud requests without the "non-EU" setting. */
+export function isEuProvider(name: ProviderName): boolean {
+  return name === 'mistral';
+}
+
+/** The GenerateResult origin for capsules from this provider, e.g. "cloud-eu:mistral". */
+export function cloudOrigin(name: ProviderName): CloudOrigin {
+  if (name === 'mistral') {
+    return 'cloud-eu:mistral';
+  }
+  return name === 'openai' ? 'cloud:openai' : 'cloud:anthropic';
+}
+
 /** Anthropic Messages API. */
 export class AnthropicProvider implements ModelProvider {
+  readonly name: ProviderName = 'anthropic';
   private config: ModelConfig;
   private transport: HttpTransport;
 
@@ -289,10 +307,12 @@ interface OpenAIBody {
  * (response_format json_object), which needs the word "JSON" in the prompt; SYSTEM_PROMPT has it.
  */
 export class OpenAICompatibleProvider implements ModelProvider {
+  readonly name: ProviderName;
   private config: ModelConfig;
   private transport: HttpTransport;
 
   constructor(config: ModelConfig, transport: HttpTransport) {
+    this.name = config.provider;
     this.config = config;
     this.transport = transport;
   }

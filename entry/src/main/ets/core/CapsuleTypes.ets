@@ -148,7 +148,10 @@ export interface ValidationResult {
   errors: string[]; // each prefixed with a JSON path, e.g. "$.ui[2].action: ..."; empty when ok
 }
 
-export type CapsuleOrigin = 'rules' | 'on-device' | 'cloud';
+/** Cloud origins name the provider; "cloud-eu:" marks providers hosted in the EU. */
+export type CloudOrigin = 'cloud-eu:mistral' | 'cloud:anthropic' | 'cloud:openai';
+
+export type CapsuleOrigin = 'rules' | 'on-device' | CloudOrigin;
 
 export interface GenerateResult {
   ok: boolean;

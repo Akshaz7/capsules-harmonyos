@@ -4,7 +4,7 @@
  */
 import { GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
-import { ChatMessage, ModelProvider } from './ModelProvider';
+import { ChatMessage, cloudOrigin, isEuProvider, ModelProvider, ProviderName } from './ModelProvider';
 
 /** Copy of SCHEMA.md (v0 + v1). Keep in sync with SCHEMA.md, which is the contract. */
 export const SCHEMA_TEXT: string = `# Capsule schema (v0, plus v1 additions)
@@ -129,6 +129,18 @@ export class CapsuleModel {
     this.provider = provider;
   }
 
+  get providerName(): ProviderName {
+    return this.provider.name;
+  }
+
+  get isEu(): boolean {
+    return isEuProvider(this.provider.name);
+  }
+
+  /**
+   * Sends only the request text (with the fixed system prompt) to the provider: no capsules, state,
+   * device data or settings.
+   */
   async generate(request: string): Promise<GenerateResult> {
     const req = request.trim();
     if (req.length === 0) {
@@ -149,7 +161,7 @@ export class CapsuleModel {
       }
       const result = validateCapsule(extractJson(reply));
       if (result.ok) {
-        return { ok: true, capsule: result.capsule, origin: 'cloud', details: [] };
+        return { ok: true, capsule: result.capsule, origin: cloudOrigin(this.provider.name), details: [] };
       }
       lastErrors = result.errors;
       messages.push({ role: 'assistant', content: reply });

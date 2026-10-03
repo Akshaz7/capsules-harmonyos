@@ -17,16 +17,21 @@ import { util } from '@kit.ArkTS';
 import { fileIo } from '@kit.CoreFileKit';
 import { GenerateResult } from './CapsuleTypes';
 import { CapsuleModel } from './CapsuleModel';
-import { AI_NOT_CONFIGURED, GenerateOptions, generateCapsuleWith } from './CapsuleGenerator';
+import { AI_NOT_CONFIGURED, CapsuleSource, GenerateOptions, generateCapsuleWith } from './CapsuleGenerator';
 import { parseRequest } from './RuleParser';
-import { createProvider, HttpResponse, HttpTransport, ModelConfigResult, parseModelConfig } from './ModelProvider';
+import {
+  createProvider, HttpResponse, HttpTransport, isEuProvider, ModelConfig, ModelConfigResult, parseModelConfig, ProviderName,
+  parseModelConfigs
+} from './ModelProvider';
 import { CactusProvider, OnDeviceStatus } from './providers/CactusProvider';
 
 export * from './CapsuleTypes';
 export { validateCapsule, validateCapsuleObject, parseAction, permissionForAction, permissionForComponent,
   componentId } from './CapsuleValidator';
 export { parseRequest } from './RuleParser';
-export { AI_NOT_CONFIGURED, NO_RULE_MATCH, GenerateOptions } from './CapsuleGenerator';
+export { AI_NOT_CONFIGURED, NO_RULE_MATCH, CLOUD_OFF, ON_DEVICE_ONLY, GenerateMode, GenerateOptions, needsLogic
+} from './CapsuleGenerator';
+export { isEuProvider, cloudOrigin, ProviderName } from './ModelProvider';
 export { OnDeviceStatus } from './providers/CactusProvider';
 export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';
 export { StateValues, EvalResult, ApplyResult, DISPLAY_ERROR, initialState, restoreState, evaluate, computedValues,
@@ -64,11 +69,15 @@ export interface ModelStatus {
   source: ConfigSource;
   /** User-facing status, e.g. "AI fallback not configured." */
   message: string;
+  /** Configured cloud providers, default first, e.g. ["mistral", "anthropic"]. */
+  providers: string[];
+  /** True if an EU provider is configured, so smart mode can use the cloud without the non-EU setting. */
+  euAvailable: boolean;
 }
 
-let model: CapsuleModel | null = null;
+let models: CapsuleModel[] = [];
 let modelError: string = 'initCapsuleModel() has not been called';
-let status: ModelStatus = { configured: false, source: 'none', message: AI_NOT_CONFIGURED };
+let status: ModelStatus = { configured: false, source: 'none', message: AI_NOT_CONFIGURED, providers: [], euAvailable: false };
 const onDevice: CactusProvider = new CactusProvider();
 
 interface ConfigText {
@@ -111,22 +120,33 @@ export async function loadModelConfig(context: common.Context): Promise<ModelCon
  */
 export async function initCapsuleModel(context: common.Context): Promise<boolean> {
   onDevice.init(context); // loads the on-device model in the background; never throws
-  model = null;
+  models = [];
   const found = await readConfigText(context);
   if (found === null) {
     modelError = '';
-    status = { configured: false, source: 'none', message: AI_NOT_CONFIGURED };
+    status = { configured: false, source: 'none', message: AI_NOT_CONFIGURED, providers: [], euAvailable: false };
     return false;
   }
-  const loaded = parseModelConfig(found.text);
-  if (loaded.config === undefined) {
+  const loaded = parseModelConfigs(found.text);
+  if (loaded.defaultConfig === undefined) {
     modelError = loaded.error ?? 'unknown config error';
-    status = { configured: false, source: found.source, message: `AI fallback unavailable: ${modelError}` };
+    status = {
+      configured: false, source: found.source, message: `AI fallback unavailable: ${modelError}`, providers: [],
+      euAvailable: false
+    };
     return false;
   }
-  model = new CapsuleModel(createProvider(loaded.config, new NetworkTransport()));
+  const chosen = loaded.defaultConfig;
+  const ordered: ModelConfig[] = [chosen].concat(loaded.configs.filter((c: ModelConfig) => c !== chosen));
+  const transport = new NetworkTransport();
+  models = ordered.map((c: ModelConfig) => new CapsuleModel(createProvider(c, transport)));
   modelError = '';
-  status = { configured: true, source: found.source, message: 'AI fallback ready.' };
+  const names = ordered.map((c: ModelConfig) => c.provider as string);
+  const eu = ordered.some((c: ModelConfig) => isEuProvider(c.provider));
+  status = {
+    configured: true, source: found.source, providers: names, euAvailable: eu,
+    message: `Cloud AI ready: ${names.map((n: string) => isEuProvider(n as ProviderName) ? `${n} (EU)` : n).join(', ')}.`
+  };
   return true;
 }
 
@@ -140,15 +160,25 @@ export function getOnDeviceStatus(): OnDeviceStatus {
   return onDevice.getStatus();
 }
 
+/** Waits for the on-device model only when the route actually asks it. */
+class LazyOnDevice implements CapsuleSource {
+  async generate(request: string): Promise<GenerateResult> {
+    await onDevice.whenInitialised();
+    if (!onDevice.isReady()) {
+      const notReady: GenerateResult = { ok: false, error: '', details: [] };
+      return notReady;
+    }
+    return onDevice.generate(request);
+  }
+}
+
+const lazyOnDevice: LazyOnDevice = new LazyOnDevice();
+
 /**
- * Rule parser, then the on-device model, then the cloud model (only if configured and
- * options.allowCloud is not false). Returns a validated capsule or a clear error.
+ * Routes a request: rules, then on-device and the cloud as the policy in CapsuleGenerator.ets says
+ * (mode "smart" by default; the cloud only with EU providers unless options.allowNonEu).
+ * Returns a validated capsule or a clear error. Only the request text is sent to a cloud provider.
  */
 export async function generateCapsule(request: string, options?: GenerateOptions): Promise<GenerateResult> {
-  if (parseRequest(request) !== null) {
-    // A rule matches: answer now instead of waiting for the on-device model to finish loading.
-    return generateCapsuleWith(request, model, modelError, null, options);
-  }
-  await onDevice.whenInitialised();
-  return generateCapsuleWith(request, model, modelError, onDevice.isReady() ? onDevice : null, options);
+  return generateCapsuleWith(request, models, modelError, lazyOnDevice, options);
 }
