@@ -278,6 +278,7 @@ function slim(t) {
   const e = { id: t.id, name: t.name, description: t.description, category: t.category, language: t.language ?? 'en',
     tags: [...new Set(t.tags.map((x) => String(x).trim()).filter((x) => x.length > 0))], slots: t.slots,
     capsule: t.capsule };
+  if (t.listed === false) e.listed = false; // hidden from the Marketplace list only; still built from Create
   e.capsule.id = t.id;
   return e;
 }
@@ -286,7 +287,7 @@ function write(templates) {
   mkdirSync(dirname(LIBRARY), { recursive: true });
   writeFileSync(LIBRARY, JSON.stringify({ version: 1, templates }) + '\n');
   const market = templates.map((t) => ({
-    id: t.id, title: t.name, category: t.category, tags: t.tags, language: t.language,
+    id: t.id, title: t.name, category: t.category, tags: t.tags, language: t.language, listed: t.listed !== false,
     capsule: JSON.parse(lib.applySlots(t, {}))
   }));
   writeFileSync(MARKETPLACE, JSON.stringify(market, null, 1) + '\n');

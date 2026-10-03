@@ -16,6 +16,7 @@
    "deuce"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "tennis",
@@ -147,6 +148,7 @@
    "interval"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "pomodoro",
@@ -234,6 +236,7 @@
    "reps"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "pushups",
@@ -331,6 +334,7 @@
    "timer"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "cooking-timers",
@@ -413,6 +417,7 @@
    "timer"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "egg-timers",
@@ -495,6 +500,7 @@
    "intervals"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "interval-training",
@@ -592,6 +598,7 @@
    "exercise"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "tabata-timer",
@@ -692,6 +699,7 @@
    "cup of tea"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "tea-timers",
@@ -768,6 +776,7 @@
    "relax"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "nap-timer",
@@ -807,13 +816,12 @@
  },
  {
   "id": "meditation-gong-timer",
-  "title": "Meditation timer with gong",
+  "title": "Meditation timer",
   "category": "timers",
   "tags": [
    "meditation",
    "meditation timer",
    "mindfulness",
-   "gong",
    "bell",
    "zen",
    "relax",
@@ -823,9 +831,10 @@
    "session"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
-   "id": "meditation-gong-timer",
+   "id": "meditation-bell-timer",
    "name": "Meditation 10 min",
    "permissions": [
     "reminders",
@@ -845,7 +854,7 @@
        "type": "button",
        "label": "Begin",
        "do": [
-        "notify:Gong - meditation begins",
+        "notify:Meditation begins",
         "startTimer:meditate"
        ]
       },
@@ -861,10 +870,10 @@
      "items": [
       {
        "type": "button",
-       "label": "End with gong",
+       "label": "End with bell",
        "do": [
         "stopTimer:meditate",
-        "notify:Gong - meditation ended",
+        "notify:meditation ended",
         "increment:sessions"
        ]
       },
@@ -877,8 +886,8 @@
     },
     {
      "type": "button",
-     "label": "Ring gong",
-     "action": "notify:Gong"
+     "label": "Ring bell",
+     "action": "notify:Bell"
     },
     {
      "type": "counter",
@@ -907,6 +916,7 @@
    "rest timer"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "plank-challenge-timer",
@@ -996,6 +1006,7 @@
    "cycle"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "laundry-washer-dryer-timers",
@@ -1081,6 +1092,7 @@
    "sourdough"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "bread-rise-bake-timer",
@@ -1181,6 +1193,7 @@
    "break reminder"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "eye-break-20-20-20",
@@ -1263,6 +1276,7 @@
    "shoulder"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "stretching-routine-timers",
@@ -1372,6 +1386,7 @@
    "stopwatch"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "chess-clock",
@@ -1456,6 +1471,7 @@
    "tally"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "cornhole-score-21",
@@ -1603,6 +1619,7 @@
    "home game"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "poker-chip-counter",
@@ -1792,6 +1809,7 @@
    "match"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "pool-rack-wins",
@@ -1908,6 +1926,7 @@
    "question counter"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "quiz-night-scores",
@@ -2114,6 +2133,7 @@
    "match"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "rock-paper-scissors-tally",
@@ -2227,6 +2247,7 @@
    "minutes left"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "parking-meter-timer",
@@ -2302,6 +2323,7 @@
    "lecture"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "speech-timer-one-minute-warning",
@@ -2395,6 +2417,7 @@
    "parenting"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "kids-bedtime-routine-timers",
@@ -2508,6 +2531,7 @@
    "waiter"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "tip-calculator",
@@ -2571,6 +2595,7 @@
    "friends"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "bill-split-tip",
@@ -2672,6 +2697,7 @@
    "mi"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "km-to-miles",
@@ -2734,6 +2760,7 @@
    "unit converter"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "celsius-to-fahrenheit",
@@ -2796,6 +2823,7 @@
    "unit converter"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "kg-to-pounds",
@@ -2860,6 +2888,7 @@
    "length"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "cm-to-feet-inches",
@@ -2914,6 +2943,7 @@
    "pub game"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "darts-501",
@@ -3074,6 +3104,7 @@
    "11 points"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "ping-pong-scoreboard",
@@ -3230,6 +3261,7 @@
    "racquet"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "badminton-scoreboard",
@@ -3398,6 +3430,7 @@
    "team score"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "volleyball-scoreboard",
@@ -3578,6 +3611,7 @@
    "lead"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "basketball-scoreboard",
@@ -3751,6 +3785,7 @@
    "fixture"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "football-match-score",
@@ -3885,6 +3920,7 @@
    "tracker"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "habit-streak",
@@ -3989,6 +4025,7 @@
    "health"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "water-tracker",
@@ -4078,6 +4115,7 @@
    "progress"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "reading-pages",
@@ -4167,6 +4205,7 @@
    "healthy eating"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "no-sugar-streak",
@@ -4251,6 +4290,7 @@
    "start the day"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "morning-routine",
@@ -4292,6 +4332,7 @@
    "to do"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "evening-routine",
@@ -4337,6 +4378,7 @@
    "mileage"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "fuel-cost-trip",
@@ -4419,6 +4461,7 @@
    "promo"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "discount-sale-price",
@@ -4496,6 +4539,7 @@
    "BMI"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "bmi-calculator",
@@ -4566,6 +4610,7 @@
    "what percent"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "percentage-calculator",
@@ -4669,6 +4714,7 @@
    "training"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "running-pace-calculator",
@@ -4757,6 +4803,7 @@
    "tablespoon"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "cups-to-ml-flour",
@@ -4829,6 +4876,7 @@
    "vat 23"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "vat-calculator",
@@ -4928,6 +4976,7 @@
    "calculator"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "age-in-days-weeks",
@@ -4998,6 +5047,7 @@
    "calculator"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "recipe-scaler",
@@ -5120,6 +5170,7 @@
    "calculator"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "simple-loan-payment",
@@ -5201,6 +5252,7 @@
    "which is cheaper"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "unit-price-compare",
@@ -5295,6 +5347,7 @@
    "habit"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "vitamins-checklist",
@@ -5348,6 +5401,7 @@
    "wellbeing"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "gratitude-journal",
@@ -5447,6 +5501,7 @@
    "mood diary"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "mood-tracker",
@@ -5594,6 +5649,7 @@
    "habit"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "sleep-log",
@@ -5711,6 +5767,7 @@
    "progress"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "steps-goal-tracker",
@@ -5817,6 +5874,7 @@
    "weights"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "sets-reps-tracker",
@@ -5944,6 +6002,7 @@
    "home workout"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "squat-counter-goal",
@@ -6066,6 +6125,7 @@
    "workout"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "situp-counter",
@@ -6175,6 +6235,7 @@
    "weightlifting"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "gym-workout-checklist",
@@ -6218,6 +6279,7 @@
    "fitness"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "running-laps-counter",
@@ -6313,6 +6375,7 @@
    "home workout"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "jumping-jacks-counter",
@@ -6439,6 +6502,7 @@
    "water ratio"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "coffee-brew-timer",
@@ -6560,6 +6624,7 @@
    "two players"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "padel-squash-scoreboard",
@@ -6707,6 +6772,7 @@
    "tally"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "card-game-scores",
@@ -6916,6 +6982,7 @@
    "letters"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "scrabble-score-keeper",
@@ -7051,6 +7118,7 @@
    "tracker"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "bowling-score-tracker",
@@ -7258,6 +7326,7 @@
    "golf score"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "golf-scorecard",
@@ -7451,6 +7520,7 @@
    "game night"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "board-game-turns",
@@ -7576,6 +7646,7 @@
    "tonnage"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "weight-lifting-volume",
@@ -7693,6 +7764,7 @@
    "streak"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "pushup-challenge-30-days",
@@ -7811,6 +7883,7 @@
    "hiking"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "walking-step-counter",
@@ -7869,6 +7942,7 @@
    "back workout"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "pull-up-counter-best",
@@ -8007,6 +8081,7 @@
    "store"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "shopping-list",
@@ -8101,6 +8176,7 @@
    "checklist"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "pancake-ingredients",
@@ -8146,6 +8222,7 @@
    "checklist"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "weekly-meal-plan",
@@ -8193,6 +8270,7 @@
    "pizza timer"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "pizza-dough-timers",
@@ -8298,6 +8376,7 @@
    "cooking timer"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "bbq-flip-timers",
@@ -8409,6 +8488,7 @@
    "count calories"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "calorie-counter",
@@ -8506,6 +8586,7 @@
    "tick off"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "exam-revision-checklist",
@@ -8547,6 +8628,7 @@
    "homework list"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "homework-tracker",
@@ -8638,6 +8720,7 @@
    "target"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "study-hours-goal",
@@ -8742,6 +8825,7 @@
    "school grades"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "grade-average-5",
@@ -8856,6 +8940,7 @@
    "language goal"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "words-learned-counter",
@@ -8956,6 +9041,7 @@
    "novels"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "reading-list-books",
@@ -9002,6 +9088,7 @@
    "spring cleaning"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "cleaning-chores-checklist",
@@ -9047,6 +9134,7 @@
    "rotation"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "flatmate-chores-rota",
@@ -9138,6 +9226,7 @@
    "green"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "plant-watering-checklist",
@@ -9191,6 +9280,7 @@
    "journey"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "trip-packing-list",
@@ -9240,6 +9330,7 @@
    "removals"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "moving-house-checklist",
@@ -9290,6 +9381,7 @@
    "dirty diaper"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "baby-feeding-diaper-counter",
@@ -9440,6 +9532,7 @@
    "checklist"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "pantry-restock",
@@ -9542,6 +9635,7 @@
    "reminder"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 0,
    "id": "leaving-home-checklist",
@@ -9601,6 +9695,7 @@
    "water"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "dog-walk-feeding",
@@ -9668,6 +9763,7 @@
    "how much left"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "monthly-budget",
@@ -9798,6 +9894,7 @@
    "fund"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "savings-goal",
@@ -9942,6 +10039,7 @@
    "daily expenses"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "expense-log",
@@ -10049,6 +10147,7 @@
    "spending"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "pocket-money",
@@ -10187,6 +10286,7 @@
    "flat"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "flat-expenses-split",
@@ -10322,6 +10422,7 @@
    "journey budget"
   ],
   "language": "en",
+  "listed": true,
   "capsule": {
    "schemaVersion": 1,
    "id": "group-trip-split",
@@ -10470,6 +10571,7 @@
    "school"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "times-tables-quiz",
@@ -10590,6 +10692,7 @@
    "quiz"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "capital-cities-quiz",
@@ -10923,6 +11026,7 @@
    "study"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "polish-english-flashcards",
@@ -11081,6 +11185,7 @@
    "physics"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "true-false-science-quiz",
@@ -11267,6 +11372,7 @@
    "kids"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "flag-guess-quiz",
@@ -11601,6 +11707,7 @@
    "score"
   ],
   "language": "en",
+  "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "spelling-practice-checklist",
