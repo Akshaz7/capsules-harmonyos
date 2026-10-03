@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Runs the same 15 requests through every provider in config.local.json and reports, per
-// provider, how many replies were valid capsules and how many were correct.
+// Runs the same requests through every provider in config.local.json and reports, per provider,
+// how many replies were valid capsules and how many were correct: 15 requests the prompt was tuned
+// on, and 5 held-out requests it never was (reported separately).
 //
 // It uses the app's own core code (system prompt, providers, validator, v1 interpreter), bundled
 // from entry/src/main/ets/core with esbuild, so it tests exactly what the app sends. Only the
@@ -170,16 +171,38 @@ const REQUESTS = [
       need(c.permissions.every((p) => p === 'reminders' || p === 'notifications'), `permissions ${c.permissions}`))]
 ];
 
+// Held out: added after the prompt was locked (2026-10-03) and never used for prompt tuning.
+// Their checks were written before the first run. Report these separately as the honest score.
+const HELD_OUT = [
+  ['km to miles converter',
+    (c) => shows(c, [[/k(ilo)?m/i, 10]], ['6.2'])],
+  ['darts for 3 players',
+    (c) => {
+      const players = Math.max(ofType(c, 'counter').length, ofType(c, 'number').length,
+        Object.values(c.state ?? {}).filter((v) => v.type === 'number').length);
+      return first(need(players >= 3, `${players} player scores`), need(buttons(c).length + ofType(c, 'input').length >= 3,
+        'fewer than 3 ways to enter scores'));
+    }],
+  ['quiz me on capitals',
+    (c) => first(need(JSON.stringify(c).toLowerCase().includes('capital'), 'no capitals'),
+      need(ofType(c, 'input').length > 0 || buttons(c).length >= 2, 'no way to answer'))],
+  ['tip calculator',
+    (c) => shows(c, [[/bill|amount|total|check/i, 50], [/tip|%|percent/i, 20]], ['10'])],
+  ['habit streak for reading',
+    (c) => need(ofType(c, 'counter').length > 0 ||
+      buttons(c).some((b) => (b.do ?? []).some((s) => typeof s === 'object' && s.set)), 'no streak that can go up')]
+];
+
 // ---- Run ----
 
 const results = [];
-for (const config of configs) {
-  const model = new lib.CapsuleModel(lib.createProvider(config, new FetchTransport()));
+
+async function runSet(model, config, setName, requests) {
   let valid = 0;
   let correct = 0;
   let totalMs = 0;
-  console.log(`\n== ${config.provider} (${config.model}) ==`);
-  for (const [request, check] of REQUESTS) {
+  console.log(`\n== ${config.provider} (${config.model}): ${setName} ==`);
+  for (const [request, check] of requests) {
     await sleep(delayMs);
     const started = Date.now();
     let r;
@@ -209,13 +232,23 @@ for (const config of configs) {
       }
     }
     console.log(`${String(ms).padStart(6)} ms  ${verdict.padEnd(9)}  ${request.substring(0, 60)}`);
-    results.push({ provider: config.provider, model: config.model, request, ok: r.ok, verdict, ms,
+    results.push({ provider: config.provider, model: config.model, set: setName, request, ok: r.ok, verdict, ms,
       capsule: r.capsule });
   }
-  console.log(`-> ${config.provider}: valid ${valid}/${REQUESTS.length}, correct ${correct}/${REQUESTS.length}, ` +
-    `avg ${Math.round(totalMs / REQUESTS.length)} ms (incl. rate-limit waits; ${rateLimited} HTTP 429 retries)`);
+  const line = `${config.provider} ${setName}: valid ${valid}/${requests.length}, correct ${correct}/${requests.length}, ` +
+    `avg ${Math.round(totalMs / requests.length)} ms (incl. rate-limit waits; ${rateLimited} HTTP 429 retries)`;
   rateLimited = 0;
+  console.log(`-> ${line}`);
+  return line;
 }
+
+const summary = [];
+for (const config of configs) {
+  const model = new lib.CapsuleModel(lib.createProvider(config, new FetchTransport()));
+  summary.push(await runSet(model, config, 'tuning set', REQUESTS));
+  summary.push(await runSet(model, config, 'held-out set', HELD_OUT));
+}
+console.log(`\nSummary\n${summary.join('\n')}`);
 
 const out = arg('--out');
 if (out) {
