@@ -38,7 +38,7 @@ function permissionReason(p: Permission): string {
     case 'vibration':
       return 'Vibrate the phone for alerts';
     case 'motion':
-      return 'Count reps or steps with the motion sensor';
+      return 'React to shaking the phone while the capsule is open. It does not count steps or reps';
     case 'location':
       return 'Use where you are';
     case 'widget':

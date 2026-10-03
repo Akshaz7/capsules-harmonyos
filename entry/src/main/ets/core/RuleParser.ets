@@ -50,8 +50,10 @@ const TIMER_FILLER: string[] = [
   'me', 'when', 'until', 'at', 'to', 'of', 'please'
 ];
 
+// Words that mean "count shakes with the motion sensor". Steps, reps and squats are not here: shaking a
+// phone does not count them, so those requests build ordinary tap counters instead.
 const MOTION_WORDS: string[] = [
-  'squat', 'pushup', 'push-up', 'push up', 'situp', 'sit-up', 'sit up', 'jumping jack', 'jump', 'lunge', 'step', 'rep'
+  'shake', 'shakes', 'shaking', 'motion', 'movement', 'moves'
 ];
 
 const TIME_PATTERN: string = '(?:\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)|\\d{1,2}:\\d{2})';

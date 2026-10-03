@@ -17,6 +17,7 @@ import deviceRelayTest from './DeviceRelay.test';
 import marketplaceTest from './Marketplace.test';
 import templatesTest from './Templates.test';
 import editCapsuleTest from './EditCapsule.test';
+import motionDetectTest from './MotionDetect.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -38,4 +39,5 @@ export default function testsuite() {
   marketplaceTest();
   templatesTest();
   editCapsuleTest();
+  motionDetectTest();
 }

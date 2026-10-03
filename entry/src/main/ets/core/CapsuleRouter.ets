@@ -5,8 +5,9 @@
  * Schema v1 (state, computed or "do" buttons) widget-suitable when it fits a card: at most 3 display/text
  * lines, at most 3 buttons, at most 2 timers/counters/checklists, and no inputs or lists (they need typing).
  */
-import { ButtonComponent, Capsule, CapsuleComponent, ChecklistComponent } from './CapsuleTypes';
+import { ButtonComponent, Capsule, CapsuleComponent, ChecklistComponent, CounterComponent } from './CapsuleTypes';
 import { allComponents } from './CapsuleProgram';
+import { usesMotion } from '../capabilities/MotionConsumers';
 
 export const MAX_WIDGET_COMPONENTS: number = 4;
 export const MAX_WIDGET_CHECKLIST_ITEMS: number = 6;
@@ -59,6 +60,12 @@ export interface CapsuleRoute {
 export function routeCapsule(capsule: Capsule): CapsuleRoute {
   if (capsule.ui.length === 0) {
     return { widget: false, reason: 'App only: the capsule has no components.' };
+  }
+  if (usesMotion(capsule)) {
+    return {
+      widget: false,
+      reason: 'App only: motion counters and triggers run while the capsule is open in the app.'
+    };
   }
   if (isV1(capsule)) {
     return routeV1(capsule);

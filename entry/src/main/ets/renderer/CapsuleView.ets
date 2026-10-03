@@ -44,11 +44,13 @@ function sectionCard() {
 @ComponentV2
 export struct CapsuleView {
   @Require @Param runtime: CapsuleRuntime;
+  /** One line under motion counters: how to shake, or why it cannot count here. '' hides it. */
+  @Param motionNote: string = '';
 
   build() {
     Column({ space: 12 }) {
       ForEach(this.runtime.capsule.ui, (c: CapsuleComponent) => {
-        CapsuleNode({ runtime: this.runtime, component: c })
+        CapsuleNode({ runtime: this.runtime, component: c, motionNote: this.motionNote })
       }, (c: CapsuleComponent, i: number) => `${this.runtime.serial}-${i}-${c.type}`)
       if (this.runtime.message.length > 0) {
         Text(this.runtime.message)
@@ -67,6 +69,7 @@ export struct CapsuleView {
 struct CapsuleNode {
   @Require @Param runtime: CapsuleRuntime;
   @Require @Param component: CapsuleComponent;
+  @Param motionNote: string = '';
 
   @Builder
   blockedItem(c: CapsuleComponent, reason: string) {
@@ -184,6 +187,13 @@ struct CapsuleNode {
           .fontColor($r('sys.color.font_primary'))
       }
       .width('100%')
+      if (c.source === 'motion' && this.motionNote.length > 0) {
+        Text(this.motionNote)
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+          .padding({ top: 6 })
+      }
     }
     .sectionCard()
   }
@@ -342,7 +352,7 @@ struct CapsuleNode {
       if (this.runtime.shown(this.component as WhenComponent)) {
         Column({ space: 12 }) {
           ForEach((this.component as WhenComponent).show, (child: CapsuleComponent) => {
-            CapsuleNode({ runtime: this.runtime, component: child })
+            CapsuleNode({ runtime: this.runtime, component: child, motionNote: this.motionNote })
           }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)
         }
         .width('100%')
@@ -351,7 +361,7 @@ struct CapsuleNode {
       Row({ space: 12 }) {
         ForEach((this.component as RowComponent).items, (child: CapsuleComponent) => {
           Column() {
-            CapsuleNode({ runtime: this.runtime, component: child })
+            CapsuleNode({ runtime: this.runtime, component: child, motionNote: this.motionNote })
           }
           .layoutWeight(1)
         }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)

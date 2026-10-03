@@ -30,6 +30,9 @@ import { TriggerCard } from './TriggerCard';
 import { formatAt, retimed, triggerTitle, withoutTrigger } from './TriggerText';
 import { NotificationAdapter } from '../adapters/NotificationAdapter';
 import { TimerAdapter } from '../adapters/TimerAdapter';
+import { MotionAdapter, MotionStatus } from '../adapters/MotionAdapter';
+import { MotionEvent } from '../capabilities/ShakeDetector';
+import { activeMotionConsumers, MotionConsumer, motionCounterIds } from '../capabilities/MotionConsumers';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
 import {
   ActionGuard,
@@ -267,6 +270,11 @@ struct Index {
   private holdTicks: number = 0;
   @Local entries: CapsuleEntry[] = [];
   @Local openId: string = '';
+  /** Motion: one shared accelerometer subscription; the scope comes from Settings. */
+  private motion: MotionAdapter | undefined = undefined;
+  @Local motionState: MotionStatus = 'unsupported';
+  private motionProbed: boolean = false;
+  private foreground: boolean = false;
   @Local pending: Capsule | undefined = undefined;
   @Local pendingOrigin: string = '';
   /** T3-17: the consent sheet's "Built from a template" line; '' when the capsule was not. */
@@ -313,6 +321,12 @@ struct Index {
     this.notifications = new NotificationAdapter(ctx);
     this.store = new CapsuleStore(ctx);
     this.settings.load(ctx);
+    this.motion = new MotionAdapter();
+    this.motion.probe().then((s: MotionStatus) => {
+      this.motionState = s;
+      this.motionProbed = true;
+      this.syncMotion();
+    });
     this.watchModelStatus();
     if (reduceMotion()) {
       this.placeholderTimer = setInterval(() => {
@@ -571,6 +585,74 @@ struct Index {
     this.toast(r.fired ? `${name} ran` : r.blocked.length > 0 ? `Blocked: ${r.blocked}` : `${name} didn't run`);
   }
 
+  // ---- Motion (schema v1.1 counters with source "motion" and motion triggers) ----
+
+  /** The line under a capsule's motion counters: how to count, or why it cannot count here. */
+  private motionNoteFor(capsule: Capsule): string {
+    if (!this.motionProbed || motionCounterIds(capsule).length === 0) {
+      return '';
+    }
+    if (this.motionState === 'available') {
+      return 'Shake the phone to count';
+    }
+    if (this.motionState === 'denied') {
+      return 'Motion access is off in system settings';
+    }
+    if (this.motionState === 'error') {
+      return 'Motion sensor unavailable right now';
+    }
+    return 'Motion sensor unavailable on this device';
+  }
+
+  /** Capsules that may receive shakes now: scope setting, per-capsule grant and the capsule still present. */
+  private motionConsumersNow(): MotionConsumer[] {
+    const gate = this.gate;
+    if (!gate) {
+      return [];
+    }
+    const capsules: Capsule[] = this.entries.map((e: CapsuleEntry) => e.capsule);
+    return activeMotionConsumers(capsules, this.settings.motionScope, this.openId,
+      (c: Capsule) => gate.isAllowed(c, 'motion') && !gate.isRemoved(c.id));
+  }
+
+  /** Keeps exactly one subscription running when there is something to feed and the app is in front. */
+  private syncMotion(): void {
+    const motion = this.motion;
+    if (!motion) {
+      return;
+    }
+    if (this.motionState !== 'available' || !this.foreground || this.motionConsumersNow().length === 0) {
+      motion.stop();
+      return;
+    }
+    motion.start((e: MotionEvent) => this.onMotionEvent(e), (s: MotionStatus) => {
+      this.motionState = s;
+      motion.stop();
+    });
+  }
+
+  /**
+   * One shake event, applied to every active consumer. The motion grant is verified again immediately
+   * before each counter increment and each trigger, so a revoked capsule stops at once.
+   */
+  private onMotionEvent(e: MotionEvent): void {
+    const gate = this.gate;
+    if (!gate) {
+      return;
+    }
+    this.motionConsumersNow().forEach((c: MotionConsumer) => {
+      const entry = this.entries.find((x: CapsuleEntry) => x.capsule.id === c.capsuleId);
+      if (!entry || gate.isRemoved(entry.capsule.id) || !gate.isAllowed(entry.capsule, 'motion')) {
+        return;
+      }
+      if (e.kind === 'shake') {
+        c.counterIds.forEach((id: string) => entry.runtime.dispatch(`increment:${id}`));
+        return;
+      }
+      c.triggerIndices.forEach((i: number) => entry.runtime.fireTrigger(i, new GatekeeperTriggerGuard(gate)));
+    });
+  }
+
   private editTriggerTime(entry: CapsuleEntry, index: number): void {
     const t = (entry.capsule.triggers ?? [])[index];
     if (t === undefined || t.on !== 'time') {
@@ -744,6 +826,7 @@ struct Index {
 
   aboutToDisappear(): void {
     this.entries.forEach((e: CapsuleEntry) => e.runtime.stop());
+    this.motion?.stop();
     clearInterval(this.statusPoll);
     clearInterval(this.placeholderTimer);
     clearInterval(this.triggerTimer);
@@ -810,10 +893,18 @@ struct Index {
     if (!ctx) {
       return;
     }
+    this.foreground = true;
     this.entries.forEach((e: CapsuleEntry) => e.runtime.applyState(loadState(ctx, e.capsule)));
     this.loadWidgets(); // the user may have added or removed widgets while away
     this.checkTriggers(); // a time that passed while the app was away fires once now
+    this.syncMotion();
     hilog.info(0x0001, 'Index', 'reloaded widget state for %{public}d capsules', this.entries.length);
+  }
+
+  /** The app left the front: motion is foreground-only, so the subscription stops here. */
+  onPageHide(): void {
+    this.foreground = false;
+    this.motion?.stop();
   }
 
   /** Keeps ids unique across saved capsules so grants and calendar events never collide. */
@@ -993,6 +1084,7 @@ struct Index {
     if (this.consentForEdit) {
       // An edit that asks for new permissions: same capsule id, so the new answers replace the old grants.
       this.gate.decide(capsule, allowed);
+      this.syncMotion(); // an edit can add or drop the motion grant
       this.consentForEdit = false;
       this.pending = undefined;
       this.showSheet = false;
@@ -1000,6 +1092,7 @@ struct Index {
       return;
     }
     this.gate.decide(capsule, allowed);
+    this.syncMotion();
     this.store?.setOrigin(capsule.id, this.pendingOriginRaw);
     if (this.pendingRequest.length > 0) {
       this.store?.setRequest(capsule.id, this.pendingRequest);
@@ -1066,12 +1159,14 @@ struct Index {
     this.getUIContext().animateTo({ curve: OPEN_CURVE }, () => {
       this.openId = id;
     });
+    this.syncMotion(); // the "while a capsule is open" scope starts with this page
   }
 
   private close(): void {
     this.getUIContext().animateTo({ curve: OPEN_CURVE }, () => {
       this.openId = '';
     });
+    this.syncMotion();
   }
 
   private async undo(entry: CapsuleEntry, replacedNote?: string): Promise<void> {
@@ -1089,6 +1184,7 @@ struct Index {
       refreshCapsuleWidgets(this.ctx, capsule.id);
     }
     this.entries = this.entries.filter((e: CapsuleEntry) => e.capsule.id !== capsule.id);
+    this.syncMotion(); // no consumers left for a removed capsule
     this.message = replacedNote === undefined ? note : '';
   }
 
@@ -1503,7 +1599,8 @@ struct Index {
       SettingsView({
         settings: this.settings,
         cloudStatus: this.cloudConfigured ? '' : this.modelStatus,
-        smartDetail: this.smartModeDetail()
+        smartDetail: this.smartModeDetail(),
+        onMotionScopeChange: () => this.syncMotion()
       })
     }
   }
@@ -2100,7 +2197,8 @@ struct Index {
             settings: this.settings,
             embedded: true,
             cloudStatus: this.cloudConfigured ? '' : this.modelStatus,
-            smartDetail: this.smartModeDetail()
+            smartDetail: this.smartModeDetail(),
+            onMotionScopeChange: () => this.syncMotion()
           })
         }
       }
@@ -2206,7 +2304,7 @@ struct Index {
       Scroll() {
         Column({ space: 16 }) {
           this.originPill(entry.origin)
-          CapsuleView({ runtime: entry.runtime })
+          CapsuleView({ runtime: entry.runtime, motionNote: this.motionNoteFor(entry.capsule) })
           this.changeCard(entry)
           if ((entry.capsule.triggers ?? []).length > 0) {
             TriggerCard({

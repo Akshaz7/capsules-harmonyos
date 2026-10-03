@@ -81,12 +81,20 @@ export default function ruleParserTest() {
       expect(parseRequest('pasta 9 min, sauce')).assertNull();
     });
 
-    it('counts squats with the motion sensor', 0, () => {
-      const c = parseValid('count my squats');
+    it('counts shakes with the motion sensor', 0, () => {
+      const c = parseValid('count my shakes');
       const counter = c.ui[0] as CounterComponent;
       expect(counter.source).assertEqual('motion');
       expect(c.permissions.join(',')).assertEqual('motion');
-      expect((c.ui[1] as ButtonComponent).action).assertEqual('increment:squats');
+      expect((c.ui[1] as ButtonComponent).action).assertEqual('increment:shakes');
+    });
+
+    it('does not claim steps or reps from shaking: they are ordinary tap counters', 0, () => {
+      ['count my steps', 'count my squats', 'count my push-ups'].forEach((req: string) => {
+        const c = parseValid(req);
+        expect(`${req}: ${(c.ui[0] as CounterComponent).source}`).assertEqual(`${req}: manual`);
+        expect(`${req}: ${c.permissions.length}`).assertEqual(`${req}: 0`);
+      });
     });
 
     it('counts non-exercise things manually', 0, () => {
