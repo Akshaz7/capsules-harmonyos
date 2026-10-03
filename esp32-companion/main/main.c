@@ -11,6 +11,7 @@
 #include "http_api.h"
 #include "motion.h"
 #include "net.h"
+#include "relay.h"
 #include "ui.h"
 
 static const char *TAG = "harmoniser";
@@ -47,6 +48,7 @@ void app_main(void)
     beep_init();
     net_start();
     http_api_start();
+    relay_start();
     ESP_LOGI(TAG, "ready. free heap: %u bytes internal (largest block %u), %u bytes PSRAM",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),

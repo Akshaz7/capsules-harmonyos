@@ -7,6 +7,8 @@ idf_component_register(
         "net.c"
         "http_api.c"
         "validate.c"
+        "relay.c"
+        "relay_sync.c"
         "ui.c"
         "motion.c"
         "beep.c"

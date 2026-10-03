@@ -11,6 +11,7 @@
 #include "beep.h"
 #include "capsule.h"
 #include "net.h"
+#include "relay.h"
 
 LV_FONT_DECLARE(font_digits_128);  // 0-9 : + -
 LV_FONT_DECLARE(font_digits_72);   // same glyphs, for values too long for the big font
@@ -33,6 +34,9 @@ LV_FONT_DECLARE(font_small_22);    // ASCII
 #define BIG_TIMER_CHARS 5    // "00:00" fits in the big font, "1:40:00" does not
 #define BIG_COUNTER_CHARS 4
 #define HOUR_FORMAT_FROM 6000  // seconds; from 100 minutes on show h:mm:ss
+#define STATUS_MAX_CHARS 32    // of the small line at the top: more runs into the rounded corners
+#define QR_BOX 300             // white square behind the pairing QR code
+#define QR_QUIET_MODULES 4     // white border the QR standard asks for, on every side
 
 typedef struct {
     lv_obj_t *root;
@@ -47,12 +51,22 @@ typedef struct {
     char status[48];  // small line at the top
     char label[CAPSULE_LABEL_MAX_BYTES];
     char value[40];
-    const char *hint;
+    char pair[sizeof(((relay_status_t *)0)->code)];  // idle only: pairing phrase, shown instead of value and label
+    char pair_url[sizeof(((relay_status_t *)0)->pair_url)];  // and what the QR code above it holds, if anything
+    char hint[24];
     uint32_t value_color;
     uint32_t bg_color;
 } frame_t;
 
 static view_t s_views[3];  // indexed by capsule_type_t
+// On the idle view while the board waits to be paired:
+static lv_obj_t *s_idle_title;  // "harmoniser"; makes way for the QR code
+static lv_obj_t *s_qr_box;      // white square (a QR code needs a light border) ...
+static lv_obj_t *s_qr;          // ... with the code in its middle
+static lv_obj_t *s_pair_title;  // "or type:" under the QR code; "pair:" when there is none
+static lv_obj_t *s_pair_code;   // the phrase
+static lv_obj_t *s_pair_ip;     // the address, below everything else
+static int s_qr_size;           // pixels the QR canvas currently has
 static lv_obj_t *s_status;
 static frame_t s_shown;
 static bool s_ready;
@@ -70,12 +84,39 @@ static void format_time(char *out, size_t size, int seconds)
     }
 }
 
-static void fill_idle(frame_t *frame, const net_status_t *net)
+static void set_hint(frame_t *frame, const char *hint)
 {
-    frame->hint = "harmoniser.local";
+    snprintf(frame->hint, sizeof(frame->hint), "%s", hint);
+}
+
+// The cloud relay's part of the small line at the top. Empty when the relay is off, has
+// not answered yet, or the pairing phrase is on the screen anyway.
+static const char *cloud_marker(const relay_status_t *relay)
+{
+    switch (relay->state) {
+    case RELAY_CLAIMED:
+        return "cloud";
+    case RELAY_OFFLINE:
+        return "cloud offline";
+    default:
+        return "";
+    }
+}
+
+static void fill_idle(frame_t *frame, const net_status_t *net, const relay_status_t *relay)
+{
+    set_hint(frame, "harmoniser.local");
     frame->value_color = net->state == NET_CONNECTED ? COLOR_TEXT : COLOR_PAUSED;
+    snprintf(frame->status, sizeof(frame->status), "%s", cloud_marker(relay));
     switch (net->state) {
     case NET_CONNECTED:
+        if (relay->state == RELAY_UNCLAIMED) {
+            // Waiting to be paired: the phrase takes the middle of the screen, the address moves down.
+            snprintf(frame->pair, sizeof(frame->pair), "%s", relay->code);
+            snprintf(frame->pair_url, sizeof(frame->pair_url), "%s", relay->pair_url);
+            set_hint(frame, net->ip);
+            break;
+        }
         snprintf(frame->value, sizeof(frame->value), "%s", net->ip);
         snprintf(frame->label, sizeof(frame->label), "%s", net->ssid);
         break;
@@ -101,29 +142,57 @@ static void fill_timer(frame_t *frame, const capsule_state_t *state)
         bool lit = s_flash_ticks / FLASH_HALF_PERIOD % 2;
         frame->bg_color = lit ? COLOR_ALERT : COLOR_BG;
         frame->value_color = lit ? COLOR_TEXT : COLOR_ALERT;
-        frame->hint = "tap to reset";
+        set_hint(frame, "tap to reset");
     } else if (state->running) {
-        frame->hint = "tap to pause";
+        set_hint(frame, "tap to pause");
     } else {
         frame->value_color = COLOR_PAUSED;
-        frame->hint = "tap to start";
+        set_hint(frame, "tap to start");
     }
 }
 
-static void fill_frame(frame_t *frame, const capsule_state_t *state, const net_status_t *net)
+// The small line above a capsule: where the board is, the cloud marker, motion counting.
+// While the board waits to be paired the phrase stands in for the address. If it all gets
+// too long the address goes: it is also on the idle screen and on the serial port.
+static void fill_status(frame_t *frame, const capsule_state_t *state, const net_status_t *net,
+                        const relay_status_t *relay)
+{
+    char place[sizeof(frame->status)];
+    if (net->state != NET_CONNECTED) {
+        snprintf(place, sizeof(place), "no Wi-Fi");
+    } else if (relay->state == RELAY_UNCLAIMED) {
+        snprintf(place, sizeof(place), "pair: %s", relay->code);
+    } else {
+        snprintf(place, sizeof(place), "%s", net->ip);
+    }
+    const char *cloud = net->state == NET_CONNECTED ? cloud_marker(relay) : "";
+    const char *motion = state->motion ? "motion on" : "";
+    const char *parts[] = { place, cloud, motion };
+    size_t separators = 3 * ((*cloud != '\0') + (*motion != '\0'));
+    if (strlen(place) + strlen(cloud) + strlen(motion) + separators > STATUS_MAX_CHARS) {
+        parts[0] = "";  // only ever true with a marker to show in its place
+    }
+    for (size_t i = 0; i < sizeof(parts) / sizeof(parts[0]); i++) {
+        if (*parts[i]) {
+            strlcat(frame->status, frame->status[0] ? "   " : "", sizeof(frame->status));
+            strlcat(frame->status, parts[i], sizeof(frame->status));
+        }
+    }
+}
+
+static void fill_frame(frame_t *frame, const capsule_state_t *state, const net_status_t *net,
+                       const relay_status_t *relay)
 {
     memset(frame, 0, sizeof(*frame));  // also the padding: frames are compared with memcmp
     frame->view = state->type;
-    frame->hint = "";
     frame->value_color = COLOR_TEXT;
     frame->bg_color = COLOR_BG;
     memcpy(frame->label, state->label, sizeof(frame->label));
     if (state->type == CAPSULE_IDLE) {
-        fill_idle(frame, net);
+        fill_idle(frame, net, relay);
         return;
     }
-    snprintf(frame->status, sizeof(frame->status), "%s%s", net->state == NET_CONNECTED ? net->ip : "no Wi-Fi",
-             state->motion ? "   motion on" : "");
+    fill_status(frame, state, net, relay);
     if (state->type == CAPSULE_TIMER) {
         fill_timer(frame, state);
     } else {
@@ -133,6 +202,93 @@ static void fill_frame(frame_t *frame, const capsule_state_t *state, const net_s
 }
 
 // ---- drawing ----
+
+// Modules along one side of the QR code LVGL makes for `bytes` bytes of text (it uses error
+// correction level M and the smallest version that fits). 0: too long for the sizes listed.
+static int qr_modules(size_t bytes)
+{
+    static const uint8_t capacity[] = { 14, 26, 42, 62, 84, 106, 122, 152, 180, 213 };  // versions 1..10, level M
+    for (size_t version = 1; version <= sizeof(capacity); version++) {
+        if (bytes <= capacity[version - 1]) {
+            return 17 + 4 * (int)version;
+        }
+    }
+    return 0;
+}
+
+// Draws `url` as dark modules on the white square, as large as whole pixels per module allow
+// with the quiet zone kept. False if it cannot be drawn; the phrase is then shown alone.
+static bool show_qr(const char *url)
+{
+    int modules = qr_modules(strlen(url));
+    if (modules == 0) {
+        return false;
+    }
+    int size = modules * (QR_BOX / (modules + 2 * QR_QUIET_MODULES));
+    if (size != s_qr_size) {
+        lv_qrcode_set_size(s_qr, size);
+        s_qr_size = size;
+    }
+    return lv_qrcode_update(s_qr, url, strlen(url)) == LV_RESULT_OK;
+}
+
+// One line of the phrase in the label font, or in the small font if that is too wide.
+static void fit_phrase_line(const char *phrase)
+{
+    lv_obj_set_style_text_font(s_pair_code, &font_text_40, 0);
+    lv_label_set_text(s_pair_code, phrase);
+    lv_obj_update_layout(s_pair_code);
+    if (lv_obj_get_width(s_pair_code) > TEXT_WIDTH) {
+        lv_obj_set_style_text_font(s_pair_code, &font_small_22, 0);
+    }
+}
+
+// The phrase as large as the label font goes: on one line if that fits between the rounded
+// corners, else one word per line.
+static void fit_phrase_lines(const char *phrase)
+{
+    lv_obj_set_style_text_font(s_pair_code, &font_text_40, 0);
+    lv_label_set_text(s_pair_code, phrase);
+    lv_obj_update_layout(s_pair_code);
+    if (lv_obj_get_width(s_pair_code) > TEXT_WIDTH) {
+        char lines[sizeof(((frame_t *)0)->pair)];
+        snprintf(lines, sizeof(lines), "%s", phrase);
+        for (char *c = lines; *c; c++) {
+            if (*c == '-' || *c == ' ') {
+                *c = '\n';
+            }
+        }
+        lv_label_set_text(s_pair_code, lines);
+    }
+}
+
+// The idle view while the board waits to be paired: the QR code with the phrase under it as
+// the fallback, or the phrase alone if the relay gave no URL. `phrase` empty: not pairing.
+static void show_pair(const view_t *idle, const char *phrase, const char *url, const char *ip)
+{
+    bool pairing = phrase[0] != '\0';
+    bool qr = pairing && url[0] != '\0' && show_qr(url);
+    lv_obj_set_hidden(s_idle_title, qr);
+    lv_obj_set_hidden(idle->value, pairing);
+    lv_obj_set_hidden(idle->label, pairing);
+    lv_obj_set_hidden(idle->hint, qr);
+    lv_obj_set_hidden(s_qr_box, !qr);
+    lv_obj_set_hidden(s_pair_ip, !qr);
+    lv_obj_set_hidden(s_pair_title, !pairing);
+    lv_obj_set_hidden(s_pair_code, !pairing);
+    if (qr) {
+        lv_label_set_text(s_pair_title, "or type:");
+        lv_obj_align(s_pair_title, LV_ALIGN_TOP_MID, 0, 324);
+        fit_phrase_line(phrase);
+        lv_obj_align(s_pair_code, LV_ALIGN_TOP_MID, 0, 346);
+        lv_label_set_text(s_pair_ip, ip);
+    } else if (pairing) {
+        lv_label_set_text(s_pair_title, "pair:");
+        lv_obj_align(s_pair_title, LV_ALIGN_TOP_MID, 0, 132);
+        fit_phrase_lines(phrase);
+        lv_obj_align(s_pair_code, LV_ALIGN_CENTER, 0, 22);
+    }
+}
 
 static void show_frame(const frame_t *frame)
 {
@@ -146,7 +302,9 @@ static void show_frame(const frame_t *frame)
     if (view->hint) {
         lv_label_set_text(view->hint, frame->hint);
     }
-    if (frame->view != CAPSULE_IDLE) {
+    if (frame->view == CAPSULE_IDLE) {
+        show_pair(view, frame->pair, frame->pair_url, frame->hint);
+    } else {
         size_t big_chars = frame->view == CAPSULE_TIMER ? BIG_TIMER_CHARS : BIG_COUNTER_CHARS;
         const lv_font_t *font = strlen(frame->value) > big_chars ? &font_digits_72 : &font_digits_128;
         lv_obj_set_style_text_font(view->value, font, 0);
@@ -160,8 +318,10 @@ static void refresh(lv_timer_t *timer)
 {
     capsule_state_t state;
     net_status_t net;
+    relay_status_t relay;
     capsule_get(&state);
     net_get_status(&net);
+    relay_get_status(&relay);
 
     bool done = state.type == CAPSULE_TIMER && state.done;
     if (done && !s_was_done) {
@@ -175,7 +335,7 @@ static void refresh(lv_timer_t *timer)
     s_was_done = done;
 
     frame_t frame;
-    fill_frame(&frame, &state, &net);
+    fill_frame(&frame, &state, &net, &relay);
     if (memcmp(&frame, &s_shown, sizeof(frame)) != 0) {
         show_frame(&frame);
         s_shown = frame;
@@ -229,11 +389,30 @@ static lv_obj_t *make_root(lv_obj_t *screen)
 static void make_idle_view(view_t *view, lv_obj_t *screen)
 {
     view->root = make_root(screen);
-    lv_obj_t *title = make_label(view->root, &font_text_40, COLOR_ACCENT, LV_ALIGN_TOP_MID, 70);
-    lv_label_set_text(title, "harmoniser");
+    s_idle_title = make_label(view->root, &font_text_40, COLOR_ACCENT, LV_ALIGN_TOP_MID, 70);
+    lv_label_set_text(s_idle_title, "harmoniser");
     view->value = make_text_line(view->root, COLOR_TEXT, LV_ALIGN_CENTER, -6);   // IP address
     view->label = make_text_line(view->root, COLOR_DIM, LV_ALIGN_CENTER, 50);    // network name
     view->hint = make_label(view->root, &font_small_22, COLOR_DIM, LV_ALIGN_BOTTOM_MID, -36);
+
+    // Shown instead while the board waits to be paired; show_pair() places the two labels.
+    s_qr_box = lv_obj_create(view->root);
+    lv_obj_remove_style_all(s_qr_box);
+    lv_obj_set_size(s_qr_box, QR_BOX, QR_BOX);
+    lv_obj_align(s_qr_box, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_set_style_bg_color(s_qr_box, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(s_qr_box, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(s_qr_box, 12, 0);
+    lv_obj_set_scrollable(s_qr_box, false);
+    s_qr = lv_qrcode_create(s_qr_box);
+    lv_qrcode_set_dark_color(s_qr, lv_color_black());
+    lv_qrcode_set_light_color(s_qr, lv_color_white());
+    lv_qrcode_set_quiet_zone(s_qr, false);  // the white square is the quiet zone
+    lv_obj_center(s_qr);
+    s_pair_title = make_label(view->root, &font_small_22, COLOR_DIM, LV_ALIGN_TOP_MID, 132);
+    s_pair_code = make_label(view->root, &font_text_40, COLOR_TEXT, LV_ALIGN_CENTER, 22);
+    lv_obj_set_style_text_line_space(s_pair_code, 0, 0);
+    s_pair_ip = make_label(view->root, &font_small_22, COLOR_DIM, LV_ALIGN_BOTTOM_MID, -12);
 }
 
 static void make_timer_view(view_t *view, lv_obj_t *screen)
