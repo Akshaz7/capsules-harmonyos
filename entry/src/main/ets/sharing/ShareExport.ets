@@ -8,13 +8,13 @@
  *   @kit.CoreFileKit -> fileIo
  */
 import { common } from '@kit.AbilityKit';
-import { fileIo } from '@kit.CoreFileKit';
+import { fileIo, fileUri, picker } from '@kit.CoreFileKit';
 import { uniformTypeDescriptor as utd } from '@kit.ArkData';
 import { systemShare } from '@kit.ShareKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule } from '../core/CapsuleTypes';
-import { exportCapsuleJson } from './CapsuleShare';
+import { exportCapsuleJson, utf8ByteLength } from './CapsuleShare';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'ShareExport';
@@ -52,7 +52,9 @@ export async function shareCapsule(context: common.UIAbilityContext, capsule: Ca
   }
   const record: systemShare.SharedRecord = {
     utd: utd.UniformDataType.FILE,
-    uri: `file://${path}`,
+    // A sandbox path needs the app-qualified uri (file://<bundle>/data/storage/...); a bare
+    // `file://` + path makes the share panel close at once on real phones.
+    uri: fileUri.getUriFromPath(path),
     title: capsule.name
   };
   const options: systemShare.ShareControllerOptions = {
@@ -66,4 +68,46 @@ export async function shareCapsule(context: common.UIAbilityContext, capsule: Ca
     hilog.error(DOMAIN, TAG, 'share panel failed: %{public}s', err.message);
     throw new Error(`Could not open the share panel: ${err.message}`);
   }
+}
+
+/** Largest capsule JSON we put in a QR code; bigger codes are too dense to scan from a phone screen. */
+export const MAX_QR_BYTES: number = 1500;
+
+/** The capsule as QR text (the same JSON as the file), or '' when it is too big to scan reliably. */
+export function capsuleQrText(capsule: Capsule): string {
+  const json: string = exportCapsuleJson(capsule);
+  return utf8ByteLength(json) <= MAX_QR_BYTES ? json : '';
+}
+
+/**
+ * Fallback when the Share panel can't open: lets the user save the capsule as a .json file in Files.
+ * Returns false when the user cancelled. Throws a clear Error when writing fails.
+ */
+export async function saveCapsuleToFiles(context: common.UIAbilityContext, capsule: Capsule): Promise<boolean> {
+  const options = new picker.DocumentSaveOptions();
+  options.newFileNames = [`${capsule.name.replace(/[\\/:*?"<>|]/g, ' ').trim() || 'capsule'}.json`];
+  let uris: string[] = [];
+  try {
+    uris = await new picker.DocumentViewPicker(context).save(options);
+  } catch (e) {
+    const err = e as BusinessError;
+    hilog.error(DOMAIN, TAG, 'save picker failed: %{public}s', err.message);
+    throw new Error(`Could not open Files: ${err.message}`);
+  }
+  if (uris.length === 0) {
+    return false;
+  }
+  try {
+    const file = fileIo.openSync(uris[0], fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+    try {
+      fileIo.writeSync(file.fd, exportCapsuleJson(capsule));
+    } finally {
+      fileIo.closeSync(file);
+    }
+  } catch (e) {
+    const err = e as BusinessError;
+    hilog.error(DOMAIN, TAG, 'save to files failed: %{public}s', err.message);
+    throw new Error(`Could not save the file: ${err.message}`);
+  }
+  return true;
 }

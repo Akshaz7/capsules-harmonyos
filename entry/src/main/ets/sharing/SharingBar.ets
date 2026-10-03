@@ -7,7 +7,7 @@ import { common } from '@kit.AbilityKit';
 import { Capsule } from '../core/CapsuleTypes';
 import { ImportResult, onImported as deliverPreparedImport, PreparedImport } from './CapsuleShare';
 import { ImportOutcome, pickAndPrepare, scanAndPrepare } from './ImportFlow';
-import { shareCapsule } from './ShareExport';
+import { capsuleQrText, saveCapsuleToFiles, shareCapsule } from './ShareExport';
 
 @ComponentV2
 export struct SharingBar {
@@ -20,6 +20,8 @@ export struct SharingBar {
   };
   @Local message: string = '';
   @Local busy: boolean = false;
+  /** The capsule JSON shown as a QR code; '' when the QR sheet is closed. */
+  @Local qrText: string = '';
 
   private host(): common.UIAbilityContext {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -34,9 +36,51 @@ export struct SharingBar {
     try {
       await shareCapsule(this.host(), this.capsule);
     } catch (e) {
-      this.report((e as Error).message);
+      // Logged in ShareExport. Offer the other ways out instead of a dead button.
+      this.offerFallback();
     }
     this.busy = false;
+  }
+
+  /** When the Share panel can't open: save to Files, or show a QR code another phone can scan. */
+  private offerFallback(): void {
+    try {
+      this.getUIContext().showActionSheet({
+        title: "Couldn't open the share panel",
+        message: 'Share it another way:',
+        sheets: [
+          { title: 'Save to Files', action: () => this.saveToFiles() },
+          { title: 'Show QR code', action: () => this.showQr() }
+        ]
+      });
+    } catch (e) {
+      this.report("Couldn't open the share panel.");
+    }
+  }
+
+  private async saveToFiles(): Promise<void> {
+    if (this.capsule === undefined) {
+      return;
+    }
+    try {
+      if (await saveCapsuleToFiles(this.host(), this.capsule)) {
+        this.report('Saved to Files');
+      }
+    } catch (e) {
+      this.report((e as Error).message);
+    }
+  }
+
+  private showQr(): void {
+    if (this.capsule === undefined) {
+      return;
+    }
+    const text = capsuleQrText(this.capsule);
+    if (text.length === 0) {
+      this.report('This capsule is too big for a QR code. Use Save to Files.');
+      return;
+    }
+    this.qrText = text;
   }
 
   private handle(outcome: ImportOutcome): void {
@@ -149,6 +193,11 @@ export struct SharingBar {
         }
       }
       .width('100%')
+      if (this.showShare) {
+        Button('Show as QR code', { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .enabled(this.capsule !== undefined && !this.busy)
+          .onClick(() => this.showQr())
+      }
       if (this.message.length > 0) {
         Text(this.message)
           .fontSize(13)
@@ -158,5 +207,31 @@ export struct SharingBar {
     }
     .width('100%')
     .padding({ left: 16, right: 16, top: 8 })
+    .bindSheet(this.qrText.length > 0, this.qrSheet(), {
+      height: SheetSize.MEDIUM,
+      title: { title: 'Scan to import' },
+      onDisappear: () => {
+        this.qrText = '';
+      }
+    })
+  }
+
+  @Builder
+  qrSheet() {
+    Column({ space: 12 }) {
+      QRCode(this.qrText)
+        .width(260)
+        .height(260)
+        .color(Color.Black)
+        .backgroundColor(Color.White)
+        .padding(12)
+        .borderRadius(12)
+      Text('On the other phone: Harmoniser > Import > Scan QR code.')
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_secondary'))
+        .textAlign(TextAlign.Center)
+    }
+    .width('100%')
+    .padding(16)
   }
 }
