@@ -2,7 +2,7 @@
 
 One take of about 90 seconds. Most of it is on the **emulator**, the default the judges expect, with one clearly labelled **real-phone** segment. Every step shows something that is built and has been seen working. The marketplace appears only as "coming next" on the end card, unless it works end to end by 03:00 (then see [Marketplace swap](#marketplace-swap-only-if-it-works-end-to-end-by-0300)).
 
-Leave out anything that isn't built or hasn't been seen working: vibration, motion counting, calendar alerts with the app closed, and scanning a capsule QR code (no device check yet). The P1 fixes have landed (timer Pause/Stop, Share on the phone, non-English requests), so they can be shown if time allows, but the 90 seconds below don't need them.
+Use English only: Harmoniser rejects other languages by design. Leave out anything that isn't built or hasn't been seen working: vibration, motion counting, calendar alerts with the app closed, and scanning a capsule QR code (no device check yet). The P1 fixes have landed (timer Pause/Stop, Share on the phone, non-English requests), so they can be shown if time allows, but the 90 seconds below don't need them.
 
 ## Before recording
 

@@ -55,7 +55,7 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 | Item | Status | Notes and owner |
 | --- | --- | --- |
 | Tool versions | ✅ | DevEco Studio 6.1.1, SDK API 24 (min API 20), `devecocli` 1.3.4, Node 18+ for the eval |
-| Unit tests | ✅ | 186 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
+| Unit tests | ✅ | 190 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
 | On-device model | ✅ | URL, tag and sha256 in `docs/THIRD_PARTY.md`; `scripts/push-model.sh` |
 | Rebuilding `libcactus_engine.so` | ✅ | Fixed by T5-5 (`755fbc3`): `cactus/BUILD.md` and `cactus/build-engine.sh`; a clean rebuild matches the committed `.so` apart from the build ID |
 | Untracked `.cache/` folder | ✅ | Fixed: ignored in `783a1ee` |
