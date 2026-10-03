@@ -37,10 +37,10 @@ $(BIN)/cJSON.o: vendor/cJSON/cJSON.c vendor/cJSON/cJSON.h
 	@mkdir -p $(BIN)
 	$(CC) -std=gnu11 -O1 -g $(SANITIZE) -c -o $@ vendor/cJSON/cJSON.c
 
-$(BIN)/test_http_api: test_http_api.c ../main/http_api.c ../main/capsule.c ../main/validate.c \
+$(BIN)/test_http_api: test_http_api.c ../main/http_api.c ../main/capsule_json.c ../main/capsule.c ../main/validate.c \
 		stubs/stubs.c stubs/fake_httpd.c $(BIN)/cJSON.o $(HEADERS)
 	@mkdir -p $(BIN)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_http_api.c ../main/http_api.c ../main/capsule.c ../main/validate.c \
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_http_api.c ../main/http_api.c ../main/capsule_json.c ../main/capsule.c ../main/validate.c \
 		stubs/stubs.c stubs/fake_httpd.c $(BIN)/cJSON.o -lm
 
 clean:

@@ -3,6 +3,7 @@ idf_component_register(
         "main.c"
         "board.c"
         "capsule.c"
+        "capsule_json.c"
         "net.c"
         "http_api.c"
         "validate.c"
