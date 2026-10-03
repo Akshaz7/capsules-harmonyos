@@ -29,6 +29,10 @@ export { parseRequest } from './RuleParser';
 export { AI_NOT_CONFIGURED, NO_RULE_MATCH, GenerateOptions } from './CapsuleGenerator';
 export { OnDeviceStatus } from './providers/CactusProvider';
 export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';
+export { StateValues, EvalResult, ApplyResult, DISPLAY_ERROR, initialState, restoreState, evaluate, computedValues,
+  renderTemplate, isShown, isEnabled, listItems, inputText, applyActions, setInput, allComponents } from './CapsuleProgram';
+export { formatValue, MAX_EXPR_LENGTH, MAX_TEXT_LENGTH, MAX_LIST_ITEMS } from './Expr';
+export { TENNIS_CAPSULE, BILL_SPLIT_CAPSULE } from './V1Fixtures';
 
 const CONFIG_FILE: string = 'config.local.json';
 
