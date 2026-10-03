@@ -49,9 +49,16 @@ That way the phone and the device need no shared Wi-Fi and no IP address.
 **Base URL:** `https://harmoniser-web.vercel.app` (planned; a custom domain may replace it). Keep it
 in one constant. Local fake, once pushed: `python3 esp32-companion/mock_relay.py --port 8090`.
 
-**Who you are:** every request from the app carries `Authorization: Bearer <install token>`. There
-are no accounts. The token is the anonymous install token the app gets from the marketplace backend
-on first launch.
+**Who you are:** every request from the app carries `X-Harmoniser-Token: <install token>`, the same
+header and the same token as the marketplace API. There are no accounts and nothing to register:
+the app makes the token itself on first launch (at least 32 random bytes, base64url, so 43 or more
+characters of `A-Z a-z 0-9 - _`), keeps it in Preferences and reuses it. The relay accepts any
+well-formed token and stores only a keyed hash of it.
+
+The token is a secret, not just a label: whoever holds it can control the devices paired with it.
+Generate it with a cryptographic random source, send it only over HTTPS, never log it and never put
+it in a shared capsule. Pairing ties a device to the token that claimed it, and only that token can
+send to it; the gatekeeper's consent still decides whether the app sends anything at all.
 
 ### Pairing
 
@@ -67,10 +74,11 @@ be used once and expires 10 minutes after it was shown, when the device shows a 
 
 ```sh
 curl -X POST https://harmoniser-web.vercel.app/api/devices/claim \
-  -H "Authorization: Bearer $INSTALL_TOKEN" \
+  -H "X-Harmoniser-Token: $INSTALL_TOKEN" \
   -d '{"code":"brave-otter-lamp"}'
 # 200 {"id":"dev_8f3a…","kind":"wrist"}      kind is "wrist" (the board) or "web" (a browser tab)
-# 404 {"error":"…"}  unknown, used or expired code        429 too many attempts
+# 404 unknown, used or expired code        429 too many attempts
+# errors look like {"error":{"code":"…","message":"…"}}, as in the marketplace API
 ```
 
 Keep the returned `id`. `GET /api/devices` lists the devices this install has paired.
@@ -82,13 +90,13 @@ most 47 bytes of UTF-8, `seconds` 1 to 359999, `count` 0 to 999999.
 
 ```sh
 curl -X PUT https://harmoniser-web.vercel.app/api/devices/$ID/capsule \
-  -H "Authorization: Bearer $INSTALL_TOKEN" \
+  -H "X-Harmoniser-Token: $INSTALL_TOKEN" \
   -d '{"type":"counter","label":"Pull-ups","count":0}'
 
 curl -X PUT https://harmoniser-web.vercel.app/api/devices/$ID/capsule \
-  -H "Authorization: Bearer $INSTALL_TOKEN" \
+  -H "X-Harmoniser-Token: $INSTALL_TOKEN" \
   -d '{"type":"timer","label":"Pasta","seconds":540}'
-# 200 {"version":7}      400 {"error":"…"} if the capsule is not valid
+# 200 {"version":7}      400 if the capsule is not valid
 ```
 
 A timer starts as soon as the device receives it. The device picks a new capsule up within about
@@ -98,7 +106,7 @@ Buttons in the app map to actions:
 
 ```sh
 curl -X POST https://harmoniser-web.vercel.app/api/devices/$ID/action \
-  -H "Authorization: Bearer $INSTALL_TOKEN" \
+  -H "X-Harmoniser-Token: $INSTALL_TOKEN" \
   -d '{"action":"increment"}'       # start | pause | toggle | reset | increment
 ```
 
@@ -106,7 +114,7 @@ curl -X POST https://harmoniser-web.vercel.app/api/devices/$ID/action \
 
 ```sh
 curl https://harmoniser-web.vercel.app/api/devices/$ID/state \
-  -H "Authorization: Bearer $INSTALL_TOKEN"
+  -H "X-Harmoniser-Token: $INSTALL_TOKEN"
 # 200 {"type":"counter","label":"Pull-ups","count":7,"seconds":0,"remaining_seconds":0,
 #      "running":false,"done":false,"motion":false,"version":7,"last_seen_ms_ago":1200}
 ```
