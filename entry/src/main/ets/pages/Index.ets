@@ -172,6 +172,9 @@ struct Index {
         rt.alert = new NotifyOnFinish(this.notifications, capsule.name);
       }
     }
+    if (this.store && capsule.state !== undefined) {
+      rt.restoreValues(this.store.values(capsule.id));
+    }
     if (this.ctx) {
       // Shared with the home-screen widget: start from its saved state, write every change back.
       rt.applyState(loadState(this.ctx, capsule));
@@ -185,6 +188,9 @@ struct Index {
       return;
     }
     saveState(this.ctx, rt.exportState());
+    if (rt.capsule.state !== undefined) {
+      this.store?.setValues(rt.capsule.id, rt.values);
+    }
     refreshCapsuleWidgets(this.ctx, rt.capsule.id);
   }
 
@@ -211,7 +217,10 @@ struct Index {
       id: id,
       name: capsule.name,
       permissions: capsule.permissions,
-      ui: capsule.ui
+      ui: capsule.ui,
+      // v1: without these the copy's expressions would name values that don't exist.
+      state: capsule.state,
+      computed: capsule.computed
     };
     return copy;
   }

@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { Capsule } from '../core';
+import { Capsule, StateValues } from '../core';
 
 const DOMAIN = 0x0001;
 const TAG = 'CapsuleStore';
@@ -58,9 +58,32 @@ export class CapsuleStore {
     }
   }
 
+  /** Saved schema v1 state values for a capsule, as plain JSON; {} if none. */
+  values(capsuleId: string): StateValues {
+    try {
+      const raw = this.prefs.getSync(`values:${capsuleId}`, '') as string;
+      return raw.length > 0 ? JSON.parse(raw) as StateValues : {};
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'load values failed: %{public}s', (e as BusinessError).message);
+      return {};
+    }
+  }
+
+  setValues(capsuleId: string, values: StateValues): void {
+    try {
+      this.prefs.putSync(`values:${capsuleId}`, JSON.stringify(values));
+      this.prefs.flush().catch((e: BusinessError) => {
+        hilog.error(DOMAIN, TAG, 'flush failed: %{public}s', e.message);
+      });
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'save values failed: %{public}s', (e as BusinessError).message);
+    }
+  }
+
   remove(capsuleId: string): Capsule[] {
     try {
       this.prefs.deleteSync(`origin:${capsuleId}`);
+      this.prefs.deleteSync(`values:${capsuleId}`);
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'delete origin failed: %{public}s', (e as BusinessError).message);
     }
