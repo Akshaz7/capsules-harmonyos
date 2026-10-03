@@ -1,0 +1,60 @@
+# Vectors for json_scan() with a depth limit of 8, run against main/validate.c
+# (tests/test_validate.c) and mock_esp32.py (tests/test_mock.py).
+#
+#   <ok | deep | nul> <TAB> <body>
+#
+# The body is everything after the tab, as is. "hex:..." gives the bytes in hex instead.
+
+# ordinary requests
+ok	
+ok	{}
+ok	{"type":"timer","label":"Pasta","seconds":540}
+ok	{"action":"increment"}
+
+# depth: 8 is allowed, 9 is not
+ok	[[[[[[[[1]]]]]]]]
+deep	[[[[[[[[[1]]]]]]]]]
+ok	{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":1}}}}}}}}
+deep	{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":{"a":1}}}}}}}}}
+ok	{"a":[{"a":[{"a":[{"a":[]}]}]}]}
+deep	{"a":[{"a":[{"a":[{"a":[{}]}]}]}]}
+deep	[[[[[[[[[
+deep	{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{
+
+# siblings do not add up, and closing more than was opened does not go below zero
+ok	[[1],[2],[3],[4],[5],[6],[7],[8],[9],[10],[11],[12]]
+ok	{"a":[[[[[[[1]]]]]]],"b":[[[[[[[2]]]]]]]}
+ok	]]]]]]]]]]]][[[[[[[[
+deep	]]]]]]]]]]]][[[[[[[[[
+
+# brackets inside strings do not count
+ok	{"label":"[[[[[[[[[[[[{{{{{{{{{{{{"}
+ok	{"[[[[[[[[[[[[":"]]]]]]]]]]]]"}
+ok	["[","[","[","[","[","[","[","[","[","["]
+
+# an escaped quote does not end the string, an escaped backslash does not escape the quote
+ok	{"label":"a\"[[[[[[[[[[[["}
+ok	{"label":"a\\\"[[[[[[[[[[[["}
+deep	{"label":"a\\","x":[[[[[[[[1]]]]]]]]}
+deep	{"label":"a\\\\","x":[[[[[[[[1]]]]]]]]}
+ok	{"label":"a\\","x":[[[[[[[1]]]]]]]}
+# an unterminated string swallows the rest
+ok	{"label":"a\",[[[[[[[[[[[[
+
+# NUL: the escape inside a string, or the raw byte anywhere
+nul	{"label":"a\u0000b"}
+nul	{"label":"\u0000"}
+nul	{"\u0000":1}
+nul	{"label":"\u00000"}
+nul	{"label":"a\\\u0000b"}
+ok	{"label":"a\\u0000b"}
+ok	{"label":"\u0001\u0020\u1000"}
+ok	{"label":"\u000
+ok	{"label":"\u000"}
+ok	\u0000
+nul	hex:7b226c6162656c223a22610062227d
+nul	hex:00
+nul	hex:7b7d00
+# whichever comes first wins
+deep	[[[[[[[[["\u0000"]]]]]]]]]
+nul	["\u0000",[[[[[[[[[1]]]]]]]]]]

@@ -1,0 +1,77 @@
+# Label vectors, run against copy_label()/utf8_valid() in the firmware (tests/test_capsule.c,
+# tests/test_validate.c) and cut_label_bytes()/utf8_valid() in mock_esp32.py (tests/test_mock.py).
+#
+#   <valid UTF-8: 1 or 0> | <label bytes> | <what gets stored>
+#
+# Bytes are hex; "61*47" is 0x61 forty-seven times; "-" is nothing. A label is cut to 47
+# bytes, never inside a character. Invalid labels are refused before they are stored, but
+# cutting them must still be safe and identical on both sides, so they have a third column too.
+
+# empty and short
+1 | - | -
+1 | 537175617473 | 537175617473
+
+# ASCII around the limit
+1 | 61*46 | 61*46
+1 | 61*47 | 61*47
+1 | 61*48 | 61*47
+1 | 61*200 | 61*47
+
+# 2-byte character (c3a9, e-acute): ends at the limit, straddles it, starts at it
+1 | 61*45 c3a9 | 61*45 c3a9
+1 | 61*46 c3a9 | 61*46
+1 | 61*47 c3a9 | 61*47
+1 | c3a9*30 | c3a9*23
+
+# 3-byte character (e282ac, euro sign)
+1 | 61*44 e282ac | 61*44 e282ac
+1 | 61*45 e282ac | 61*45
+1 | 61*46 e282ac | 61*46
+1 | 61*47 e282ac | 61*47
+
+# 4-byte character (f09f9880, an emoji)
+1 | 61*43 f09f9880 | 61*43 f09f9880
+1 | 61*44 f09f9880 | 61*44
+1 | 61*45 f09f9880 | 61*45
+1 | 61*46 f09f9880 | 61*46
+1 | 61*47 f09f9880 | 61*47
+1 | f09f9880*12 | f09f9880*11
+
+# first and last code points of each length, and the neighbours of the surrogate range
+1 | c280 | c280
+1 | dfbf | dfbf
+1 | e0a080 | e0a080
+1 | ed9fbf | ed9fbf
+1 | ee8080 | ee8080
+1 | efbfbf | efbfbf
+1 | f0908080 | f0908080
+1 | f48fbfbf | f48fbfbf
+
+# continuation bytes only: short ones are kept as they are, long ones are cut down to nothing
+0 | 80 | 80
+0 | 80*10 | 80*10
+0 | 80*47 | 80*47
+0 | 80*48 | -
+0 | bf*200 | -
+# the cut backs up over the continuation bytes and the byte before them
+0 | 61*40 80*20 | 61*39
+
+# other invalid UTF-8
+0 | ff | ff
+0 | 61 ff 62 | 61 ff 62
+0 | c3 | c3
+0 | 61 c3 61 | 61 c3 61
+0 | e282 | e282
+0 | f09f98 | f09f98
+0 | c080 | c080
+0 | c1bf | c1bf
+0 | e08080 | e08080
+0 | e09fbf | e09fbf
+0 | f0808080 | f0808080
+0 | f08fbfbf | f08fbfbf
+0 | eda080 | eda080
+0 | edbfbf | edbfbf
+0 | f4908080 | f4908080
+0 | f5808080 | f5808080
+0 | f888808080 | f888808080
+0 | 61*46 c3 | 61*46 c3
