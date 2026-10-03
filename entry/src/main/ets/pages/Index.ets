@@ -612,9 +612,20 @@ struct Index {
     if (!entry || !gate || !battery) {
       return;
     }
-    const usesBattery: boolean =
-      allComponents(entry.capsule.ui).some((c: CapsuleComponent) => c.type === 'device');
-    if (!usesBattery || !gate.isAllowed(entry.capsule, 'battery') || gate.isRemoved(entry.capsule.id)) {
+    this.refreshBattery(entry);
+    this.refreshWeather(entry);
+  }
+
+  /** Reads the battery only for capsules that actually show one, and only while it is allowed. */
+  private refreshBattery(entry: CapsuleEntry): void {
+    const gate = this.gate;
+    const battery = this.battery;
+    if (!gate || !battery) {
+      return;
+    }
+    const showsBattery: boolean = allComponents(entry.capsule.ui).some((c: CapsuleComponent) =>
+      c.type === 'device' && (c as DeviceComponent).bind === 'battery');
+    if (!showsBattery || !gate.isAllowed(entry.capsule, 'battery') || gate.isRemoved(entry.capsule.id)) {
       return;
     }
     const reading: BatteryReading = battery.read();
@@ -631,7 +642,6 @@ struct Index {
       out.detail = 'This phone does not report its battery here';
     }
     entry.runtime.setDeviceReadout('battery', out);
-    this.refreshWeather(entry);
   }
 
   /** The capsule's weather component, if it has one. */
@@ -1821,20 +1831,24 @@ struct Index {
 
   @Builder
   sheetBody() {
-    Column() {
-      if (this.pending) {
-        ConsentView({
-          capsule: this.pending,
-          origin: this.pendingOrigin,
-          builtFrom: this.pendingBuiltFrom,
-          canBuildFresh: this.pendingBuiltFrom.length > 0 && this.settings.aiMode === 'smart' && this.cloudUsable(),
-          onBuildFresh: () => this.buildFresh(),
-          onDecide: (allowed: Permission[]) => this.decide(allowed),
-          onCancel: () => this.cancelPending()
-        })
+    if (this.cityPickerId.length > 0) {
+      this.citySheet()
+    } else {
+      Column() {
+        if (this.pending) {
+          ConsentView({
+            capsule: this.pending,
+            origin: this.pendingOrigin,
+            builtFrom: this.pendingBuiltFrom,
+            canBuildFresh: this.pendingBuiltFrom.length > 0 && this.settings.aiMode === 'smart' && this.cloudUsable(),
+            onBuildFresh: () => this.buildFresh(),
+            onDecide: (allowed: Permission[]) => this.decide(allowed),
+            onCancel: () => this.cancelPending()
+          })
+        }
       }
+      .width('100%')
     }
-    .width('100%')
   }
 
   @Builder
@@ -2600,22 +2614,17 @@ struct Index {
       .width('100%')
       .height('100%')
       .backgroundColor($r('sys.color.background_secondary'))
-      .bindSheet(this.showSheet, this.sheetBody(), {
-        height: SheetSize.FIT_CONTENT,
-        dragBar: true,
-        backgroundColor: $r('sys.color.background_secondary'),
-        onDisappear: () => {
-          if (this.pending) {
-            this.cancelPending();
-          }
-        }
-      })
-      .bindSheet(this.cityPickerId.length > 0, this.citySheet(), {
-        height: 520,
+      // One sheet only: ArkUI keeps the last bindSheet on a node, so the consent sheet and the city picker
+      // must share this single binding (the builder branches on cityPickerId).
+      .bindSheet(this.showSheet || this.cityPickerId.length > 0, this.sheetBody(), {
+        height: this.cityPickerId.length > 0 ? 520 : SheetSize.FIT_CONTENT,
         dragBar: true,
         backgroundColor: $r('sys.color.background_secondary'),
         onDisappear: () => {
           this.cityPickerId = '';
+          if (this.pending) {
+            this.cancelPending();
+          }
         }
       })
     }
