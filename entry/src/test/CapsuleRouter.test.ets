@@ -51,5 +51,18 @@ export default function capsuleRouterTest() {
     it('sends an empty capsule to the app', 0, () => {
       expect(routeCapsule(fromJson('[]')).widget).assertFalse();
     });
+
+    it('sends schema v1 capsules to the app', 0, () => {
+      const v1 = (extra: string, ui: string): Capsule => {
+        const r = validateCapsule(`{"schemaVersion":1,"id":"x","name":"X","permissions":[]${extra},"ui":${ui}}`);
+        expect(r.errors.join('\n')).assertEqual('');
+        return r.capsule as Capsule;
+      };
+      const route = routeCapsule(v1(',"state":{"n":{"type":"number","initial":0}}', '[{"type":"text","text":"a"}]'));
+      expect(route.widget).assertFalse();
+      expect(route.reason).assertContain('state');
+      expect(routeCapsule(v1('', '[{"type":"button","label":"Hi","do":["reset:k"]},{"type":"counter","id":"k","label":"K","source":"manual"}]')).widget).assertFalse();
+      expect(routeCapsule(v1('', '[{"type":"display","text":"{1 + 1}"}]')).widget).assertFalse();
+    });
   });
 }
