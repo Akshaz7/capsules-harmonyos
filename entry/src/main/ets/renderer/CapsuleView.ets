@@ -1,5 +1,6 @@
 import {
   ButtonComponent,
+  ButtonStep,
   CapsuleComponent,
   ChecklistComponent,
   CounterComponent,
@@ -12,7 +13,20 @@ import {
   TimerComponent,
   WhenComponent
 } from '../core';
+import { allComponents } from '../core/CapsuleProgram';
 import { CapsuleRuntime, ChecklistState, CounterState, formatClock, NumberState, TimerState } from './CapsuleRuntime';
+
+/** True if some button in the capsule increments this counter, so the row needn't show a + icon too. */
+function hasIncrementButton(components: CapsuleComponent[], counterId: string): boolean {
+  const action = `increment:${counterId}`;
+  return allComponents(components).some((c: CapsuleComponent) => {
+    if (c.type !== 'button') {
+      return false;
+    }
+    const b = c as ButtonComponent;
+    return b.action === action || (b.do ?? []).some((step: ButtonStep) => step === action);
+  });
+}
 
 /** Rounded section card on the grouped background. */
 @Extend(Column)
@@ -121,10 +135,17 @@ struct CapsuleNode {
   counterItem(c: CounterComponent, s: CounterState | undefined) {
     Column() {
       Row() {
-        SymbolGlyph(c.source === 'motion' ? $r('sys.symbol.figure_walk') : $r('sys.symbol.plus_circle'))
-          .fontSize(20)
-          .fontColor([$r('sys.color.icon_secondary')])
-          .margin({ right: 10 })
+        if (c.source === 'motion') {
+          SymbolGlyph($r('sys.symbol.figure_walk'))
+            .fontSize(20)
+            .fontColor([$r('sys.color.icon_secondary')])
+            .margin({ right: 10 })
+        } else if (!hasIncrementButton(this.runtime.capsule.ui, c.id)) {
+          SymbolGlyph($r('sys.symbol.plus_circle'))
+            .fontSize(20)
+            .fontColor([$r('sys.color.icon_secondary')])
+            .margin({ right: 10 })
+        }
         Text(c.label)
           .fontSize($r('sys.float.Subtitle_M'))
           .fontColor($r('sys.color.font_primary'))
