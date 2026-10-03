@@ -43,7 +43,7 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 
 | Issue | Where | Owner |
 | --- | --- | --- |
-| The UI says capsules can use "vibration and the motion sensor", but neither is built: there is no vibrator or sensor code and no sensor permission | `pages/Index.ets` `CAPSULE_ABILITIES` | **T3**: remove the words, or build the features |
+| The UI says capsules can use "vibration and the motion sensor", but neither is built for capsules: no capsule can vibrate or read a sensor, and there is no sensor permission (the app's own save vibration, UI-1, is not a capsule ability). Still in the text at d9bf333 | `pages/Index.ets` `CAPSULE_ABILITIES` | **T3**: remove the words, or build the features |
 | The cloud prompt tells the model "steps and reps can use the motion sensor" and that capsules can use "vibration, the motion sensor, location and a home [widget]". A user asking for automatic step counting gets a tap counter. | `core/CapsuleModel.ets` lines 135–137 | **T4**: align the prompt with what is built |
 | The schema has `location` and `widget` permissions that nothing uses | `SCHEMA.md` | **Ash** decides (SCHEMA is the contract). The README already says so. |
 | `HACKATHON_BRIEF.md` is still the empty template | repo root | **Ash**: fill in or delete. Judges may read it. |
