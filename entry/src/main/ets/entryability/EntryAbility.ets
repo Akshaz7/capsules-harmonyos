@@ -4,13 +4,16 @@ import { window } from '@kit.ArkUI';
 import { initCapsuleModel, initTemplates } from '../core';
 import { takeWidgetWant } from '../pages/WidgetLaunch';
 import { takeShareWant } from '../pages/ShareLaunch';
+import { Flags } from '../theme/Flags';
 
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     try {
-      this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
+      // Redesign: light mode only (Flags.NEW_THEME); otherwise follow the system as before.
+      this.context.getApplicationContext().setColorMode(Flags.NEW_THEME ?
+        ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT : ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
     } catch (err) {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
