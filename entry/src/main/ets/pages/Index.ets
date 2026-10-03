@@ -47,19 +47,23 @@ import {
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
-import { PreparedImport, SharingBar, scanAndPrepare } from '../sharing';
+import { prepareImport, PreparedImport, SharingBar, scanAndPrepare } from '../sharing';
+import { loadLibraryJson, loadMarketplaceBaseUrl, MarketItem, MarketplaceClient } from '../adapters/MarketplaceClient';
+import { MarketplaceView } from './MarketplaceView';
 import {
   DeviceRelay, DeviceState, HttpDeviceRelay, isOffline, isStaleState, loadRelayBaseUrl, normalizePairCode, PairedDevice, payloadFor,
   relaySimulationEnabled, SimulatedDeviceRelay
 } from '../adapters/DeviceRelay';
 import { deviceName, DeviceStore } from '../adapters/DeviceStore';
-import { getInstallToken } from '../adapters/InstallToken';
+import { getInstallToken, getMarketplaceToken } from '../adapters/InstallToken';
 import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
 
 const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
 const CHOOSE_PAGE = 'chooseCapsule';
+const MARKET_PAGE = 'marketplace';
+const MARKETPLACE_ORIGIN = 'marketplace';
 // Stored as a capsule origin so the sheet and the card badge say where it came from.
 const IMPORTED_ORIGIN = 'imported';
 const OPEN_CURVE: ICurve = curves.springMotion(0.45, 0.9);
@@ -193,6 +197,13 @@ struct Index {
   private deviceId: string = '';
   private deviceVersion: number = 0;
   private devicePoll: number = -1;
+  /** Marketplace (T3-10/T3-11): live when marketplace.baseUrl is configured, else the shipped examples. */
+  private market: MarketplaceClient = new MarketplaceClient('', '', '');
+  @Local marketConfigured: boolean = false;
+  /** The marketplace item behind `pending`, for the install count once the user runs it. */
+  private pendingMarketItem: MarketItem | undefined = undefined;
+  /** Capsule ids this install has published, to show "Remove from marketplace". */
+  @Local publishedIds: string[] = [];
   /** Time of the last trigger check; the trigger cards re-read "Next: ..." from it. */
   @Local triggerNow: number = Date.now();
   @Local placeholderIndex: number = 0;
@@ -266,6 +277,71 @@ struct Index {
     this.relay = base.length > 0 ? new HttpDeviceRelay(base, getInstallToken(ctx)) : new SimulatedDeviceRelay();
     this.relaySimulated = this.relay.simulated;
     this.devicesEnabled = base.length > 0 || relaySimulationEnabled(ctx);
+    const marketBase = loadMarketplaceBaseUrl(ctx);
+    this.marketConfigured = marketBase.length > 0;
+    loadLibraryJson(ctx).then((library: string) => {
+      this.market = new MarketplaceClient(marketBase, marketBase.length > 0 ? getMarketplaceToken(ctx) : '', library);
+    });
+    this.publishedIds = this.entries.filter((e: CapsuleEntry) => (this.store?.published(e.capsule.id) ?? '').length > 0)
+      .map((e: CapsuleEntry) => e.capsule.id);
+  }
+
+  // ---- Marketplace (T3-10 / T3-11) ----
+
+  /** Install = download the JSON into the normal import flow: validator, fresh id, consent. Nothing runs yet. */
+  private async installFromMarket(item: MarketItem): Promise<void> {
+    const got = await this.market.capsuleJson(item);
+    if (got.json === undefined) {
+      this.toast(got.error ?? "Couldn't download that capsule");
+      return;
+    }
+    const prepared = prepareImport(got.json);
+    if (!prepared.ok || prepared.capsule === undefined) {
+      this.toast(prepared.error ?? "That capsule isn't valid");
+      return;
+    }
+    this.nav.pop();
+    this.pending = this.uniqueCapsule(prepared.capsule);
+    this.pendingOriginRaw = MARKETPLACE_ORIGIN;
+    this.pendingRequest = '';
+    this.replacingId = '';
+    this.pendingMarketItem = item;
+    this.pendingOrigin = originBadge(this.pendingOriginRaw);
+    this.showSheet = true;
+  }
+
+  private publishToMarket(entry: CapsuleEntry): void {
+    const name = entry.capsule.name;
+    this.getUIContext().showAlertDialog({
+      title: `Publish "${name}"?`,
+      message: `The name "${name}" and how the capsule works become public: anyone can find and install it. ` +
+        'Its current values, your request and your permissions are not included.',
+      primaryButton: { value: 'Cancel', action: () => {
+      } },
+      secondaryButton: { value: 'Publish', action: async () => {
+        const r = await this.market.publish(entry.capsule, '', []);
+        const id = r.id ?? r.duplicateId ?? '';
+        if (id.length > 0) {
+          this.store?.setPublished(entry.capsule.id, id);
+          this.publishedIds = this.publishedIds.filter((x: string) => x !== entry.capsule.id).concat([entry.capsule.id]);
+        }
+        this.toast(r.id !== undefined ? 'Published. Anyone can install it now.' : r.error ?? "Couldn't publish it");
+      } }
+    });
+  }
+
+  private async unpublishFromMarket(entry: CapsuleEntry): Promise<void> {
+    const id = this.store?.published(entry.capsule.id) ?? '';
+    if (id.length === 0) {
+      return;
+    }
+    if (await this.market.unpublish(id)) {
+      this.store?.setPublished(entry.capsule.id, '');
+      this.publishedIds = this.publishedIds.filter((x: string) => x !== entry.capsule.id);
+      this.toast('Removed from the marketplace');
+    } else {
+      this.toast("Couldn't reach the marketplace. Try again later.");
+    }
   }
 
   // ---- Show on another device (T3-15) ----
@@ -841,6 +917,10 @@ struct Index {
       this.undo(replaced, `Replaced ${replaced.capsule.name} with a version made with Mistral (EU)`);
     }
     this.replacingId = '';
+    if (this.pendingOriginRaw === MARKETPLACE_ORIGIN && this.pendingMarketItem !== undefined) {
+      this.market.installed(this.pendingMarketItem); // best effort, after the user chose to run it
+    }
+    this.pendingMarketItem = undefined;
     this.store?.add(capsule);
     const entry = this.makeEntry(capsule);
     this.entries = [entry].concat(this.entries);
@@ -862,6 +942,7 @@ struct Index {
 
   private cancelPending(): void {
     this.pending = undefined;
+    this.pendingMarketItem = undefined;
     this.showSheet = false;
   }
 
@@ -1054,6 +1135,11 @@ struct Index {
       WidgetCapsulePicker({
         entries: this.entries,
         onPick: (capsuleId: string) => this.pickForWidget(capsuleId)
+      })
+    } else if (name === MARKET_PAGE) {
+      MarketplaceView({
+        client: this.market,
+        onInstall: (item: MarketItem) => this.installFromMarket(item)
       })
     } else if (name === SETTINGS_PAGE) {
       SettingsView({
@@ -1331,6 +1417,7 @@ struct Index {
               onPairCode: (code: string) => this.claimDevice(code), // a scanned device pairing QR
               onImported: (prepared: PreparedImport) => this.handleImported(prepared)
             })
+            this.iconButton($r('sys.symbol.bag'), () => this.nav.pushPath({ name: MARKET_PAGE }))
             this.iconButton($r('sys.symbol.gearshape'), () => this.nav.pushPath({ name: SETTINGS_PAGE }))
             this.iconButton($r('sys.symbol.doc_text'), () => this.nav.pushPath({ name: LOG_PAGE }))
           }
@@ -1525,6 +1612,20 @@ struct Index {
           }
           // Share only: importing lives on the home screen.
           SharingBar({ capsule: entry.capsule, showImport: false })
+          if (this.marketConfigured) {
+            if (this.publishedIds.includes(entry.capsule.id)) {
+              Row({ space: 8 }) {
+                Text('In the marketplace')
+                  .fontSize($r('sys.float.Body_M'))
+                  .fontColor($r('sys.color.font_secondary'))
+                Button('Remove from marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
+                  .onClick(() => this.unpublishFromMarket(entry))
+              }
+            } else {
+              Button('Publish to marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
+                .onClick(() => this.publishToMarket(entry))
+            }
+          }
           Button() {
             Row({ space: 6 }) {
               SymbolGlyph($r('sys.symbol.trash'))

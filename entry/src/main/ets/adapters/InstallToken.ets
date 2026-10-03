@@ -14,6 +14,7 @@ const DOMAIN = 0x0001;
 const TAG = 'InstallToken';
 const STORE = 'install';
 const TOKEN_KEY = 'token';
+const MARKETPLACE_TOKEN_KEY = 'marketplaceToken';
 const TOKEN_BYTES = 32;
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
 
@@ -44,29 +45,42 @@ export function isValidInstallToken(token: string): boolean {
   return /^[A-Za-z0-9_-]{43,}$/.test(token);
 }
 
-let cached: string = '';
+const cache: Map<string, string> = new Map();
 
-/** The install token, made and saved on first use. '' only if the random source or Preferences fail. */
-export function getInstallToken(ctx: common.Context): string {
-  if (cached.length > 0) {
-    return cached;
+function tokenFor(ctx: common.Context, key: string): string {
+  const known = cache.get(key);
+  if (known !== undefined) {
+    return known;
   }
   try {
     const prefs = preferences.getPreferencesSync(ctx, { name: STORE } as preferences.Options);
-    const saved = prefs.getSync(TOKEN_KEY, '') as string;
+    const saved = prefs.getSync(key, '') as string;
     if (isValidInstallToken(saved)) {
-      cached = saved;
-      return cached;
+      cache.set(key, saved);
+      return saved;
     }
     const random = cryptoFramework.createRandom().generateRandomSync(TOKEN_BYTES);
     const token = toBase64Url(random.data);
-    prefs.putSync(TOKEN_KEY, token);
+    prefs.putSync(key, token);
     prefs.flushSync();
-    cached = token;
-    hilog.info(DOMAIN, TAG, 'made a new install token (%{public}d chars)', token.length); // never the token
-    return cached;
+    cache.set(key, token);
+    hilog.info(DOMAIN, TAG, 'made a new %{public}s (%{public}d chars)', key, token.length); // never the token
+    return token;
   } catch (e) {
-    hilog.error(DOMAIN, TAG, 'install token failed: %{public}s', (e as BusinessError).message);
+    hilog.error(DOMAIN, TAG, '%{public}s failed: %{public}s', key, (e as BusinessError).message);
     return '';
   }
+}
+
+/** The relay install token, made and saved on first use. '' only if the random source or Preferences fail. */
+export function getInstallToken(ctx: common.Context): string {
+  return tokenFor(ctx, TOKEN_KEY);
+}
+
+/**
+ * The marketplace owner token: one token for every marketplace call (publish, delete, install, report), and
+ * separate from the relay's. It is the only way to delete what this install published.
+ */
+export function getMarketplaceToken(ctx: common.Context): string {
+  return tokenFor(ctx, MARKETPLACE_TOKEN_KEY);
 }

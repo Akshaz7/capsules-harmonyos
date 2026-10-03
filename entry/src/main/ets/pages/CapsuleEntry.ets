@@ -41,6 +41,8 @@ export function originBadge(origin: string): string {
       return 'Made with OpenAI';
     case 'imported':
       return 'From someone else';
+    case 'marketplace':
+      return 'From the marketplace';
     default:
       return '';
   }
@@ -55,6 +57,9 @@ export function originIcon(origin: string): Resource {
   }
   if (origin === 'imported') {
     return $r('sys.symbol.arrow_down_circle');
+  }
+  if (origin === 'marketplace') {
+    return $r('sys.symbol.bag');
   }
   return $r('sys.symbol.wand_and_stars');
 }

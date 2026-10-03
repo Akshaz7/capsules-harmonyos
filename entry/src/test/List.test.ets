@@ -14,6 +14,7 @@ import sharingTest from './Sharing.test';
 import createTextTest from './CreateText.test';
 import triggerTextTest from './TriggerText.test';
 import deviceRelayTest from './DeviceRelay.test';
+import marketplaceTest from './Marketplace.test';
 import templatesTest from './Templates.test';
 
 export default function testsuite() {
@@ -33,5 +34,6 @@ export default function testsuite() {
   createTextTest();
   triggerTextTest();
   deviceRelayTest();
+  marketplaceTest();
   templatesTest();
 }

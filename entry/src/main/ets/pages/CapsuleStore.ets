@@ -49,6 +49,31 @@ export class CapsuleStore {
     return next;
   }
 
+  /** The public marketplace id this install published the capsule as; '' if not published. */
+  published(capsuleId: string): string {
+    try {
+      return this.prefs.getSync(`published:${capsuleId}`, '') as string;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /** Records (or with '' clears) the capsule's public marketplace id. */
+  setPublished(capsuleId: string, marketId: string): void {
+    try {
+      if (marketId.length > 0) {
+        this.prefs.putSync(`published:${capsuleId}`, marketId);
+      } else {
+        this.prefs.deleteSync(`published:${capsuleId}`);
+      }
+      this.prefs.flush().catch((e: BusinessError) => {
+        hilog.error(DOMAIN, TAG, 'flush failed: %{public}s', e.message);
+      });
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'save published failed: %{public}s', (e as BusinessError).message);
+    }
+  }
+
   /** When each time trigger last fired (core's triggerKey -> scheduled ms). */
   triggerRuns(): Record<string, number> {
     try {
