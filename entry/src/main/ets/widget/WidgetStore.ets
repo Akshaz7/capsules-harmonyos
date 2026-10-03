@@ -20,6 +20,7 @@ import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule } from '../core/CapsuleTypes';
+import { StateValues } from '../core/CapsuleProgram';
 import { validateCapsuleObject } from '../core/CapsuleValidator';
 import { CapsuleState, initialState, parseState, WidgetBindingFact } from '../core/WidgetModel';
 
@@ -67,6 +68,17 @@ function errorText(e: Object): string {
 }
 
 /** Saved capsules from the app, newest first. Each one is re-validated before use. */
+/** The app's saved schema v1 values for a capsule (CapsuleStore "values:<id>"), or {} if none. */
+export function savedValues(ctx: common.Context, capsuleId: string): StateValues {
+  try {
+    const raw = appStore(ctx, APP_CAPSULES).getSync(`values:${capsuleId}`, '') as string;
+    return raw.length > 0 ? JSON.parse(raw) as StateValues : {};
+  } catch (e) {
+    hilog.error(DOMAIN, TAG, 'savedValues failed: %{public}s', errorText(e));
+    return {};
+  }
+}
+
 export function savedCapsules(ctx: common.Context): Capsule[] {
   try {
     const prefs = appStore(ctx, APP_CAPSULES);

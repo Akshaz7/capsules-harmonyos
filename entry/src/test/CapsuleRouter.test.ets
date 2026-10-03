@@ -3,6 +3,7 @@ import { routeCapsule } from '../main/ets/core/CapsuleRouter';
 import { parseRequest } from '../main/ets/core/RuleParser';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import { Capsule } from '../main/ets/core/CapsuleTypes';
+import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
 
 function fromRules(request: string): Capsule {
   const c = parseRequest(request);
@@ -27,12 +28,11 @@ export default function capsuleRouterTest() {
       });
     });
 
-    it('keeps the live v1 goal and bill split in the app', 0, () => {
-      ['water 8 glasses', 'split 84 between 4'].forEach((req: string) => {
-        const route = routeCapsule(fromRules(req));
-        expect(`${req}: ${route.widget}`).assertEqual(`${req}: false`);
-        expect(route.reason).assertContain('schema v1');
-      });
+    it('puts the v1 goal counter on widgets; the bill split (inputs) stays in the app (T4-15/T4-14)', 0, () => {
+      expect(routeCapsule(fromRules('water 8 glasses')).widget).assertTrue();
+      const split = routeCapsule(fromRules('split 84 between 4'));
+      expect(split.widget).assertFalse();
+      expect(split.reason).assertContain('need typing');
     });
 
     it('sends capsules with more than 4 components to the app', 0, () => {
@@ -59,17 +59,25 @@ export default function capsuleRouterTest() {
       expect(routeCapsule(fromJson('[]')).widget).assertFalse();
     });
 
-    it('sends schema v1 capsules to the app', 0, () => {
-      const v1 = (extra: string, ui: string): Capsule => {
-        const r = validateCapsule(`{"schemaVersion":1,"id":"x","name":"X","permissions":[]${extra},"ui":${ui}}`);
+    it('v1 capsules fit a widget with at most 3 lines, 3 buttons and 2 parts', 0, () => {
+      const v1 = (ui: string): Capsule => {
+        const r = validateCapsule(`{"schemaVersion":1,"id":"x","name":"X","permissions":["reminders"],` +
+          `"state":{"n":{"type":"number","initial":0}},"ui":${ui}}`);
         expect(r.errors.join('\n')).assertEqual('');
         return r.capsule as Capsule;
       };
-      const route = routeCapsule(v1(',"state":{"n":{"type":"number","initial":0}}', '[{"type":"text","text":"a"}]'));
-      expect(route.widget).assertFalse();
-      expect(route.reason).assertContain('state');
-      expect(routeCapsule(v1('', '[{"type":"button","label":"Hi","do":["reset:k"]},{"type":"counter","id":"k","label":"K","source":"manual"}]')).widget).assertFalse();
-      expect(routeCapsule(v1('', '[{"type":"display","text":"{1 + 1}"}]')).widget).assertFalse();
+      const tennis = validateCapsule(TENNIS_CAPSULE).capsule as Capsule;
+      expect(routeCapsule(tennis).widget).assertTrue(); // 3 displays (one inside "when"), 3 buttons
+      expect(routeCapsule(fromRules('pomodoro')).widget).assertTrue();
+      const d = '{"type":"display","text":"{n}"}';
+      const b = '{"type":"button","label":"+","do":[{"set":"n","to":"n + 1"}]}';
+      expect(routeCapsule(v1(`[${d},${d},${d},${b},${b},${b}]`)).widget).assertTrue();
+      const fourLines = routeCapsule(v1(`[${d},{"type":"row","items":[${d},${d}]},{"type":"when","if":"n > 1","show":[${d}]}]`));
+      expect(fourLines.reason).assertEqual('App only: 4 lines of text (a widget fits at most 3).');
+      expect(routeCapsule(v1(`[${d},${b},${b},${b},${b}]`)).reason).assertContain('4 buttons');
+      const t = (id: string): string => `{"type":"timer","id":"${id}","label":"T","minutes":1}`;
+      expect(routeCapsule(v1(`[${t('a')},${t('b')},${t('c')}]`)).widget).assertFalse();
+      expect(routeCapsule(v1('[{"type":"input","bind":"n","kind":"number","label":"N"}]')).widget).assertFalse();
     });
   });
 }

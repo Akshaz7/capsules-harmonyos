@@ -2,11 +2,14 @@ import { describe, it, expect } from '@ohos/hypium';
 import {
   applyWidgetMessage, buildWidgetView, CapsuleState, declaredAction, GateFacts, initialState, parseState,
   parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow,
-  BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact
+  BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact,
+  accentFor, displayFor, pickColorTag, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
 } from '../main/ets/core/WidgetModel';
+import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
+import { StateValues } from '../main/ets/core/CapsuleProgram';
 import { parseRequest } from '../main/ets/core/RuleParser';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
-import { Capsule, Permission } from '../main/ets/core/CapsuleTypes';
+import { Capsule, ChecklistComponent, Permission } from '../main/ets/core/CapsuleTypes';
 
 const NOW: number = 1700000000000;
 
@@ -34,6 +37,29 @@ function blank(formId: string, addedAt?: number): WidgetBindingFact {
 
 function shown(bindings: WidgetBindingFact[]): string {
   return bindings.map((b: WidgetBindingFact) => `${b.formId}=${b.capsuleId.length > 0 ? b.capsuleId : '-'}`).join(' ');
+}
+
+function noneRemoved(id: string): boolean {
+  return false;
+}
+
+function displaySummary(d: WidgetDisplay): string {
+  return d.kind === 'score' ? `${d.label}[${d.left}|${d.right}]` : d.text;
+}
+
+function goalValues(count: number): StateValues {
+  const v: StateValues = {};
+  v['count'] = count;
+  return v;
+}
+
+function tennisValues(): StateValues {
+  const v: StateValues = {};
+  v['p1'] = 2;
+  v['p2'] = 1;
+  v['g1'] = 3;
+  v['g2'] = 2;
+  return v;
 }
 
 export default function widgetModelTest() {
@@ -136,7 +162,7 @@ export default function widgetModelTest() {
       const saved: SavedCapsule[] = [
         { capsule: rules('count coffees'), savedAt: 1 },
         { capsule: rules('medication 8am and 8pm'), savedAt: 2 },
-        { capsule: rules('water 8 glasses'), savedAt: 3 }, // v1: app only
+        { capsule: rules('split 84 between 4'), savedAt: 3 }, // v1 with inputs: app only
         { capsule: rules('4 timers a 1 b 2 c 3 d 4'), savedAt: 5 }, // too many components
         { capsule: rules('split 84 between 4'), savedAt: 4 } // v1: app only
       ];
@@ -187,7 +213,7 @@ export default function widgetModelTest() {
     });
 
     it('skips app-only capsules, capsules already shown, and existing capsules on the first run', 0, () => {
-      const water = rules('water 8 glasses'); // v1: app only
+      const water = rules('split 84 between 4'); // v1 with inputs: app only
       const coffees = rules('count coffees');
       const appOnly = planWidgetAssignments([blank('1')], [water], [], never);
       expect(shown(appOnly.bindings)).assertEqual('1=-');
@@ -206,6 +232,65 @@ export default function widgetModelTest() {
       expect(firstBlank([{ formId: '1', capsuleId: 'x', wide: false }])).assertNull();
       expect(emptyView(false).message).assertEqual(BLANK_WIDGET_MESSAGE);
       expect(BLANK_WIDGET_MESSAGE).assertEqual('Tap to choose a capsule');
+    });
+
+    it('fills the card with one main element per v0 type (T4-15)', 0, () => {
+      const all = gate(['reminders', 'motion', 'notifications'], true, false);
+      const counter = rules('count coffees');
+      const cv = buildWidgetView(counter, initialState(counter), all, 0, false);
+      expect(`${cv.layout} ${cv.icon}`).assertEqual('counter counter');
+      const timer = rules('tea 4 min');
+      expect(buildWidgetView(timer, initialState(timer), all, 0, false).layout).assertEqual('timer');
+      const list = rules('checklist: passport, keys, charger');
+      const ticked = applyWidgetMessage(list, initialState(list), msg('toggle', list.ui[0].type === 'checklist' ?
+        (list.ui[0] as ChecklistComponent).id : '', 1), 0);
+      const lv = buildWidgetView(list, ticked, all, 0, true);
+      expect(`${lv.layout} ${lv.icon} ${lv.caption}`).assertEqual('checklist checklist 1 / 3 done');
+      const three = rules('3 timers pasta 9 sauce 15 bread 6');
+      expect(buildWidgetView(three, initialState(three), all, 0, false).layout).assertEqual('rows');
+      const blank = emptyView(false);
+      expect(`${blank.layout} ${blank.icon} ${blank.message}`).assertEqual('message blank Tap to choose a capsule');
+    });
+
+    it('a v1 goal counter becomes a ring with its value, goal and what is left (T4-15)', 0, () => {
+      const water = rules('water 8 glasses');
+      const v = buildWidgetView(water, initialState(water), gate([], true, false), 0, false, goalValues(3));
+      expect(`${v.layout} ${v.icon} ${v.value}/${v.goal}`).assertEqual('goal goal 3/8');
+      expect(v.caption).assertEqual('5 to go');
+      expect(v.buttons.map((b: WidgetButton) => `${b.index}:${b.label}:${b.enabled}`).join(' ')).assertEqual('0:+1 glass:true 1:Reset:true');
+      const done = buildWidgetView(water, initialState(water), gate([], true, false), 0, false, goalValues(8));
+      expect(done.caption).assertEqual('0 to go · Goal reached!');
+    });
+
+    it('tennis becomes score lines and point buttons (T4-15, wired by T4-14)', 0, () => {
+      const tennis = capsuleOf(TENNIS_CAPSULE);
+      const v = buildWidgetView(tennis, initialState(tennis), gate([], true, false), 0, true, tennisValues());
+      expect(`${v.layout} ${v.icon}`).assertEqual('logic logic');
+      expect(v.displays.map(displaySummary).join(' | ')).assertEqual('Games[3|2] | [30|15] | P1 leads');
+      expect(v.buttons.map((b: WidgetButton) => b.label).join(',')).assertEqual('Point P1,Point P2,Reset match');
+      const fresh = buildWidgetView(tennis, initialState(tennis), gate([], true, false), 0, false, {});
+      expect(fresh.displays.length).assertEqual(2); // "P1 leads" is hidden until a game is won
+      expect(fresh.buttons[2].enabled).assertFalse(); // Reset match: enabledIf
+    });
+
+    it('score lines only for short values on both sides', 0, () => {
+      expect(displaySummary(displayFor('a', 'Games 2 - 1'))).assertEqual('Games[2|1]');
+      expect(displaySummary(displayFor('b', 'Deuce'))).assertEqual('Deuce');
+      expect(displaySummary(displayFor('c', 'Each pays: 21'))).assertEqual('Each pays: 21');
+      expect(displaySummary(displayFor('d', 'Advantage P1'))).assertEqual('Advantage P1');
+    });
+
+    it('each widget keeps its own accent colour (colorTag)', 0, () => {
+      expect(pickColorTag([], '5')).assertEqual(0);
+      expect(pickColorTag([0, 1], '5')).assertEqual(2);
+      const full = WIDGET_PALETTE.map((c: string, i: number) => i);
+      expect(pickColorTag(full, '12345')).assertEqual(stableColorTag('12345'));
+      expect(stableColorTag('12345')).assertEqual(stableColorTag('12345'));
+      expect(accentFor(WIDGET_PALETTE.length + 1)).assertEqual(WIDGET_PALETTE[1]);
+      const v = withColor(emptyView(false), 3);
+      expect(`${v.colorTag} ${v.accent}`).assertEqual(`3 ${WIDGET_PALETTE[3]}`);
+      const kept = planWidgetAssignments([{ formId: '1', capsuleId: '', wide: false, colorTag: 4 }], [], [], noneRemoved);
+      expect(kept.bindings[0].colorTag).assertEqual(4);
     });
   });
 }

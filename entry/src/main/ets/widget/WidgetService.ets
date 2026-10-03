@@ -20,12 +20,12 @@ import { Capsule, Permission } from '../core/CapsuleTypes';
 import { routeCapsule } from '../core/CapsuleRouter';
 import {
   applyWidgetMessage, buildWidgetView, declaredAction, emptyView, firstBlank, GateFacts, parseWidgetMessage,
-  pickCapsuleForNewWidget, planWidgetAssignments, SavedCapsule, WidgetView
+  pickCapsuleForNewWidget, pickColorTag, planWidgetAssignments, SavedCapsule, stableColorTag, WidgetView, withColor
 } from '../core/WidgetModel';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
 import {
   FormBinding, allBindings, getBinding, isFormProcess, loadSeen, loadState, putBinding, saveSeen, saveState,
-  savedCapsules
+  savedCapsules, savedValues
 } from './WidgetStore';
 
 const DOMAIN = 0x0002;
@@ -44,6 +44,8 @@ export interface WidgetInfo {
   /** null when the widget is blank ("Tap to choose a capsule"). */
   capsuleId: string | null;
   size: WidgetSize;
+  /** The widget's stable accent slot (WIDGET_PALETTE index), shown as its colour. */
+  colorTag: number;
 }
 
 /**
@@ -75,7 +77,7 @@ function gateFacts(gate: Gatekeeper, capsule: Capsule, removedFromApp: boolean):
 export function viewFor(ctx: common.Context, binding: FormBinding): WidgetView {
   const v = viewForCapsule(ctx, binding);
   v.formId = binding.formId;
-  return v;
+  return withColor(v, colorTagOf(binding));
 }
 
 function viewForCapsule(ctx: common.Context, binding: FormBinding): WidgetView {
@@ -92,7 +94,13 @@ function viewForCapsule(ctx: common.Context, binding: FormBinding): WidgetView {
     v.message = 'This capsule was removed.';
     return v;
   }
-  return buildWidgetView(capsule, loadState(ctx, capsule), gateFacts(gate, capsule, false), Date.now(), binding.wide);
+  return buildWidgetView(capsule, loadState(ctx, capsule), gateFacts(gate, capsule, false), Date.now(), binding.wide,
+    savedValues(ctx, capsule.id));
+}
+
+/** The widget's colour slot: saved when it was added, or derived from its formId for older widgets. */
+export function colorTagOf(binding: FormBinding): number {
+  return binding.colorTag ?? stableColorTag(binding.formId);
 }
 
 export function bindingData(view: WidgetView): formBindingData.FormBindingData {
@@ -129,8 +137,10 @@ export function bindNewForm(ctx: common.Context, formId: string, wide: boolean):
     return s;
   });
   const chosen = pickCapsuleForNewWidget(saved, (id: string) => gate.isRemoved(id));
+  const used = allBindings(ctx).map((b: FormBinding) => colorTagOf(b));
   const binding: FormBinding = {
-    formId: formId, capsuleId: chosen === null ? '' : chosen.id, wide: wide, addedAt: Date.now()
+    formId: formId, capsuleId: chosen === null ? '' : chosen.id, wide: wide, addedAt: Date.now(),
+    colorTag: pickColorTag(used, formId)
   };
   putBinding(ctx, binding);
   hilog.info(DOMAIN, TAG, 'form %{public}s -> capsule %{public}s', formId, binding.capsuleId);
@@ -190,7 +200,10 @@ export async function refreshCapsuleWidgets(ctx: common.Context, capsuleId?: str
 }
 
 function infoOf(b: FormBinding): WidgetInfo {
-  return { formId: b.formId, capsuleId: b.capsuleId.length > 0 ? b.capsuleId : null, size: b.wide ? '2x4' : '2x2' };
+  return {
+    formId: b.formId, capsuleId: b.capsuleId.length > 0 ? b.capsuleId : null, size: b.wide ? '2x4' : '2x2',
+    colorTag: colorTagOf(b)
+  };
 }
 
 /** Every placed Harmoniser widget, in the order they were added, with assignments brought up to date. */

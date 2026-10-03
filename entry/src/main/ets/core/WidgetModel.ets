@@ -8,12 +8,16 @@ import {
   CapsuleComponent,
   ChecklistComponent,
   CounterComponent,
+  DisplayComponent,
   Permission,
+  RowComponent,
   TextComponent,
-  TimerComponent
+  TimerComponent,
+  WhenComponent
 } from './CapsuleTypes';
 import { parseAction, permissionForAction, permissionForComponent } from './CapsuleValidator';
 import { routeCapsule } from './CapsuleRouter';
+import { allComponents, isEnabled, isShown, renderTemplate, restoreState, StateValues } from './CapsuleProgram';
 
 type JsonValue = Object | null | undefined;
 type JsonRecord = Record<string, Object | null>;
@@ -230,6 +234,36 @@ export interface WidgetRow {
   items: WidgetCheckItem[];
 }
 
+/**
+ * How the card arranges itself:
+ *  counter / timer / checklist  one v0 component fills the card (big number, ring, tick list);
+ *  goal       a v1 "N / goal" display: big number, progress ring and the first button as a round +;
+ *  logic      other v1 capsules: up to 3 big display values (a "Games 2 - 1" line becomes two scores) and buttons;
+ *  rows       several v0 components, one per row;
+ *  message    blank, removed or app-only: icon and one line.
+ */
+export type WidgetLayout = 'counter' | 'goal' | 'timer' | 'checklist' | 'logic' | 'rows' | 'message';
+
+/** The capsule icon (a system symbol chosen by the card). */
+export type WidgetIcon = 'counter' | 'goal' | 'timer' | 'checklist' | 'logic' | 'text' | 'blank';
+
+/** One v1 display line: plain text, or a score line "label left - right" drawn as two big numbers. */
+export interface WidgetDisplay {
+  key: string;
+  kind: 'line' | 'score';
+  text: string;
+  label: string;
+  left: string;
+  right: string;
+}
+
+/** One v1 button. Index = position among the capsule's buttons (all levels), for T4-14's tap handling. */
+export interface WidgetButton {
+  index: number;
+  label: string;
+  enabled: boolean;
+}
+
 export type WidgetStatus = 'ok' | 'empty' | 'removed';
 
 export interface WidgetView {
@@ -242,6 +276,18 @@ export interface WidgetView {
   wide: boolean;
   /** The widget this view is for; a blank widget sends it when tapped, to choose a capsule. */
   formId?: string;
+  layout: WidgetLayout;
+  icon: WidgetIcon;
+  /** The widget's palette slot (stable per widget) and its accent colour. */
+  colorTag: number;
+  accent: string;
+  /** Small text under the hero: a checklist's "2 / 3 done", a goal's "5 to go", a capsule's text line. */
+  caption: string;
+  /** Layout "goal": the current value and the goal (progress = value / goal). */
+  value: number;
+  goal: number;
+  displays: WidgetDisplay[];
+  buttons: WidgetButton[];
 }
 
 export interface GateFacts {
@@ -251,6 +297,40 @@ export interface GateFacts {
   decided: boolean;
   /** True after Undo removed the capsule. */
   removed: boolean;
+}
+
+/** Accent colours, one per widget (colorTag = index). Mid-tone so they read on light and dark cards. */
+export const WIDGET_PALETTE: string[] = ['#0A59F7', '#ED6F21', '#2DA44E', '#8A5CF5', '#E84D6E', '#00A3B4'];
+
+export function accentFor(colorTag: number): string {
+  const n = WIDGET_PALETTE.length;
+  return WIDGET_PALETTE[((Math.floor(colorTag) % n) + n) % n];
+}
+
+/** A new widget's colorTag: the first palette slot no other widget uses, else one derived from the formId. */
+export function pickColorTag(used: number[], formId: string): number {
+  for (let i = 0; i < WIDGET_PALETTE.length; i++) {
+    if (!used.includes(i)) {
+      return i;
+    }
+  }
+  return stableColorTag(formId);
+}
+
+/** The colorTag for a widget saved before colorTags existed: derived from its formId, so it never changes. */
+export function stableColorTag(formId: string): number {
+  let h = 0;
+  for (let i = 0; i < formId.length; i++) {
+    h = (h * 31 + formId.charCodeAt(i)) % 1000003;
+  }
+  return h % WIDGET_PALETTE.length;
+}
+
+/** Sets the widget's colour on a view. */
+export function withColor(view: WidgetView, colorTag: number): WidgetView {
+  view.colorTag = colorTag;
+  view.accent = accentFor(colorTag);
+  return view;
 }
 
 function row(kind: WidgetRowKind, id: string, label: string): WidgetRow {
@@ -266,86 +346,204 @@ function permitted(p: Permission | null, granted: Permission[]): boolean {
 
 export const BLANK_WIDGET_MESSAGE: string = 'Tap to choose a capsule';
 
-export function emptyView(wide: boolean): WidgetView {
+function baseView(status: WidgetStatus, capsuleId: string, title: string, message: string, wide: boolean): WidgetView {
   return {
-    status: 'empty', capsuleId: '', title: 'Harmoniser', message: BLANK_WIDGET_MESSAGE,
-    rows: [], wide: wide
+    status: status, capsuleId: capsuleId, title: title, message: message, rows: [], wide: wide, layout: 'message',
+    icon: 'blank', colorTag: 0, accent: accentFor(0), caption: '', value: 0, goal: 0, displays: [], buttons: []
   };
+}
+
+export function emptyView(wide: boolean): WidgetView {
+  return baseView('empty', '', 'Harmoniser', BLANK_WIDGET_MESSAGE, wide);
+}
+
+/** The v0 row for one component, or null when it is not drawn (buttons, v1-only types). */
+function v0Row(capsule: Capsule, c: CapsuleComponent, i: number, state: CapsuleState, gate: GateFacts): WidgetRow | null {
+  if (c.type === 'text') {
+    const r = row('text', '', (c as TextComponent).text);
+    r.key = `${i}:text:${r.label}`;
+    return r;
+  } else if (c.type === 'timer') {
+    const t = c as TimerComponent;
+    const r = row('timer', t.id, t.label);
+    const run = state.timers.find((x: TimerRun) => x.id === t.id);
+    r.minutes = t.minutes;
+    r.endAt = run !== undefined ? run.endAt : 0;
+    const action = declaredAction(capsule, { op: 'start', id: t.id, index: -1 });
+    r.canStart = action !== null && permitted(permissionForAction({ kind: 'startTimer', arg: t.id }), gate.granted);
+    r.key = `${i}:timer:${t.id}:${r.endAt}:${r.canStart}`;
+    return r;
+  } else if (c.type === 'counter') {
+    const k = c as CounterComponent;
+    const r = row('counter', k.id, k.label);
+    const v = state.counters.find((x: CounterValue) => x.id === k.id);
+    r.value = v !== undefined ? v.value : 0;
+    const action = declaredAction(capsule, { op: 'increment', id: k.id, index: -1 });
+    const parsed = action === null ? null : parseAction(action);
+    r.canIncrement = parsed !== null && permitted(permissionForAction(parsed), gate.granted);
+    r.key = `${i}:counter:${k.id}:${r.value}:${r.canIncrement}`;
+    return r;
+  } else if (c.type === 'checklist') {
+    const l = c as ChecklistComponent;
+    const r = row('checklist', l.id, '');
+    const ticks = state.checklists.find((x: ChecklistTicks) => x.id === l.id);
+    r.items = l.items.map((text: string, n: number): WidgetCheckItem => {
+      const item: WidgetCheckItem = {
+        index: n, text: text, checked: ticks !== undefined && n < ticks.checked.length ? ticks.checked[n] : false
+      };
+      return item;
+    });
+    r.key = `${i}:checklist:${l.id}:${r.items.map((x: WidgetCheckItem) => x.checked ? '1' : '0').join('')}`;
+    return r;
+  }
+  return null;
+}
+
+function iconFor(kind: WidgetRowKind): WidgetIcon {
+  return kind === 'timer' ? 'timer' : (kind === 'counter' ? 'counter' : (kind === 'checklist' ? 'checklist' : 'text'));
+}
+
+function doneCaption(r: WidgetRow): string {
+  const done = r.items.filter((x: WidgetCheckItem) => x.checked).length;
+  return `${done} / ${r.items.length} done`;
+}
+
+/** Picks the layout for v0 rows: one main component fills the card, text rows become the caption. */
+function arrangeV0(view: WidgetView): void {
+  const main = view.rows.filter((r: WidgetRow) => r.kind !== 'text');
+  const texts = view.rows.filter((r: WidgetRow) => r.kind === 'text');
+  if (main.length === 0) {
+    view.layout = 'rows';
+    view.icon = 'text';
+    return;
+  }
+  view.icon = iconFor(main[0].kind);
+  if (main.length === 1 && texts.length <= 1) {
+    view.layout = main[0].kind === 'timer' ? 'timer' : (main[0].kind === 'counter' ? 'counter' : 'checklist');
+    view.caption = main[0].kind === 'checklist' ? doneCaption(main[0]) : (texts.length > 0 ? texts[0].label : '');
+  } else {
+    view.layout = 'rows';
+    const lists = main.filter((r: WidgetRow) => r.kind === 'checklist');
+    view.caption = main.length === 1 && lists.length === 1 ? doneCaption(lists[0]) : '';
+  }
+}
+
+const GOAL_LINE: RegExp = /^\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*(.*)$/;
+const SCORE_LINE: RegExp = /^(.*?)\s*(\S{1,4})\s+[-–:]\s+(\S{1,4})$/;
+
+/** A display line; "Games 2 - 1" or "15 - 30" becomes a score line. */
+export function displayFor(key: string, text: string): WidgetDisplay {
+  const d: WidgetDisplay = { key: key, kind: 'line', text: text, label: '', left: '', right: '' };
+  const m = text.match(SCORE_LINE);
+  if (m !== null && m[1].length <= 24) {
+    d.kind = 'score';
+    d.label = m[1].trim();
+    d.left = m[2];
+    d.right = m[3];
+  }
+  return d;
+}
+
+/** The shown v1 components in order: "when" blocks only when their condition holds, rows flattened. */
+function shownComponents(capsule: Capsule, values: StateValues, list: CapsuleComponent[], out: CapsuleComponent[]): void {
+  list.forEach((c: CapsuleComponent) => {
+    if (c.type === 'when') {
+      if (isShown(capsule, values, c as WhenComponent)) {
+        shownComponents(capsule, values, (c as WhenComponent).show, out);
+      }
+    } else if (c.type === 'row') {
+      shownComponents(capsule, values, (c as RowComponent).items, out);
+    } else {
+      out.push(c);
+    }
+  });
+}
+
+/** v1 card: display values rendered from the state, the capsule's buttons, and any v0 timers/counters/lists. */
+function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValues, gate: GateFacts,
+  wide: boolean): WidgetView {
+  const view = baseView('ok', capsule.id, capsule.name, '', wide);
+  const buttons = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'button');
+  const shown: CapsuleComponent[] = [];
+  shownComponents(capsule, values, capsule.ui, shown);
+  const lines: string[] = [];
+  shown.forEach((c: CapsuleComponent, i: number) => {
+    if (c.type === 'display') {
+      lines.push(renderTemplate(capsule, values, (c as DisplayComponent).text));
+    } else if (c.type === 'text') {
+      lines.push((c as TextComponent).text);
+    } else if (c.type === 'button') {
+      const b = c as ButtonComponent;
+      view.buttons.push({ index: buttons.indexOf(c), label: b.label, enabled: isEnabled(capsule, values, b) });
+    } else if (permitted(permissionForComponent(c), gate.granted)) {
+      const r = v0Row(capsule, c, i, state, gate);
+      if (r !== null) {
+        view.rows.push(r);
+      }
+    }
+  });
+  const goal = lines.length > 0 && view.rows.length === 0 ? lines[0].match(GOAL_LINE) : null;
+  if (goal !== null && parseFloat(goal[2]) > 0) {
+    view.layout = 'goal';
+    view.icon = 'goal';
+    view.value = parseFloat(goal[1]);
+    view.goal = parseFloat(goal[2]);
+    const rest = goal[3].replace(/^[\s·•,\-–:|]+/, '').trim();
+    view.caption = lines.length > 1 ? lines[1] : rest;
+    if (lines.length > 1 && rest.length > 0) {
+      view.caption = `${rest} · ${lines[1]}`;
+    }
+  } else {
+    view.layout = 'logic';
+    view.icon = view.rows.some((r: WidgetRow) => r.kind === 'timer') ? 'timer' : 'logic';
+    view.displays = lines.map((t: string, n: number) => displayFor(`${n}:${t}`, t));
+  }
+  return view;
 }
 
 /**
  * Builds the card view. Only widget-suitable capsules are shown, and only components and
  * actions the gatekeeper allows: a component needing an ungranted permission is hidden, and a
  * start/+ control appears only if the capsule declares that action and its permission is granted.
+ * `values` are the capsule's saved v1 state values (used for v1 capsules only).
  */
 export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: GateFacts, now: number,
-  wide: boolean): WidgetView {
+  wide: boolean, values?: StateValues): WidgetView {
   if (gate.removed) {
-    return {
-      status: 'removed', capsuleId: capsule.id, title: capsule.name, message: 'This capsule was removed.', rows: [],
-      wide: wide
-    };
+    return baseView('removed', capsule.id, capsule.name, 'This capsule was removed.', wide);
   }
   const route = routeCapsule(capsule);
   if (!route.widget) {
-    return {
-      status: 'empty', capsuleId: capsule.id, title: capsule.name, message: route.reason, rows: [], wide: wide
-    };
+    const v = baseView('empty', capsule.id, capsule.name, route.reason, wide);
+    v.icon = capsule.schemaVersion === 1 ? 'logic' : 'blank';
+    return v;
   }
-  const rows: WidgetRow[] = [];
-  let hidden = 0;
-  capsule.ui.forEach((c: CapsuleComponent, i: number) => {
-    if (c.type === 'button') {
-      return; // buttons become the start/+ controls on their rows
-    }
-    if (!permitted(permissionForComponent(c), gate.granted)) {
-      hidden++;
-      return;
-    }
-    if (c.type === 'text') {
-      const r = row('text', '', (c as TextComponent).text);
-      r.key = `${i}:text:${r.label}`;
-      rows.push(r);
-    } else if (c.type === 'timer') {
-      const t = c as TimerComponent;
-      const r = row('timer', t.id, t.label);
-      const run = state.timers.find((x: TimerRun) => x.id === t.id);
-      r.minutes = t.minutes;
-      r.endAt = run !== undefined ? run.endAt : 0;
-      const action = declaredAction(capsule, { op: 'start', id: t.id, index: -1 });
-      r.canStart = action !== null && permitted(permissionForAction({ kind: 'startTimer', arg: t.id }), gate.granted);
-      r.key = `${i}:timer:${t.id}:${r.endAt}:${r.canStart}`;
-      rows.push(r);
-    } else if (c.type === 'counter') {
-      const k = c as CounterComponent;
-      const r = row('counter', k.id, k.label);
-      const v = state.counters.find((x: CounterValue) => x.id === k.id);
-      r.value = v !== undefined ? v.value : 0;
-      const action = declaredAction(capsule, { op: 'increment', id: k.id, index: -1 });
-      const parsed = action === null ? null : parseAction(action);
-      r.canIncrement = parsed !== null && permitted(permissionForAction(parsed), gate.granted);
-      r.key = `${i}:counter:${k.id}:${r.value}:${r.canIncrement}`;
-      rows.push(r);
-    } else if (c.type === 'checklist') {
-      const l = c as ChecklistComponent;
-      const r = row('checklist', l.id, '');
-      const ticks = state.checklists.find((x: ChecklistTicks) => x.id === l.id);
-      r.items = l.items.map((text: string, n: number): WidgetCheckItem => {
-        const item: WidgetCheckItem = {
-          index: n, text: text, checked: ticks !== undefined && n < ticks.checked.length ? ticks.checked[n] : false
-        };
-        return item;
-      });
-      r.key = `${i}:checklist:${l.id}:${r.items.map((x: WidgetCheckItem) => x.checked ? '1' : '0').join('')}`;
-      rows.push(r);
-    }
-  });
-  let message = '';
+  let view: WidgetView;
+  if (capsule.schemaVersion === 1 || capsule.state !== undefined || capsule.computed !== undefined) {
+    view = buildLogicView(capsule, state, restoreState(capsule, values ?? {}), gate, wide);
+  } else {
+    view = baseView('ok', capsule.id, capsule.name, '', wide);
+    capsule.ui.forEach((c: CapsuleComponent, i: number) => {
+      if (c.type === 'button') {
+        return; // buttons become the start/+ controls on their rows
+      }
+      if (!permitted(permissionForComponent(c), gate.granted)) {
+        return;
+      }
+      const r = v0Row(capsule, c, i, state, gate);
+      if (r !== null) {
+        view.rows.push(r);
+      }
+    });
+    arrangeV0(view);
+  }
+  const hidden = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type !== 'button' &&
+    !permitted(permissionForComponent(c), gate.granted)).length;
   if (hidden > 0) {
-    message = gate.decided ? `${hidden} item${hidden === 1 ? '' : 's'} blocked by the gatekeeper.` :
+    view.message = gate.decided ? `${hidden} item${hidden === 1 ? '' : 's'} blocked by the gatekeeper.` :
       'Open the app to allow permissions.';
   }
-  return { status: 'ok', capsuleId: capsule.id, title: capsule.name, message: message, rows: rows, wide: wide };
+  return view;
 }
 
 // ---- Which capsule a new widget shows ----
@@ -376,6 +574,8 @@ export interface WidgetBindingFact {
   wide: boolean;
   /** When the widget was added (ms). Missing on bindings saved before it was recorded: those count as oldest. */
   addedAt?: number;
+  /** The widget's palette slot (see WIDGET_PALETTE). Missing on older bindings: use stableColorTag(formId). */
+  colorTag?: number;
 }
 
 export class AssignmentPlan {
@@ -412,7 +612,9 @@ export function planWidgetAssignments(bindings: WidgetBindingFact[], saved: Caps
   const known = seen ?? saved.map((c: Capsule) => c.id);
   const sorted = bindings.slice().sort(widgetOrder);
   sorted.forEach((b: WidgetBindingFact) => {
-    const next: WidgetBindingFact = { formId: b.formId, capsuleId: b.capsuleId, wide: b.wide, addedAt: b.addedAt };
+    const next: WidgetBindingFact = {
+      formId: b.formId, capsuleId: b.capsuleId, wide: b.wide, addedAt: b.addedAt, colorTag: b.colorTag
+    };
     if (next.capsuleId.length > 0 && !aliveIds.includes(next.capsuleId)) {
       next.capsuleId = '';
       plan.changed.push(next.formId);
