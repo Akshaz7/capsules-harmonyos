@@ -80,6 +80,13 @@ import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
 import { HomeHero } from './HomeHero';
+import { Flags } from '../theme/Flags';
+import { Palette } from '../theme/Tokens';
+import { storeWidthClass } from '../theme/Breakpoint';
+import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../components';
+import { PromptBar } from '../components/PromptBar';
+import { RecentRow, RecentTile, SuggestionChips } from '../components/CreateParts';
+import { shareCapsule } from '../sharing';
 import { MiniPreview } from './MiniPreview';
 import { reduceMotion, springCurve, successTick } from './Motion';
 import { BUILT_FROM_TEMPLATE } from './CapsuleEntry';
@@ -100,6 +107,13 @@ const TAB_CREATE = 0;
 const TAB_CAPSULES = 1;
 const TAB_MARKET = 2;
 const TAB_SETTINGS = 3;
+/** Redesign tab bar items, in tab order. */
+const TAB_ITEMS: TabItem[] = [
+  { icon: $r('sys.symbol.plus_circle'), label: 'Create' },
+  { icon: $r('sys.symbol.square_grid_2x2'), label: 'Capsules' },
+  { icon: $r('sys.symbol.bag'), label: 'Marketplace' },
+  { icon: $r('sys.symbol.gearshape'), label: 'Settings' }
+];
 const MARKETPLACE_ORIGIN = 'marketplace';
 // Stored as a capsule origin so the sheet and the card badge say where it came from.
 const IMPORTED_ORIGIN = 'imported';
@@ -268,6 +282,10 @@ struct Index {
   @Local tab: number = TAB_CREATE;
   @Local tabTaps: number[] = [0, 0, 0, 0];
   private tabsController: TabsController = new TabsController();
+  /** Redesign: true on wide windows (600vp and up); also stored in AppStorage by theme/Breakpoint. */
+  @Local wide: boolean = false;
+  /** Redesign frame: the "Change it…" card shows after the footer pill is tapped (or while it has news). */
+  @Local changeOpenId: string = '';
   /** UI-1: the placeholder as typed so far (types and erases the examples). */
   @Local placeholderText: string = PLACEHOLDERS[0];
   @Local inputFocused: boolean = false;
@@ -2201,20 +2219,7 @@ struct Index {
         }
         this.inputCard()
         this.statusRow()
-        if (this.snapNeedsCloud) {
-          this.snapCloudNote()
-        } else if (this.languageFailed) {
-          this.languageCard()
-        } else if (this.failed && this.unsupported.length > 0) {
-          this.unsupportedCard()
-        } else if (this.failed) {
-          this.failedCard()
-        } else if (this.message.length > 0) {
-          Text(this.message)
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.font_secondary'))
-            .width('100%')
-        }
+        this.createNotices()
         this.recentSection()
       }
       .padding({ left: 16, right: 16, top: 8, bottom: 120 }) // room for the floating tab bar
@@ -2229,6 +2234,122 @@ struct Index {
     .linearGradient({ direction: GradientDirection.Bottom,
       colors: [[$r('app.color.hero_top'), 0], [$r('sys.color.background_secondary'), 0.35]] })
     .transition(TransitionEffect.OPACITY)
+  }
+
+  /** The create flow's cards (failure, language, snap, message): one at a time, as before. */
+  @Builder
+  createNotices() {
+    if (this.snapNeedsCloud) {
+      this.snapCloudNote()
+    } else if (this.languageFailed) {
+      this.languageCard()
+    } else if (this.failed && this.unsupported.length > 0) {
+      this.unsupportedCard()
+    } else if (this.failed) {
+      this.failedCard()
+    } else if (this.message.length > 0) {
+      Text(this.message)
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_secondary'))
+        .width('100%')
+    }
+  }
+
+  /** Redesign (NEW_CREATE): host bar, title, Recent, suggestions, and the prompt bar docked above the tab bar. */
+  @Builder
+  createTab() {
+    Column() {
+      Scroll() {
+        Column({ space: 14 }) {
+          Row() {
+            HostBar({ showScan: false })
+              .layoutWeight(1)
+            // The existing import (file or QR scan); nothing is saved until the consent sheet's Run.
+            SharingBar({
+              showShare: false,
+              compact: true,
+              onPairCode: (code: string) => this.claimDevice(code),
+              onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+            })
+              .margin({ right: 16 })
+          }
+          .width('100%')
+          Column({ space: 4 }) {
+            Text('What do you need?')
+              .fontSize(24)
+              .fontWeight(800)
+              .fontColor(Palette.text)
+              .width('100%')
+            Text('Tiny apps, made by asking.')
+              .fontSize(13)
+              .fontWeight(500)
+              .fontColor(Palette.text2)
+              .width('100%')
+          }
+          .padding({ left: 20, right: 20 })
+          Column({ space: 14 }) {
+            this.createNotices()
+            RecentRow({ tiles: this.recentTiles(), onOpen: (id: string) => this.open(id) })
+            if (this.request.trim().length === 0) {
+              SuggestionChips({ suggestions: this.suggestions(), onPick: (text: string) => {
+                this.request = text;
+              } })
+            }
+            Text(this.statusLine())
+              .fontSize(13)
+              .fontWeight(500)
+              .fontColor(Palette.text2)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+          }
+          .padding({ left: 16, right: 16 })
+        }
+        .width('100%')
+        .constraintSize({ maxWidth: this.wide ? 640 : undefined })
+        .padding({ bottom: 16 })
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .align(Alignment.Top)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+      PromptBar({
+        text: this.request,
+        placeholder: this.placeholderText,
+        busy: this.busy,
+        onTextChange: (v: string) => {
+          this.request = v;
+        },
+        onSend: () => this.create(),
+        onSnap: () => {
+          this.cameraBounce++;
+          this.snap();
+        },
+        onFocusChange: (focused: boolean) => {
+          this.inputFocused = focused;
+        }
+      })
+        .margin({ left: 12, right: 12, bottom: 64 + 12 + 10 }) // above the floating tab bar
+        .constraintSize({ maxWidth: this.wide ? 640 : undefined })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  private recentTiles(): RecentTile[] {
+    return this.entries.slice(0, 8).map((e: CapsuleEntry): RecentTile => {
+      const t: RecentTile = {
+        id: e.capsule.id, name: e.capsule.name, icon: capsuleIcon(e.capsule), originText: originBadge(e.origin),
+        originKind: originKindOf(e.origin)
+      };
+      return t;
+    });
+  }
+
+  /** The existing rotating examples, without their "Try: " prefix. */
+  private suggestions(): string[] {
+    return PLACEHOLDERS.map((p: string) => p.replace(/^Try: /, ''));
   }
 
   /** Home "Recent": the four newest capsules as live mini widgets; "See all" opens the Capsules tab. */
@@ -2396,7 +2517,11 @@ struct Index {
       // Native Tabs hold the pages; their own bar is hidden in favour of the floating pill below.
       Tabs({ barPosition: BarPosition.End, controller: this.tabsController, index: this.tab }) {
         TabContent() {
-          this.home()
+          if (Flags.NEW_CREATE) {
+            this.createTab()
+          } else {
+            this.home()
+          }
         }
         TabContent() {
           this.capsulesTab()
@@ -2426,7 +2551,18 @@ struct Index {
       })
       .width('100%')
       .height('100%')
-      this.tabBar()
+      if (Flags.NEW_SHELL) {
+        TabBar({
+          items: TAB_ITEMS,
+          selected: this.tab,
+          taps: this.tabTaps,
+          onSelect: (i: number) => this.selectTab(i)
+        })
+          .margin({ left: 16, right: 16, bottom: 12 })
+          .constraintSize({ maxWidth: this.wide ? 640 : undefined })
+      } else {
+        this.tabBar()
+      }
     }
     .width('100%')
     .height('100%')
@@ -2605,18 +2741,161 @@ struct Index {
     .transition(TransitionEffect.OPACITY)
   }
 
+  /** Redesign (NEW_FRAME): the open capsule inside CapsuleFrame. Same parts as detail(), restyled. */
+  @Builder
+  frameDetail(entry: CapsuleEntry) {
+    Column() {
+      CapsuleFrame({
+        name: entry.capsule.name,
+        icon: capsuleIcon(entry.capsule),
+        originText: originBadge(entry.origin),
+        originKind: originKindOf(entry.origin),
+        wide: this.wide,
+        onClose: () => this.close(),
+        onChangeIt: () => {
+          this.changeOpenId = this.changeOpenId === entry.capsule.id ? '' : entry.capsule.id;
+        },
+        onShare: () => this.shareFromFrame(entry),
+        body: () => {
+          this.frameBody(entry)
+        },
+        addToHome: () => {
+          this.frameAddToHome(entry)
+        }
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ top: 8 })
+    .geometryTransition(entry.capsule.id)
+    .transition(TransitionEffect.OPACITY)
+  }
+
+  @Builder
+  frameBody(entry: CapsuleEntry) {
+      CapsuleView({
+        runtime: entry.runtime,
+        motionNote: this.motionNoteFor(entry.capsule),
+        onPickCity: () => this.openCityPicker(entry.capsule.id)
+      })
+      if (this.changeOpenId === entry.capsule.id || this.undoIds.includes(entry.capsule.id) ||
+        (this.changeId === entry.capsule.id &&
+          (this.changeBusy || this.changeSummary.length > 0 || this.changeIssue.length > 0))) {
+        this.changeCard(entry)
+      }
+      if ((entry.capsule.triggers ?? []).length > 0) {
+        TriggerCard({
+          triggers: entry.capsule.triggers ?? [],
+          allowed: this.triggersAllowed(entry),
+          now: this.triggerNow,
+          onRunNow: (i: number) => this.runTriggerNow(entry, i),
+          onEditTime: (i: number) => this.editTriggerTime(entry, i),
+          onRemove: (i: number) => this.removeTrigger(entry, i)
+        })
+      }
+      if (this.canMakeSmarter(entry)) {
+        this.smarterButton(entry)
+      }
+      if (this.devicesEnabled && payloadFor(entry.capsule) !== null) {
+        DevicePanel({
+          devices: this.devices,
+          simulated: this.relaySimulated,
+          status: this.deviceCapsuleId === entry.capsule.id ? this.deviceStatus : '',
+          onPairScan: () => this.pairScan(),
+          onPairPhrase: (phrase: string) => this.claimDevice(phrase),
+          onShow: (id: string) => this.showOnDevice(entry, id),
+          onUnpair: (id: string) => this.unpairDevice(id)
+        })
+      }
+      // Share only (with "Show as QR code"); the footer's Share opens the same share panel.
+      SharingBar({ capsule: entry.capsule, showImport: false })
+      if (this.marketConfigured) {
+        if (this.publishedIds.includes(entry.capsule.id)) {
+          Row({ space: 8 }) {
+            Text('In the marketplace')
+              .fontSize($r('sys.float.Body_M'))
+              .fontColor($r('sys.color.font_secondary'))
+            Button('Remove from marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
+              .onClick(() => this.unpublishFromMarket(entry))
+          }
+        } else {
+          Button('Publish to marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
+            .onClick(() => this.publishToMarket(entry))
+        }
+      }
+      Button() {
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.trash'))
+            .fontSize(18)
+            .fontColor([$r('sys.color.warning')])
+          Text('Remove capsule')
+            .fontSize($r('sys.float.Body_L'))
+            .fontColor($r('sys.color.warning'))
+        }
+      }
+      .width('100%')
+      .height(48)
+      .margin({ top: 8 })
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      .onClick(() => {
+        this.undo(entry);
+      })
+      Text('Removes the capsule, its permissions and its calendar events.')
+        .fontSize($r('sys.float.Caption_M'))
+        .fontColor($r('sys.color.font_tertiary'))
+    Row() {
+      Button('Activity log', { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
+        .onClick(() => this.nav.pushPath({ name: LOG_PAGE }))
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
+  /** The frame footer's slot for T4's button, mounted exactly as T4 provides it. */
+  @Builder
+  frameAddToHome(entry: CapsuleEntry) {
+    // PROTECTED: owned by T4. Do not remove or modify. See /tmp/hy-tasks.
+    AddToHomeButton({ capsuleId: entry.capsule.id, capsuleName: entry.capsule.name })
+  }
+
+  /** Footer Share: the same share panel as SharingBar; if it can't open, point to "Show as QR code". */
+  private shareFromFrame(entry: CapsuleEntry): void {
+    if (!this.ctx) {
+      return;
+    }
+    shareCapsule(this.ctx, entry.capsule).catch(() => {
+      this.toast("Couldn't open the share panel. Use Show as QR code below.");
+    });
+  }
+
   build() {
     Navigation(this.nav) {
-      Stack() {
+      Stack({ alignContent: Alignment.Top }) {
+        if (Flags.NEW_THEME) {
+          // The one gradient: 360vp at the top, #DCE5FF into the page background.
+          Column()
+            .width('100%')
+            .height(360)
+            .linearGradient({ direction: GradientDirection.Bottom, colors: [[Palette.gradientTop, 0], [Palette.bg, 1]] })
+            .hitTestBehavior(HitTestMode.None)
+        }
         if (this.openEntry()) {
-          this.detail(this.openEntry() as CapsuleEntry)
+          if (Flags.NEW_FRAME) {
+            this.frameDetail(this.openEntry() as CapsuleEntry)
+          } else {
+            this.detail(this.openEntry() as CapsuleEntry)
+          }
         } else {
           this.mainTabs()
         }
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('sys.color.background_secondary'))
+      .backgroundColor(Flags.NEW_THEME ? Palette.bg : $r('sys.color.background_secondary'))
+      .onAreaChange((o: Area, n: Area) => {
+        storeWidthClass(n.width as number);
+        this.wide = Flags.NEW_WIDE && (n.width as number) >= 600;
+      })
       // One sheet only: ArkUI keeps the last bindSheet on a node, so the consent sheet and the city picker
       // must share this single binding (the builder branches on cityPickerId).
       .bindSheet(this.showSheet || this.cityPickerId.length > 0, this.sheetBody(), {
