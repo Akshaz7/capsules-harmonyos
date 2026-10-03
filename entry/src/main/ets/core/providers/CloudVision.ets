@@ -3,12 +3,17 @@
  * so this file runs in unit tests and in scripts/eval-images.mjs as well as on the device.
  *
  * Policy (same consent rules as text, see CapsuleGenerator.ets):
- *   1. On device (unless cloudOnly): LFM2-VL reads the photo; the text it reads goes through the shared-text
- *      converters (recipe, bill, workout, list), otherwise through grounded on-device slot-filling.
- *   2. If that fails: mode "on-device-only" stops here. allowCloud false returns needsCloud (when a usable
- *      cloud provider is configured) so the app can ask first; nothing has left the device.
- *   3. Cloud: the photo is sent to the chosen provider (EU first; non-EU only with allowNonEu), which
- *      transcribes it; the cloud capsule model builds from the transcript (shared-text converters as fallback).
+ *   1. On device (unless cloudOnly): system OCR (Core Vision Kit) reads the text in the photo. The text goes
+ *      through the shared-text converters (recipe, bill, workout, list), then the normal local text pipeline
+ *      (rules, built-in templates, on-device model). Made this way, the capsule never touched the internet:
+ *      origin "template" (badge "Made on your phone · no internet") or "on-device".
+ *   2. OCR found text but nothing local could build it: only that text (not the photo) goes to the cloud
+ *      capsule model, if the cloud may be used.
+ *   3. OCR found no text: LFM2-VL would read the photo (off, see CactusProvider ON_DEVICE_VISION), then the
+ *      photo itself goes to the cloud provider, which transcribes it (Mistral: Pixtral), and the cloud capsule
+ *      model builds from the transcript (shared-text converters as fallback).
+ *   Whenever the cloud is next: mode "on-device-only" stops; allowCloud false returns needsCloud (when a usable
+ *   cloud provider is configured) so the app can ask first; nothing has left the device.
  */
 import { GenerateResult } from '../CapsuleTypes';
 import { CapsuleModel } from '../CapsuleModel';
@@ -28,6 +33,14 @@ export interface ImageInput {
   mime: string;
   readBase64: () => string;
 }
+
+/** Reads the text in a photo on the device (system OCR). Throws if unavailable. */
+export interface DeviceTextReader {
+  readText(imagePath: string): Promise<string>;
+}
+
+/** The local text pipeline (rules, templates, on-device model; never the cloud) for text read from a photo. */
+export type LocalTextPipeline = (text: string) => Promise<GenerateResult>;
 
 /** The on-device model (CactusProvider): reads a photo to text, and fills slots for a text request. */
 export interface OnDeviceImageReader {
@@ -115,6 +128,16 @@ function asRecord(v: JsonValue): JsonRecord | null {
 }
 
 const VISION_MAX_TOKENS: number = 1024;
+/**
+ * Mistral's vision model reads the photo; the configured model (e.g. ministral-14b) still builds the capsule.
+ * Photo eval 2026-10-03: Pixtral reading + ministral building 8/10 correct, ministral doing both 5/10.
+ */
+export const MISTRAL_VISION_MODEL: string = 'pixtral-12b-latest';
+
+/** The model that reads photos for this provider config. */
+export function visionModel(config: ModelConfig): string {
+  return config.provider === 'mistral' && !config.model.startsWith('pixtral') ? MISTRAL_VISION_MODEL : config.model;
+}
 const VISION_MIN_TIMEOUT_MS: number = 60000;
 
 /**
@@ -133,7 +156,7 @@ export async function describeImage(config: ModelConfig, transport: HttpTranspor
     headers['x-api-key'] = config.apiKey;
     headers['anthropic-version'] = '2023-06-01';
     const b: AnthropicVisionBody = {
-      model: config.model, max_tokens: VISION_MAX_TOKENS, messages: [{ role: 'user', content: [
+      model: visionModel(config), max_tokens: VISION_MAX_TOKENS, messages: [{ role: 'user', content: [
         { type: 'image', source: { type: 'base64', media_type: image.mime, data: data } },
         { type: 'text', text: VISION_PROMPT }
       ] }]
@@ -143,7 +166,7 @@ export async function describeImage(config: ModelConfig, transport: HttpTranspor
     url = `${config.baseUrl}/chat/completions`;
     headers['authorization'] = `Bearer ${config.apiKey}`;
     const b: OpenAIVisionBody = {
-      model: config.model, max_tokens: VISION_MAX_TOKENS, messages: [{ role: 'user', content: [
+      model: visionModel(config), max_tokens: VISION_MAX_TOKENS, messages: [{ role: 'user', content: [
         { type: 'text', text: VISION_PROMPT },
         { type: 'image_url', image_url: { url: `data:${image.mime};base64,${data}` } }
       ] }]
@@ -238,39 +261,89 @@ async function cloudFromImage(image: ImageInput, model: CapsuleModel, config: Mo
   return built;
 }
 
+/** Lines of OCR text joined into one request line for the rules, templates and the on-device model. */
+export function oneLine(text: string): string {
+  return text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0).join('. ')
+    .replace(/([.!?:;,])\./g, '$1').substring(0, 500);
+}
+
+/** OCR text -> capsule without the internet: shared-text converters, then the local text pipeline. */
+export async function localFromPhotoText(text: string, localText: LocalTextPipeline | null): Promise<GenerateResult> {
+  const shared = capsuleFromSharedText(text.substring(0, MAX_SHARED_TEXT));
+  if (shared.ok && shared.capsule !== undefined) {
+    return { ok: true, capsule: shared.capsule, origin: 'template', details: [] };
+  }
+  if (localText === null) {
+    return { ok: false, error: IMAGE_NOT_UNDERSTOOD, details: [] };
+  }
+  const r = await localText(oneLine(text));
+  if (r.ok && r.origin === 'rules') {
+    return { ok: true, capsule: r.capsule, origin: 'template', details: [] }; // made on the phone, no internet
+  }
+  return r.ok ? r : { ok: false, error: r.error ?? IMAGE_NOT_UNDERSTOOD, details: r.details };
+}
+
+/** Why the cloud cannot be used now, as a failed result; null if it can (then `chosen` is set). */
+function cloudBlocked(cloud: CapsuleModel[], chosen: CapsuleModel | null, why: string,
+  options?: GenerateOptions): GenerateResult | null {
+  const mode: GenerateMode = options?.mode ?? 'smart';
+  const reasons: string[] = why.length > 0 ? [why] : [];
+  if (mode === 'on-device-only') {
+    return { ok: false, error: `${IMAGE_NOT_UNDERSTOOD} ${ON_DEVICE_ONLY}`, details: reasons };
+  }
+  if (options?.allowCloud === false) {
+    return { ok: false, error: `${IMAGE_NOT_UNDERSTOOD} ${CLOUD_OFF}`, details: reasons, needsCloud: chosen !== null };
+  }
+  if (chosen === null) {
+    const outside = cloud.length > 0 ? `The configured cloud provider (${cloud[0].providerName}) is outside the EU.` :
+      AI_NOT_CONFIGURED;
+    return { ok: false, error: `${IMAGE_NOT_UNDERSTOOD} ${outside}`, details: reasons };
+  }
+  return null;
+}
+
 /**
- * Photo -> validated capsule under the policy above. `cloud` and `configs` are the configured providers in the
- * same order (default first); `transport` is null when no cloud is configured.
+ * Photo -> validated capsule under the policy above. `ocr`: system OCR, or null. `localText`: the local text
+ * pipeline. `cloud` and `configs` are the configured providers in the same order (default first); `transport`
+ * is null when no cloud is configured.
  */
-export async function generateFromImageWith(image: ImageInput, onDevice: OnDeviceImageReader | null,
-  cloud: CapsuleModel[], configs: ModelConfig[], transport: HttpTransport | null,
-  options?: GenerateOptions): Promise<GenerateResult> {
-  let onDeviceError = '';
-  if (options?.cloudOnly !== true && onDevice !== null) {
-    if (await onDevice.whenInitialised() && onDevice.isReady()) {
+export async function generateFromImageWith(image: ImageInput, ocr: DeviceTextReader | null,
+  localText: LocalTextPipeline | null, onDevice: OnDeviceImageReader | null, cloud: CapsuleModel[],
+  configs: ModelConfig[], transport: HttpTransport | null, options?: GenerateOptions): Promise<GenerateResult> {
+  const chosen = pickCloud(cloud, options?.allowNonEu ?? false);
+  let localError = '';
+  if (options?.cloudOnly !== true) {
+    let text = '';
+    if (ocr !== null) {
+      try {
+        text = (await ocr.readText(image.path)).trim();
+      } catch (e) {
+        localError = e instanceof Error ? e.message : String(e);
+      }
+    }
+    if (text.length > 0) {
+      const local = await localFromPhotoText(text, localText);
+      if (local.ok) {
+        return local;
+      }
+      const blocked = cloudBlocked(cloud, chosen, local.error ?? '', options);
+      if (blocked !== null || chosen === null) {
+        return blocked ?? { ok: false, error: IMAGE_NOT_UNDERSTOOD, details: [] };
+      }
+      return chosen.generate(photoRequest(text.substring(0, MAX_SHARED_TEXT)), MAX_SHARED_TEXT + 200); // text only
+    }
+    if (onDevice !== null && await onDevice.whenInitialised() && onDevice.isReady()) {
       const local = await onDeviceFromImage(image, onDevice);
       if (local.ok) {
         return local;
       }
-      onDeviceError = local.error ?? '';
+      localError = local.error ?? localError;
     }
   }
-  const mode: GenerateMode = options?.mode ?? 'smart';
-  const allowNonEu = options?.allowNonEu ?? false;
-  if (mode === 'on-device-only') {
-    return { ok: false, error: `${IMAGE_NOT_UNDERSTOOD} ${ON_DEVICE_ONLY}`, details: onDeviceError.length > 0 ?
-      [onDeviceError] : [] };
-  }
-  const chosen = pickCloud(cloud, allowNonEu);
-  if (options?.allowCloud === false) {
-    return { ok: false, error: `${IMAGE_NOT_UNDERSTOOD} ${CLOUD_OFF}`, details: [], needsCloud: chosen !== null };
-  }
+  const blocked = cloudBlocked(cloud, chosen, localError, options);
   const config = chosen === null ? undefined : configs.find((c: ModelConfig) => c.provider === chosen.providerName);
-  if (chosen === null || config === undefined || transport === null) {
-    const why = cloud.length > 0 ? `The configured cloud provider (${cloud[0].providerName}) is outside the EU.` :
-      AI_NOT_CONFIGURED;
-    return { ok: false, error: `${IMAGE_NOT_UNDERSTOOD} ${why}`, details: onDeviceError.length > 0 ? [onDeviceError] :
-      [] };
+  if (blocked !== null || chosen === null || config === undefined || transport === null) {
+    return blocked ?? { ok: false, error: `${IMAGE_NOT_UNDERSTOOD} ${AI_NOT_CONFIGURED}`, details: [] };
   }
   return cloudFromImage(image, chosen, config, transport);
 }

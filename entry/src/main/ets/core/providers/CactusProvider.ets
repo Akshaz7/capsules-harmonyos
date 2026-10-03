@@ -16,6 +16,8 @@
 import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
+import { textRecognition } from '@kit.CoreVisionKit';
+import { image } from '@kit.ImageKit';
 import { complete, initModel } from 'cactus';
 import {
   Capsule,
@@ -29,7 +31,7 @@ import {
 import { validateCapsule } from '../CapsuleValidator';
 import { CapsuleSource } from '../CapsuleGenerator';
 import { IMAGE_NOT_READABLE, IMAGE_TOO_LARGE, IMAGE_UNSUPPORTED, ImageInput, imageMime, MAX_IMAGE_BYTES,
-  OnDeviceImageReader } from './CloudVision';
+  DeviceTextReader, OnDeviceImageReader } from './CloudVision';
 
 export const ON_DEVICE_MODEL_DIR: string = 'lfm2-vl-450m-cq4';
 export const ON_DEVICE_READY: string = 'On-device AI ready';
@@ -652,6 +654,11 @@ export class CactusProvider implements CapsuleSource, OnDeviceImageReader {
     if (!ON_DEVICE_VISION) {
       throw new Error(ON_DEVICE_VISION_OFF);
     }
+    return this.readImageUngated(imagePath);
+  }
+
+  /** readImage without the ON_DEVICE_VISION switch, for the phone eval (runPhotoEvalIfRequested) only. */
+  async readImageUngated(imagePath: string): Promise<string> {
     if (!this.status.ready) {
       throw new Error(this.status.message);
     }
@@ -760,4 +767,146 @@ export function loadImage(imagePath: string): ImageInput | string {
     }
   };
   return image;
+}
+
+// ---- System OCR (Core Vision Kit) ----
+
+export const OCR_UNAVAILABLE: string = 'Text recognition is not available on this phone.';
+const OCR_TIMEOUT_MS: number = 20000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    p.then((v: T) => {
+      clearTimeout(timer);
+      resolve(v);
+    }, (e: Error) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+  });
+}
+
+/**
+ * Reads the text in a photo with the system OCR (textRecognition, @kit.CoreVisionKit), on the device and offline.
+ * Per Huawei's docs the kit does not run on the emulator and is offered in mainland China only, so any failure
+ * (init false, BusinessError 1001400002 "service abnormal", timeout) throws and the photo path moves on.
+ * Calls are serialised: the kit rejects concurrent calls from one process.
+ */
+export class DeviceOcr implements DeviceTextReader {
+  private initPromise: Promise<boolean> | null = null;
+  private queue: Promise<void> = Promise.resolve();
+
+  async readText(imagePath: string): Promise<string> {
+    if (this.initPromise === null) {
+      this.initPromise = withTimeout(textRecognition.init(), OCR_TIMEOUT_MS, OCR_UNAVAILABLE).catch(() => false);
+    }
+    if (!(await this.initPromise)) {
+      throw new Error(OCR_UNAVAILABLE);
+    }
+    const run = this.queue.then(() => this.recognize(imagePath));
+    this.queue = run.then(() => {}, () => {});
+    return withTimeout(run, OCR_TIMEOUT_MS, OCR_UNAVAILABLE);
+  }
+
+  private async recognize(imagePath: string): Promise<string> {
+    const file = fileIo.openSync(imagePath, fileIo.OpenMode.READ_ONLY);
+    let source: image.ImageSource | null = null;
+    let pixels: image.PixelMap | null = null;
+    try {
+      source = image.createImageSource(file.fd);
+      pixels = await source.createPixelMap();
+      const info: textRecognition.VisionInfo = { pixelMap: pixels };
+      const config: textRecognition.TextRecognitionConfiguration = { isDirectionDetectionSupported: false };
+      const result = await textRecognition.recognizeText(info, config);
+      const lines: string[] = [];
+      result.blocks.forEach((b: textRecognition.TextBlock) => {
+        b.lines.forEach((l: textRecognition.TextLine) => {
+          if (l.value.trim().length > 0) {
+            lines.push(l.value.trim());
+          }
+        });
+      });
+      return lines.length > 0 ? lines.join('\n') : result.value;
+    } catch (e) {
+      throw new Error(OCR_UNAVAILABLE);
+    } finally {
+      pixels?.release();
+      source?.release();
+      fileIo.closeSync(file);
+    }
+  }
+}
+
+// ---- Phone photo eval (debug builds only) ----
+
+/**
+ * Headless photo eval for the real phones, where the system OCR runs (it does not on the emulator).
+ * Runs only if <entry files>/photo-eval/run exists, which only `hdc file send -b` on a debuggable build can put
+ * there (see scripts/phone-photo-eval.sh). For each photo-eval/*.jpg it records the OCR text and the result of
+ * `generate` on-device only (allowCloud false) and with the cloud allowed, to photo-eval/results.jsonl.
+ * If photo-eval/vlm.jpg exists it also times one LFM2-VL image prompt (15 s limit), ignoring ON_DEVICE_VISION.
+ * Writes photo-eval/results.jsonl.done at the end and deletes the run marker so it runs once.
+ */
+export async function runPhotoEvalIfRequested(context: common.Context, provider: CactusProvider,
+  ocr: DeviceOcr, generate: (path: string, allowCloud: boolean) => Promise<GenerateResult>): Promise<void> {
+  const dir = `${context.filesDir}/photo-eval`;
+  try {
+    if (!fileIo.accessSync(`${dir}/run`)) {
+      return;
+    }
+    fileIo.unlinkSync(`${dir}/run`);
+  } catch (e) {
+    return;
+  }
+  try {
+    fileIo.unlinkSync(`${dir}/results.jsonl.done`);
+  } catch (e) {
+    // no marker from an earlier run
+  }
+  const out = fileIo.openSync(`${dir}/results.jsonl`,
+    fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC | fileIo.OpenMode.WRITE_ONLY);
+  const write = (line: string): void => {
+    fileIo.writeSync(out.fd, `${line}\n`);
+  };
+  try {
+    const names = fileIo.listFileSync(dir).filter((n: string) => n.endsWith('.jpg') && n !== 'vlm.jpg').sort();
+    for (const name of names) {
+      const path = `${dir}/${name}`;
+      let t0 = Date.now();
+      let text = '';
+      let ocrError = '';
+      try {
+        text = await ocr.readText(path);
+      } catch (e) {
+        ocrError = e instanceof Error ? e.message : String(e);
+      }
+      const ocrMs = Date.now() - t0;
+      t0 = Date.now();
+      const local = await generate(path, false);
+      const localMs = Date.now() - t0;
+      t0 = Date.now();
+      const chain = await generate(path, true);
+      const chainMs = Date.now() - t0;
+      write(JSON.stringify({ image: name, ocr_ms: ocrMs, ocr_text: text, ocr_error: ocrError, local_ms: localMs,
+        result: local, chain_ms: chainMs, chain: chain }));
+    }
+    if (fileIo.accessSync(`${dir}/vlm.jpg`)) {
+      await provider.whenInitialised();
+      const t0 = Date.now();
+      let reply = '';
+      let error = '';
+      try {
+        reply = await withTimeout(provider.readImageUngated(`${dir}/vlm.jpg`), 15000, 'no answer in 15 s');
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+      write(JSON.stringify({ vlm: true, ms: Date.now() - t0, reply: reply, error: error }));
+    }
+  } catch (e) {
+    write(JSON.stringify({ eval_error: e instanceof Error ? e.message : String(e) }));
+  } finally {
+    fileIo.closeSync(out);
+    fileIo.closeSync(fileIo.openSync(`${dir}/results.jsonl.done`, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY));
+  }
 }

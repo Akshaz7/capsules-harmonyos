@@ -26,7 +26,7 @@ import {
   parseModelConfigs
 } from './ModelProvider';
 import { getRequestCache, getTemplateLibrary } from './templates';
-import { CactusProvider, loadImage, OnDeviceStatus } from './providers/CactusProvider';
+import { CactusProvider, DeviceOcr, loadImage, OnDeviceStatus, runPhotoEvalIfRequested } from './providers/CactusProvider';
 import { generateFromImageWith } from './providers/CloudVision';
 
 export * from './CapsuleTypes';
@@ -103,6 +103,7 @@ let status: ModelStatus = {
   configured: false, source: 'none', message: AI_NOT_CONFIGURED, providers: [], euAvailable: false, provider: 'none'
 };
 const onDevice: CactusProvider = new CactusProvider();
+const deviceOcr: DeviceOcr = new DeviceOcr();
 
 interface ConfigText {
   source: ConfigSource;
@@ -144,6 +145,10 @@ export async function loadModelConfig(context: common.Context): Promise<ModelCon
  */
 export async function initCapsuleModel(context: common.Context): Promise<boolean> {
   onDevice.init(context); // loads the on-device model in the background; never throws
+  setTimeout(() => { // debug-only phone photo eval; runs only if scripts/phone-photo-eval.sh pushed its marker
+    runPhotoEvalIfRequested(context, onDevice, deviceOcr,
+      (path: string, allowCloud: boolean) => generateCapsuleFromImage(path, { allowCloud: allowCloud }));
+  }, 3000);
   models = [];
   modelConfigs = [];
   cloudTransport = null;
@@ -251,8 +256,9 @@ export async function generateCapsuleFromSharedText(text: string, options?: Gene
 
 /**
  * Photo -> capsule. `imagePath`: a JPEG, PNG or WebP file in the app sandbox (max 5 MB), e.g. a camera or
- * picker photo copied into context.cacheDir. The on-device model reads it first; if that fails, the photo is sent
- * to the cloud provider under the same policy as generateCapsule: never in mode "on-device-only", and with
+ * picker photo copied into context.cacheDir. The system OCR reads its text on the phone and the local text pipeline
+ * builds it (origin "template": badge "Made on your phone · no internet", or "on-device"). Otherwise the OCR text,
+ * or the photo if OCR found none, goes to the cloud provider under the same policy as generateCapsule: never in mode "on-device-only", and with
  * allowCloud false the result has needsCloud true (ask the user, then retry with allowCloud true).
  * The result is validated like any capsule; nothing is saved here.
  */
@@ -262,5 +268,7 @@ export async function generateCapsuleFromImage(imagePath: string, options?: Gene
     const failed: GenerateResult = { ok: false, error: image, details: [] };
     return failed;
   }
-  return generateFromImageWith(image, onDevice, models, modelConfigs, cloudTransport, options);
+  const localText = (text: string): Promise<GenerateResult> => generateCapsuleWith(text, models, modelError, lazyOnDevice,
+    { mode: 'on-device-only' }, { library: getTemplateLibrary(), slotModel: onDeviceSlots });
+  return generateFromImageWith(image, deviceOcr, localText, onDevice, models, modelConfigs, cloudTransport, options);
 }

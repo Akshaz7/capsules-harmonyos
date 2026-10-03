@@ -9,7 +9,7 @@
 // The photos are synthetic (rendered text, scripts/eval-images/render.py), not camera photos.
 //
 // Usage (from the repo root):
-//   node scripts/eval-images.mjs [--only mistral] [--ondevice eval/ondevice-images.jsonl] [--out results.json]
+//   node scripts/eval-images.mjs [--only mistral] [--model pixtral-12b-latest] [--vision-model pixtral-12b-latest] [--ondevice results.jsonl [--no-cloud]] [--out results.json]
 // Needs Node 18+ and network access; downloads esbuild through npx on first run.
 // Never prints API keys. config.local.json is git-ignored; never commit it.
 
@@ -42,20 +42,27 @@ execFileSync('npx', ['-y', 'esbuild@0.25.10', entry, '--bundle', '--format=esm',
   { stdio: 'inherit' });
 const lib = await import(pathToFileURL(bundle).href);
 
-let configText;
+let configText = '{"providers":{}}';
 try {
   configText = readFileSync(join(root, 'config.local.json'), 'utf8');
 } catch {
-  console.error('No config.local.json in the repo root. See CLAUDE.md.');
-  process.exit(1);
+  if (!process.argv.includes('--no-cloud')) {
+    console.error('No config.local.json in the repo root. See CLAUDE.md.');
+    process.exit(1);
+  }
 }
 const parsed = lib.parseModelConfigs(configText);
-if (parsed.error) {
+if (parsed.error && !process.argv.includes('--no-cloud')) {
   console.error(parsed.error);
   process.exit(1);
 }
 const only = arg('--only');
-const configs = parsed.configs.filter((c) => only === undefined || c.provider === only);
+// --model overrides the model of every selected provider (e.g. --only mistral --model pixtral-12b-latest).
+const modelOverride = arg('--model');
+const configs = (parsed.configs ?? []).filter((c) => only === undefined || c.provider === only)
+  .map((c) => (modelOverride === undefined ? c : { ...c, model: modelOverride }));
+// --vision-model overrides only the model that reads the photo; the capsule is still built by the configured model.
+const visionModel = arg('--vision-model');
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -161,8 +168,26 @@ if (onDevice.size > 0) {
   summary.push(`on-device: valid ${valid}/${IMAGES.length}, correct ${correct}/${IMAGES.length}`);
 }
 
+// Device chain (photo-eval rows from scripts/phone-photo-eval.sh carry "chain": the app's result with the cloud allowed).
+const deviceChain = [...onDevice.keys()].length > 0 && onDeviceFile !== undefined ?
+  readFileSync(onDeviceFile, 'utf8').split('\n').filter((l) => l.trim().length > 0).map((l) => JSON.parse(l))
+    .filter((row) => row.chain !== undefined) : [];
+if (deviceChain.length > 0) {
+  let valid = 0;
+  let correct = 0;
+  console.log('\n== device chain (on the phone, cloud allowed) ==');
+  for (const [name, what, check] of IMAGES) {
+    const row = deviceChain.find((x) => x.image === name);
+    const j = judge(row?.chain ?? { ok: false, error: 'not run' }, check);
+    valid += j.valid ? 1 : 0;
+    correct += j.correct ? 1 : 0;
+    console.log(`  ${j.verdict.padEnd(9).substring(0, 110)}  ${what}  [${row?.chain?.origin ?? '-'}]`);
+  }
+  summary.push(`device chain: valid ${valid}/${IMAGES.length}, correct ${correct}/${IMAGES.length}`);
+}
+
 const transport = new FetchTransport();
-for (const config of configs) {
+for (const config of process.argv.includes('--no-cloud') ? [] : configs) {
   const model = new lib.CapsuleModel(lib.createProvider(config, transport));
   let valid = 0;
   let correct = 0;
@@ -175,7 +200,8 @@ for (const config of configs) {
     const started = Date.now();
     let r;
     try {
-      r = await lib.generateFromImageWith(image(name), null, [model], [config], transport,
+      const visionConfig = visionModel === undefined ? config : { ...config, model: visionModel };
+      r = await lib.generateFromImageWith(image(name), null, null, null, [model], [visionConfig], transport,
         { allowCloud: true, allowNonEu: true, cloudOnly: true });
     } catch (e) {
       r = { ok: false, error: String(e?.message ?? e), details: [] };
