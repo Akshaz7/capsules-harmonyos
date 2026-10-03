@@ -129,15 +129,15 @@ static void test_register_lengths(void)
 static void test_code_ok(void)
 {
     // The board does not interpret the code, it only has to be able to show it.
-    CHECK(relay_code_ok("brave-otter-lamp"));
-    CHECK(relay_code_ok("Brave Otter Lamp"));
-    CHECK(relay_code_ok("123456"));
-    CHECK(relay_code_ok("abcdefghij-abcdefghij-abcdefghij"));  // 32 bytes
-    CHECK(!relay_code_ok("abcdefghij-abcdefghij-abcdefghijk"));
-    CHECK(!relay_code_ok(""));
-    CHECK(!relay_code_ok("a\tb"));
-    CHECK(!relay_code_ok("a\x7f"));
-    CHECK(!relay_code_ok("\xff"));
+    CHECK(relay_printable("brave-otter-lamp", RELAY_CODE_MAX));
+    CHECK(relay_printable("Brave Otter Lamp", RELAY_CODE_MAX));
+    CHECK(relay_printable("123456", RELAY_CODE_MAX));
+    CHECK(relay_printable("abcdefghij-abcdefghij-abcdefghij", RELAY_CODE_MAX));  // 32 bytes
+    CHECK(!relay_printable("abcdefghij-abcdefghij-abcdefghijk", RELAY_CODE_MAX));
+    CHECK(!relay_printable("", RELAY_CODE_MAX));
+    CHECK(!relay_printable("a\tb", RELAY_CODE_MAX));
+    CHECK(!relay_printable("a\x7f", RELAY_CODE_MAX));
+    CHECK(!relay_printable("\xff", RELAY_CODE_MAX));
 }
 
 static void test_poll_code(void)
@@ -155,6 +155,79 @@ static void test_poll_code(void)
                   "\"code\":\"abcdefghij-abcdefghij-abcdefghijk\"}");
     CHECK(result.ok);
     CHECK_STR(result.code, "");
+}
+
+static void test_pair_url(void)
+{
+    relay_credentials_t got;
+    CHECK(parse_register("{\"id\":\"a\",\"token\":\"b\",\"code\":\"brave-otter-lamp\","
+                         "\"pair_url\":\"https://example.com/pair?code=brave-otter-lamp\"}", &got));
+    CHECK_STR(got.pair_url, "https://example.com/pair?code=brave-otter-lamp");
+    // Optional: without it, or with one that cannot be drawn, the phrase alone is shown.
+    CHECK(parse_register("{\"id\":\"a\",\"token\":\"b\",\"code\":\"brave-otter-lamp\"}", &got));
+    CHECK_STR(got.pair_url, "");
+    CHECK(parse_register("{\"id\":\"a\",\"token\":\"b\",\"code\":\"brave-otter-lamp\",\"pair_url\":null}", &got));
+    CHECK_STR(got.pair_url, "");
+    CHECK(parse_register("{\"id\":\"a\",\"token\":\"b\",\"code\":\"brave-otter-lamp\",\"pair_url\":\"\"}", &got));
+    CHECK_STR(got.pair_url, "");
+    CHECK(parse_register("{\"id\":\"a\",\"token\":\"b\",\"code\":\"brave-otter-lamp\",\"pair_url\":\"a\\nb\"}", &got));
+    CHECK_STR(got.pair_url, "");
+
+    char body[512], url[RELAY_PAIR_URL_MAX + 2];
+    for (int over = 0; over <= 1; over++) {
+        memset(url, 'u', RELAY_PAIR_URL_MAX + over);
+        url[RELAY_PAIR_URL_MAX + over] = '\0';
+        snprintf(body, sizeof(body), "{\"id\":\"a\",\"token\":\"b\",\"code\":\"c\",\"pair_url\":\"%s\"}", url);
+        CHECK(parse_register(body, &got));
+        CHECK_INT(strlen(got.pair_url), over ? 0 : RELAY_PAIR_URL_MAX);
+    }
+
+    fresh();
+    relay_poll_t result = poll("{\"claimed\":false,\"version\":0,\"capsule\":null,\"action_seq\":0,"
+                               "\"code\":\"quiet-maple-drum\",\"pair_url\":\"http://10.0.0.1:8090/pair?code=quiet-maple-drum\"}");
+    CHECK_STR(result.code, "quiet-maple-drum");
+    CHECK_STR(result.pair_url, "http://10.0.0.1:8090/pair?code=quiet-maple-drum");
+    // A URL without a code belongs to nothing.
+    result = poll("{\"claimed\":false,\"version\":0,\"capsule\":null,\"action_seq\":0,\"pair_url\":\"http://x/pair\"}");
+    CHECK(result.ok);
+    CHECK_STR(result.pair_url, "");
+}
+
+static void test_take_pairing(void)
+{
+    relay_credentials_t held = { .id = "a", .token = "b", .code = "brave-otter-lamp", .pair_url = "http://x/pair?code=1" };
+    relay_credentials_t before = held;
+    relay_poll_t answer = { .ok = true };
+
+    CHECK(!relay_take_pairing(&held, &answer));  // a relay that says nothing about codes in a poll
+    strcpy(answer.code, "brave-otter-lamp");
+    CHECK(!relay_take_pairing(&held, &answer));  // same code, no URL: the one from the registration stays
+    strcpy(answer.pair_url, "http://x/pair?code=1");
+    CHECK(!relay_take_pairing(&held, &answer));
+    CHECK(memcmp(&held, &before, sizeof(held)) == 0);
+
+    strcpy(answer.code, "quiet-maple-drum");
+    strcpy(answer.pair_url, "http://x/pair?code=2");
+    CHECK(relay_take_pairing(&held, &answer));
+    CHECK_STR(held.code, "quiet-maple-drum");
+    CHECK_STR(held.pair_url, "http://x/pair?code=2");
+    CHECK_STR(held.token, "b");
+
+    strcpy(answer.code, "tiny-fox-drum");  // a new code without a URL: the old QR code must go
+    answer.pair_url[0] = '\0';
+    CHECK(relay_take_pairing(&held, &answer));
+    CHECK_STR(held.code, "tiny-fox-drum");
+    CHECK_STR(held.pair_url, "");
+
+    strcpy(answer.pair_url, "http://x/pair?code=3");  // same code, the URL arrives later
+    CHECK(relay_take_pairing(&held, &answer));
+    CHECK_STR(held.pair_url, "http://x/pair?code=3");
+
+    before = held;
+    strcpy(answer.code, "calm-owl-jar");
+    answer.claimed = true;  // claimed: nothing to pair any more
+    CHECK(!relay_take_pairing(&held, &answer));
+    CHECK(memcmp(&held, &before, sizeof(held)) == 0);
 }
 
 static void test_text_ok(void)
@@ -506,6 +579,8 @@ int main(void)
     test_register_lengths();
     test_text_ok();
     test_code_ok();
+    test_pair_url();
+    test_take_pairing();
     test_poll_code();
     test_poll_nothing_to_do();
     test_poll_applies_a_new_version_once();

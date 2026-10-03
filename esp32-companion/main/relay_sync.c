@@ -25,10 +25,10 @@ bool relay_text_ok(const char *text, size_t max, const char *extra)
     return true;
 }
 
-bool relay_code_ok(const char *text)
+bool relay_printable(const char *text, size_t max)
 {
     size_t len = strlen(text);
-    if (len == 0 || len > RELAY_CODE_MAX) {
+    if (len == 0 || len > max) {
         return false;
     }
     for (size_t i = 0; i < len; i++) {
@@ -61,6 +61,15 @@ static bool read_counter(const cJSON *json, const char *key, int64_t *value)
     return true;
 }
 
+// The optional pair_url of an answer; `out` stays empty unless it is there and can be shown.
+static void copy_pair_url(char out[RELAY_PAIR_URL_MAX + 1], const cJSON *json)
+{
+    const char *url = string_field(json, "pair_url");
+    if (url && relay_printable(url, RELAY_PAIR_URL_MAX)) {
+        strcpy(out, url);
+    }
+}
+
 static bool absent_or_null(const cJSON *item)
 {
     return !item || cJSON_IsNull(item);
@@ -88,12 +97,13 @@ bool relay_parse_register(const char *body, size_t len, relay_credentials_t *out
     const char *token = string_field(json, "token");
     const char *code = string_field(json, "code");
     bool ok = id && token && code && relay_text_ok(id, RELAY_ID_MAX, ID_EXTRA) &&
-              relay_text_ok(token, RELAY_TOKEN_MAX, TOKEN_EXTRA) && relay_code_ok(code);
+              relay_text_ok(token, RELAY_TOKEN_MAX, TOKEN_EXTRA) && relay_printable(code, RELAY_CODE_MAX);
     if (ok) {
         memset(out, 0, sizeof(*out));
         strcpy(out->id, id);  // the lengths were checked just above
         strcpy(out->token, token);
         strcpy(out->code, code);
+        copy_pair_url(out->pair_url, json);
     }
     cJSON_Delete(json);
     return ok;
@@ -157,8 +167,9 @@ relay_poll_t relay_handle_poll(relay_sync_t *sync, const char *body, size_t len)
         result.claimed = cJSON_IsTrue(claimed);
         // Optional: a relay that renews an expired pairing code hands out the new one here.
         // One that cannot be shown is ignored; the code from the registration stays.
-        if (cJSON_IsString(code) && relay_code_ok(code->valuestring)) {
+        if (cJSON_IsString(code) && relay_printable(code->valuestring, RELAY_CODE_MAX)) {
             strcpy(result.code, code->valuestring);
+            copy_pair_url(result.pair_url, json);
         }
         if (version != sync->version) {
             take_capsule(sync, capsule, version, &result);
@@ -170,6 +181,25 @@ relay_poll_t relay_handle_poll(relay_sync_t *sync, const char *body, size_t len)
     }
     cJSON_Delete(json);
     return result;
+}
+
+bool relay_take_pairing(relay_credentials_t *credentials, const relay_poll_t *poll)
+{
+    if (poll->claimed || poll->code[0] == '\0') {
+        return false;
+    }
+    bool new_code = strcmp(poll->code, credentials->code) != 0;
+    bool new_url = poll->pair_url[0] != '\0' && strcmp(poll->pair_url, credentials->pair_url) != 0;
+    if (!new_code && !new_url) {
+        return false;
+    }
+    if (new_code) {
+        strcpy(credentials->code, poll->code);  // same sizes on both sides
+    }
+    if (new_code || new_url) {
+        strcpy(credentials->pair_url, poll->pair_url);
+    }
+    return true;
 }
 
 int64_t relay_shown_version(const relay_sync_t *sync)

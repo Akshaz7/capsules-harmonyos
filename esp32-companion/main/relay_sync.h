@@ -15,6 +15,7 @@
 #define RELAY_ID_MAX 64            // characters; [A-Za-z0-9_-], it goes into a URL path
 #define RELAY_TOKEN_MAX 128        // characters; [A-Za-z0-9._~+/=-], it goes into a header
 #define RELAY_CODE_MAX 32          // bytes of printable ASCII; the board only displays it
+#define RELAY_PAIR_URL_MAX 200     // bytes of printable ASCII; the board draws it as a QR code
 #define RELAY_MAX_RESPONSE 2048    // bytes of a response body; a longer one is a failure
 
 #define RELAY_POLL_MS 2000         // GET .../capsule this often
@@ -27,21 +28,23 @@
 typedef struct {
     char id[RELAY_ID_MAX + 1];
     char token[RELAY_TOKEN_MAX + 1];
-    char code[RELAY_CODE_MAX + 1];  // pairing phrase, e.g. "brave-otter-lamp"
+    char code[RELAY_CODE_MAX + 1];          // pairing phrase, e.g. "brave-otter-lamp"
+    char pair_url[RELAY_PAIR_URL_MAX + 1];  // what the QR code holds; empty: the relay gave none
 } relay_credentials_t;
 
 // The body for POST /api/devices/register. Free with cJSON_free(). NULL if memory ran out.
 char *relay_register_body(const char *hw, const char *fw);
 
 // The 201 answer to it. `body[len]` must be a NUL. False (and *out untouched) unless id,
-// token and code are all there and well-formed.
+// token and code are all there and well-formed. pair_url is optional: one that is missing
+// or cannot be shown comes back empty, and the board then shows the phrase alone.
 bool relay_parse_register(const char *body, size_t len, relay_credentials_t *out);
 
 // True if `text` is 1..max characters, all letters, digits or one of `extra`.
 bool relay_text_ok(const char *text, size_t max, const char *extra);
 
-// True if `text` can be shown as a pairing code: 1..RELAY_CODE_MAX printable ASCII characters.
-bool relay_code_ok(const char *text);
+// True if `text` is 1..max printable ASCII characters: something the board can display.
+bool relay_printable(const char *text, size_t max);
 
 // What has been taken from the relay so far. Start with relay_sync_reset() at boot and
 // after every registration.
@@ -58,7 +61,8 @@ void relay_sync_reset(relay_sync_t *sync);
 typedef struct {
     bool ok;                    // false: the body was not a usable answer; nothing was changed
     bool claimed;
-    char code[RELAY_CODE_MAX + 1];  // the pairing code in the answer; empty: none given
+    char code[RELAY_CODE_MAX + 1];          // the pairing code in the answer; empty: none given
+    char pair_url[RELAY_PAIR_URL_MAX + 1];  // and the URL that goes with it; empty: none given
     bool capsule_applied;
     const char *capsule_error;  // not NULL: a new version arrived and its capsule was refused
     bool action_applied;
@@ -70,6 +74,11 @@ typedef struct {
 // reset takes the capsule but only notes the action_seq: an action from before the board
 // (re)started must not run a second time. `body[len]` must be a NUL.
 relay_poll_t relay_handle_poll(relay_sync_t *sync, const char *body, size_t len);
+
+// Takes over the pairing code (and the URL that goes with it) from a poll answer, for a
+// relay that renews a code that ran out. True if `credentials` changed and should be
+// stored. A new code without a URL clears the old URL: it belonged to the old code.
+bool relay_take_pairing(relay_credentials_t *credentials, const relay_poll_t *poll);
 
 // The relay version of the capsule on screen: 0 when the screen shows nothing from the
 // relay (idle, or a capsule that was set over the local API since).
