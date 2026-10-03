@@ -292,6 +292,20 @@ export default function capsuleV1Test() {
       expect(errorsOf(v1(NUM, '{}', `[${nested}]`))).assertContain('nested too deeply');
     });
 
+    it('rejects {name} placeholders outside display components, which would show literally', 0, () => {
+      const streak = '{"streak":{"type":"number","initial":0}}';
+      expect(errorsOf(v1(streak, '{}', '[{"type":"text","text":"Reading Streak: {streak}"}]')))
+        .assertContain('$.ui[0].text: "{streak}" would be shown literally; only a "display" component fills in');
+      expect(errorsOf(v1(streak, '{}', '[{"type":"display","text":"Reading Streak: {streak}"}]'))).assertEqual('');
+      expect(errorsOf(v1(streak, '{}', '[{"type":"display","text":"Reading Streak: {streek}"}]')))
+        .assertContain('unknown name "streek"');
+      expect(errorsOf(v1(streak, '{}', '[{"type":"row","items":[{"type":"button","label":"+1 {streak}",' +
+        '"do":[{"set":"streak","to":"streak + 1"}]}]}]'))).assertContain('$.ui[0].items[0].label: "{streak}"');
+      expect(errorsOf('{"schemaVersion":0,"id":"x","name":"X","permissions":[],' +
+        '"ui":[{"type":"checklist","id":"c","items":["Day {n}"]}]}')).assertContain('$.ui[0].items[0]: "{n}"');
+      expect(errorsOf(v1(streak, '{}', '[{"type":"text","text":"Use {{braces}} and {} freely"}]'))).assertEqual('');
+    });
+
     it('applies permissions and ids to nested components and do-actions', 0, () => {
       expect(errorsOf(v1(NUM, '{}', '[{"type":"row","items":[{"type":"timer","id":"t","label":"T","minutes":1}]}]')))
         .assertContain('needs permission "reminders"');

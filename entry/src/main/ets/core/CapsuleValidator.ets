@@ -560,6 +560,41 @@ function stateType(state: Record<string, StateVar>, name: string): VarType | nul
   return v === undefined ? null : v.type;
 }
 
+/** A "{name}" placeholder; "{{" and "}}" are literal braces. */
+const PLACEHOLDER: RegExp = /(^|[^{])\{\s*([A-Za-z_][^{}]*?)\s*\}(?!\})/;
+
+/**
+ * Only "display" text fills in {expressions}; anywhere else a placeholder would be shown literally
+ * (e.g. a text component "Reading Streak: {streak}"), so it is rejected.
+ */
+function checkLiteralPlaceholders(ck: Checker, placed: Placed[]): void {
+  const check = (value: string, path: string): void => {
+    const m = value.match(PLACEHOLDER);
+    if (m !== null) {
+      ck.add(path, `"{${m[2]}}" would be shown literally; only a "display" component fills in {...} ` +
+        '(it needs "schemaVersion": 1 and a state or computed value with that name)');
+    }
+  };
+  placed.forEach((p: Placed) => {
+    const c = p.c;
+    if (c.type === 'text') {
+      check((c as TextComponent).text, `${p.path}.text`);
+    } else if (c.type === 'checklist') {
+      (c as ChecklistComponent).items.forEach((item: string, i: number) => check(item, `${p.path}.items[${i}]`));
+    } else if (c.type === 'timer') {
+      check((c as TimerComponent).label, `${p.path}.label`);
+    } else if (c.type === 'counter') {
+      check((c as CounterComponent).label, `${p.path}.label`);
+    } else if (c.type === 'number') {
+      check((c as NumberComponent).label, `${p.path}.label`);
+    } else if (c.type === 'input') {
+      check((c as InputComponent).label, `${p.path}.label`);
+    } else if (c.type === 'button') {
+      check((c as ButtonComponent).label, `${p.path}.label`);
+    }
+  });
+}
+
 /** Checks every v1 expression, binding and step against the declared names and types. */
 function checkV1(ck: Checker, placed: Placed[], state: Record<string, StateVar>, types: Map<string, VarType>): void {
   const isComputed = (n: string): boolean => types.has(n) && stateType(state, n) === null;
@@ -777,6 +812,8 @@ export function validateCapsuleObject(root: JsonValue): ValidationResult {
       checkV1(ck, ck.placed, state ?? {}, types);
     }
   }
+
+  checkLiteralPlaceholders(ck, ck.placed);
 
   if (ck.errors.length > 0) {
     return { ok: false, errors: ck.errors };
