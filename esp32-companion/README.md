@@ -27,8 +27,8 @@ As of 2026-10-03.
 | | State |
 | --- | --- |
 | Mock server | Passes `test_api.sh` (72 checks) and its unit tests. |
-| Host unit tests | `make -C tests test`: 1,448 checks in C on the firmware's own source files, 19 Python tests on the mock and 35 on the fake relay. All pass. |
-| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,717,472 bytes, 80% of the app partition free. |
+| Host unit tests | `make -C tests test`: 1,619 checks in C on the firmware's own source files, 19 Python tests on the mock and 36 on the fake relay. All pass. |
+| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,717,552 bytes, 80% of the app partition free. |
 | Boot on hardware | One board (revision V2): boots, display and touch drivers start, accelerometer and audio codec answer, HTTP server starts. |
 | Wi-Fi on hardware | Joins the phone hotspot (WPA3) and the venue network `HackYeah2026`, which it sees on 2.4 GHz channel 1. Joining the venue network often takes several attempts. |
 | HTTP API on hardware | **Confirmed**: `./test_api.sh http://<board ip>` passes 72 of 72 against the board over the venue Wi-Fi. JSON nested 300 and 1024 levels deep gets a 400 and the board keeps running (it used to reboot). |
@@ -499,14 +499,16 @@ Tested:
   relay within three seconds, a running timer is reported every 10 seconds; a capsule set
   over the local API is reported with `version` 0; with the fake stopped the screen says
   "cloud offline", the retries back off to 30 seconds and `test_api.sh` still passes 72 of
-  72; with the fake started again the board gets a 401, registers again and carries on;
+  72; with the fake started again the board gets a 401, waits for its backoff, registers
+  again once and carries on; against a fake that registers the board but answers 401 to
+  every poll (`mock_relay.py --always-401`) it registered once in 75 seconds, not in a loop;
   unpairing gives the board a new phrase.
 
 Not tested:
 
 - The cloud relay client against a real backend, and any request beyond the TLS handshake
   over HTTPS (polling over a kept-alive TLS connection, for hours). A relay that accepts
-  the connection and then says nothing (the 4 second timeout): the fake was either up or
+  the connection and then says nothing (the 10 second timeout): the fake was either up or
   refusing connections. A pairing code expiring on the board after 10 minutes (host tests
   only). Scanning the QR code off the glass with a phone: it was decoded from the
   screenshot, which shows what LVGL draws, not what the panel displays.

@@ -50,7 +50,7 @@ Called when the board has no stored token (first boot, or after a 401).
 
 | Field | Meaning |
 | --- | --- |
-| `hw` | Stable id of the board: 16 hex digits, the first 8 bytes of SHA-256 over `"harmoniser-wrist:"` followed by the 6 bytes of the Wi-Fi MAC. Not the MAC, and the MAC cannot be read back from it. 1 to 64 characters of `A-Z a-z 0-9 _ -`. |
+| `hw` | Stable id of the board: 16 hex digits, the first 8 bytes of SHA-256 over `"harmoniser-wrist:"` followed by the 6 bytes of the Wi-Fi MAC. A salted hash rather than the MAC itself, and it is sent to the relay only. Somebody who never sees it learns nothing from it, but it is not a secret and no strong protection: whoever holds an `hw` and a list of candidate MAC addresses can test them against it. 1 to 64 characters of `A-Z a-z 0-9 _ -`. |
 | `kind` | `"wrist"`. Room for other devices later. |
 | `fw` | Firmware version, free text up to 64 characters. |
 
@@ -74,7 +74,9 @@ Registering the same `hw` again gives the same `id` with a new `token`, `code` a
 `pair_url`. The old token and code stop working, the device is unclaimed again, and its
 capsule and pending action are dropped. (A board that lost its token may have changed hands.)
 
-The board keeps `id`, `token`, `code` and `pair_url` in flash (NVS).
+The board keeps `id` and `token` in flash (NVS), written once per registration. `code` and
+`pair_url` are held in RAM only: after a restart the board has neither until its first
+poll, which is why the poll answer below repeats them.
 
 ### `GET /api/devices/{id}/capsule`
 
@@ -93,7 +95,7 @@ connection.
 | `capsule` | no | `null`, or a capsule object exactly like the body of the local `POST /capsule`: `{"type":"timer","label":"…","seconds":N}` or `{"type":"counter","label":"…","count":N}`, with the optional `running` and `motion`. |
 | `action_seq` | yes | Whole number, 0 to 2^53. Changes with every new action. |
 | `action` | no | `null`, or one of `start`, `pause`, `toggle`, `reset`, `increment`, `motion_on`, `motion_off`. |
-| `code`, `pair_url` | no | While unclaimed: the current pairing code and its URL. This is how a renewed code reaches the board. `null` or absent otherwise. A `pair_url` without a `code` is ignored. |
+| `code`, `pair_url` | while unclaimed | The current pairing code and its URL, **in every answer while the device is unclaimed**. This is how the code reaches a board that restarted (it does not keep the code in flash) and how a renewed code replaces the old one. `null` or absent once claimed. A `pair_url` without a `code` is ignored. A relay that leaves them out still works, but a board that restarts while unclaimed then has nothing to show until it registers again. |
 
 What the board does with it:
 
@@ -107,13 +109,18 @@ What the board does with it:
 - **After a restart or a registration** the first answer's capsule is applied (the board
   gets its capsule back), but its `action_seq` is only noted: an action from before the
   restart is not run a second time.
-- **Pairing.** A `code` different from the one it holds replaces it on the screen and in flash.
+- **Pairing.** A `code` different from the one it holds replaces it on the screen. Nothing
+  is written to flash for that, so a relay may change the code as often as it likes.
 
-Limits on the answer: 2048 bytes, nested at most 8 deep. Anything else counts as a failed request.
+Limits on the answer (and on the answer to `register`): 1024 bytes, nested at most 8 deep.
+Anything else counts as a failed request. With every field at the limits in this document
+the longest poll answer is about 700 bytes and the longest registration answer about 470,
+so there is room for a field or two, not for a list of things.
 
-`401` when the id or the token is unknown. The board then forgets its registration and
-registers again. An unknown device id must be a 401 too; the board treats a 404 on this
-route the same way, in case the backend prefers that.
+`401` when the id or the token is unknown. The board then forgets its registration, waits
+(see [backoff](#when-the-relay-does-not-answer)) and registers again. **An unknown device
+id must be a 401.** A 404 is a failure like any other to the board: it keeps its token and
+tries again later, for ever.
 
 ### `POST /api/devices/{id}/state`
 
@@ -128,7 +135,10 @@ With the bearer token. Body: the object of the local `GET /state`, plus `version
 shows nothing from the relay: the board is idle, or somebody set a capsule over the local
 API since. (So capsule versions should start at 1.)
 
-Answer: `204`, no body. `401` as above.
+Answer: `204`, no body; the board takes any 2xx. A report that fails, with whatever status,
+is tried again later (after 2, 4, 8, 16, then every 30 seconds) and changes nothing else:
+the board keeps polling at its usual pace, keeps its token (only a 401 to a *poll* makes it
+register again), and the screen does not say "cloud offline" because of it.
 
 When it is sent: after any change of `type`, `label`, `count`, `seconds`, `running`, `done`,
 `motion` or `version` (a tap on + is a change of `count`), at most once a second; and every
@@ -137,11 +147,19 @@ a countdown does not cause a request per second; for a stopped timer it is (a re
 
 ### When the relay does not answer
 
-Requests time out after 4 seconds. After a failure the board waits 2, 4, 8, 16, then 30
-seconds between attempts. After two failures in a row the screen says "cloud offline". The
-screen, the touch buttons, the timer and the local API carry on as before. The first
-request that succeeds ends the backoff. Anything other than the expected status (200, 201,
-204) or a 401 counts as a failure, 5xx included.
+A request times out after 10 seconds; that covers connecting (TCP and TLS) as well as the
+answer. After a failed registration or poll the board waits 2, 4, 8, 16, then 30 seconds
+between attempts. After two failures in a row the screen says "cloud offline". The screen,
+the touch buttons, the timer and the local API carry on as before.
+
+- A failure is: no answer, an answer the board cannot use, or any status other than the
+  expected one (201 for `register`, 200 for the poll), 404 and 5xx included.
+- A 401 to a poll counts as a failure too, and on top of that the board forgets its
+  registration. The registration that follows waits for the backoff like any other request.
+- Only a poll that succeeds ends the backoff. A registration that succeeds does not: a relay
+  that hands out a token and then refuses it sees a registration after 2, 4, 8, 16 seconds
+  and then one every 30 seconds, not a loop.
+- State reports are outside all this, see above.
 
 ## User side
 
@@ -286,4 +304,7 @@ The board draws `pair_url` as a QR code, with the phrase under it as the fallbac
   self-signed certificate was refused), with about 50 KB of internal RAM free while the
   connection was open. All polling so far was over plain HTTP to the fake. Polling over a
   kept-alive TLS connection for hours has not been run.
+- **A relay that only answers 404 strands the board.** The board re-registers on a 401
+  alone. If a device record is ever deleted and the route answers 404 for it, that board
+  keeps trying its old token every 30 seconds until it is reflashed or its NVS is erased.
 - **Polling.** One request every 2 seconds per board, for as long as it is on.
