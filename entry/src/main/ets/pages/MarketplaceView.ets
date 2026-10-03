@@ -3,6 +3,8 @@ import { MARKET_CATEGORIES, MarketItem, MarketPage, MarketplaceClient } from '..
 /** Marketplace: search, categories, Install (-> the app's own import + "From the marketplace" consent). */
 @ComponentV2
 export struct MarketplaceView {
+  /** Shown as a home tab (UI-2) instead of a pushed page. */
+  @Param embedded: boolean = false;
   @Require @Param client: MarketplaceClient;
   @Event onInstall: (item: MarketItem) => void = () => {
   };
@@ -83,62 +85,88 @@ export struct MarketplaceView {
     .backgroundColor($r('sys.color.comp_background_primary'))
   }
 
-  build() {
-    NavDestination() {
-      Column({ space: 12 }) {
-        Search({ value: this.q, placeholder: 'Search capsules' })
-          .onChange((v: string) => {
-            this.q = v;
-          })
-          .onSubmit(() => this.load(false))
-        Scroll() {
-          Row({ space: 8 }) {
-            ForEach(MARKET_CATEGORIES, (c: string) => {
-              this.chip(c.charAt(0).toUpperCase() + c.substring(1), c)
-            }, (c: string) => c)
-          }
+  @Builder
+  content() {
+    Column({ space: 12 }) {
+      Search({ value: this.q, placeholder: 'Search capsules' })
+        .onChange((v: string) => {
+          this.q = v;
+        })
+        .onSubmit(() => this.load(false))
+      Scroll() {
+        Row({ space: 8 }) {
+          ForEach(MARKET_CATEGORIES, (c: string) => {
+            this.chip(c.charAt(0).toUpperCase() + c.substring(1), c)
+          }, (c: string) => c)
         }
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
-        .width('100%')
-        if (this.offline) {
-          Text(this.client.configured ? "The marketplace is offline right now. These examples come with the app." :
-            'These examples come with the app.')
-            .fontSize($r('sys.float.Caption_M'))
-            .fontColor($r('sys.color.font_secondary'))
-            .width('100%')
-        }
-        if (this.loading && this.items.length === 0) {
-          LoadingProgress().width(40).height(40)
-        } else if (this.items.length === 0) {
-          Text('Nothing found. Try another word.')
-            .fontSize($r('sys.float.Body_L'))
-            .fontColor($r('sys.color.font_tertiary'))
-            .width('100%')
-            .padding(16)
-        } else {
-          List({ space: 10 }) {
-            ForEach(this.items, (item: MarketItem) => {
-              ListItem() {
-                this.card(item)
-              }
-            }, (item: MarketItem) => item.id)
-            if (this.cursor.length > 0) {
-              ListItem() {
-                Button('More', { buttonStyle: ButtonStyleMode.TEXTUAL })
-                  .onClick(() => this.load(true))
-              }
+      }
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .width('100%')
+      if (this.offline) {
+        Text(this.client.configured ? "The marketplace is offline right now. These examples come with the app." :
+          'These examples come with the app.')
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+      }
+      if (this.loading && this.items.length === 0) {
+        LoadingProgress().width(40).height(40)
+      } else if (this.items.length === 0) {
+        Text('Nothing found. Try another word.')
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+          .padding(16)
+      } else {
+        List({ space: 10 }) {
+          ForEach(this.items, (item: MarketItem) => {
+            ListItem() {
+              this.card(item)
+            }
+          }, (item: MarketItem) => item.id)
+          if (this.cursor.length > 0) {
+            ListItem() {
+              Button('More', { buttonStyle: ButtonStyleMode.TEXTUAL })
+                .onClick(() => this.load(true))
             }
           }
-          .layoutWeight(1)
-          .scrollBar(BarState.Off)
         }
+        .layoutWeight(1)
+        .scrollBar(BarState.Off)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, top: 8 })
+  }
+
+  build() {
+    if (this.embedded) {
+      // A tab of the home screen (UI-2): no title bar, a large title, room for the floating tab bar.
+      Column({ space: 8 }) {
+        Text('Marketplace')
+          .fontSize(30)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 12 })
+        Column() {
+          this.content()
+        }
+        .layoutWeight(1)
+        .width('100%')
       }
       .width('100%')
       .height('100%')
-      .padding({ left: 16, right: 16, top: 8 })
+      .padding({ bottom: 96 })
+      .backgroundColor($r('sys.color.background_secondary'))
+    } else {
+      NavDestination() {
+        this.content()
+      }
+      .title('Marketplace')
+      .backgroundColor($r('sys.color.background_secondary'))
     }
-    .title('Marketplace')
-    .backgroundColor($r('sys.color.background_secondary'))
   }
 }

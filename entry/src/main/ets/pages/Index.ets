@@ -84,6 +84,10 @@ const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
 const CHOOSE_PAGE = 'chooseCapsule';
 const MARKET_PAGE = 'marketplace';
+const TAB_CREATE = 0;
+const TAB_CAPSULES = 1;
+const TAB_MARKET = 2;
+const TAB_SETTINGS = 3;
 const MARKETPLACE_ORIGIN = 'marketplace';
 // Stored as a capsule origin so the sheet and the card badge say where it came from.
 const IMPORTED_ORIGIN = 'imported';
@@ -247,6 +251,10 @@ struct Index {
   /** Time of the last trigger check; the trigger cards re-read "Next: ..." from it. */
   @Local triggerNow: number = Date.now();
   @Local placeholderIndex: number = 0;
+  /** UI-2: the selected home tab, and a tap counter per tab for the symbol bounce. */
+  @Local tab: number = TAB_CREATE;
+  @Local tabTaps: number[] = [0, 0, 0, 0];
+  private tabsController: TabsController = new TabsController();
   /** UI-1: the placeholder as typed so far (types and erases the examples). */
   @Local placeholderText: string = PLACEHOLDERS[0];
   @Local inputFocused: boolean = false;
@@ -1225,7 +1233,7 @@ struct Index {
             .fontSize($r('sys.float.Body_M'))
             .fontColor($r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)
-            .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
+            .onClick(() => this.selectTab(TAB_SETTINGS))
         }
       }
       .layoutWeight(1)
@@ -1760,7 +1768,7 @@ struct Index {
         .fontSize($r('sys.float.Body_S'))
         .fontColor($r('sys.color.font_secondary'))
         .width('100%')
-        .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
+        .onClick(() => this.selectTab(TAB_SETTINGS))
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach(RETRY_SUGGESTIONS, (chip: ExampleChip) => {
           Row({ space: 6 }) {
@@ -1792,7 +1800,7 @@ struct Index {
             .fontSize($r('sys.float.Body_M'))
             .fontColor($r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)
-            .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
+            .onClick(() => this.selectTab(TAB_SETTINGS))
         }
       }
     }
@@ -1859,26 +1867,11 @@ struct Index {
   home() {
     Scroll() {
       Column({ space: 16 }) {
-        Row() {
-          Text('Harmoniser')
-            .fontSize($r('sys.float.Subtitle_L'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_secondary'))
-            .layoutWeight(1)
-          Row({ space: 8 }) {
-            // Import is a secondary action: a small icon next to Settings and Log, not a big button.
-            SharingBar({
-              showShare: false,
-              compact: true,
-              onPairCode: (code: string) => this.claimDevice(code), // a scanned device pairing QR
-              onImported: (prepared: PreparedImport) => this.handleImported(prepared)
-            })
-            this.iconButton($r('sys.symbol.bag'), () => this.nav.pushPath({ name: MARKET_PAGE }))
-            this.iconButton($r('sys.symbol.gearshape'), () => this.nav.pushPath({ name: SETTINGS_PAGE }))
-            this.iconButton($r('sys.symbol.doc_text'), () => this.nav.pushPath({ name: LOG_PAGE }))
-          }
-        }
-        .width('100%')
+        Text('Harmoniser')
+          .fontSize($r('sys.float.Subtitle_L'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
         HomeHero()
         this.inputCard()
         this.statusRow()
@@ -1901,21 +1894,44 @@ struct Index {
             .fontColor($r('sys.color.font_secondary'))
             .width('100%')
         }
-        // Import from another phone. Nothing is saved until the sheet's Run.
-        Row() {
-          Text('Your capsules')
-            .fontSize($r('sys.float.Subtitle_L'))
+      }
+      .padding({ left: 16, right: 16, top: 8, bottom: 120 }) // room for the floating tab bar
+      .width('100%')
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.Top)
+    .edgeEffect(EdgeEffect.Spring)
+    .scrollBar(BarState.Off)
+    .transition(TransitionEffect.OPACITY)
+  }
+
+  /** UI-2: the Capsules tab (live previews come with UI-3). */
+  @Builder
+  capsulesTab() {
+    Scroll() {
+      Column({ space: 16 }) {
+        Row({ space: 8 }) {
+          Text('Capsules')
+            .fontSize(30)
             .fontWeight(FontWeight.Bold)
             .fontColor($r('sys.color.font_primary'))
-            .layoutWeight(1)
           if (this.entries.length > 0) {
             Text(`${this.entries.length}`)
-              .fontSize($r('sys.float.Body_M'))
+              .fontSize($r('sys.float.Body_L'))
               .fontColor($r('sys.color.font_tertiary'))
           }
+          Blank()
+          // Import from another phone (moved here from the home header). Nothing is saved until the sheet's Run.
+          SharingBar({
+            showShare: false,
+            compact: true,
+            onPairCode: (code: string) => this.claimDevice(code), // a scanned device pairing QR
+            onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+          })
         }
         .width('100%')
-        .margin({ top: 8 })
+        .margin({ top: 4 })
         if (this.entries.length === 0) {
           Text('Capsules you create appear here.')
             .fontSize($r('sys.float.Body_M'))
@@ -1939,7 +1955,7 @@ struct Index {
           .layoutDirection(GridDirection.Row)
         }
       }
-      .padding({ left: 16, right: 16, top: 8, bottom: 32 })
+      .padding({ left: 16, right: 16, top: 12, bottom: 120 })
       .width('100%')
     }
     .width('100%')
@@ -1947,7 +1963,93 @@ struct Index {
     .align(Alignment.Top)
     .edgeEffect(EdgeEffect.Spring)
     .scrollBar(BarState.Off)
-    .transition(TransitionEffect.OPACITY)
+  }
+
+  private selectTab(index: number): void {
+    this.tabTaps = this.tabTaps.map((n: number, i: number) => i === index ? n + 1 : n);
+    this.tab = index;
+    this.tabsController.changeIndex(index);
+  }
+
+  /** UI-2: one item of the floating tab bar: an HM Symbol that bounces when tapped, and a short label. */
+  @Builder
+  tabItem(index: number, icon: Resource, label: string) {
+    Column({ space: 2 }) {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([this.tab === index ? $r('sys.color.brand') : $r('sys.color.icon_secondary')])
+        .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.DOWN), this.tabTaps[index])
+      Text(label)
+        .fontSize(10)
+        .fontWeight(this.tab === index ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.tab === index ? $r('sys.color.brand') : $r('sys.color.font_secondary'))
+        .maxLines(1)
+    }
+    .layoutWeight(1)
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .accessibilityText(label)
+    .onClick(() => this.selectTab(index))
+  }
+
+  /** UI-2: a floating, frosted pill above the home indicator. */
+  @Builder
+  tabBar() {
+    Row() {
+      this.tabItem(TAB_CREATE, $r('sys.symbol.plus_circle'), 'Create')
+      this.tabItem(TAB_CAPSULES, $r('sys.symbol.square_grid_2x2'), 'Capsules')
+      this.tabItem(TAB_MARKET, $r('sys.symbol.bag'), 'Marketplace')
+      this.tabItem(TAB_SETTINGS, $r('sys.symbol.gearshape'), 'Settings')
+    }
+    .width('92%')
+    .height(64)
+    .padding({ left: 6, right: 6 })
+    .borderRadius(32)
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+    .border({ width: 0.5, color: $r('sys.color.comp_divider') })
+    .shadow({ radius: 24, color: '#1F000000', offsetY: 6 })
+    .margin({ bottom: 12 })
+  }
+
+  @Builder
+  mainTabs() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      // Native Tabs hold the pages; their own bar is hidden in favour of the floating pill below.
+      Tabs({ barPosition: BarPosition.End, controller: this.tabsController, index: this.tab }) {
+        TabContent() {
+          this.home()
+        }
+        TabContent() {
+          this.capsulesTab()
+        }
+        TabContent() {
+          MarketplaceView({
+            client: this.market,
+            embedded: true,
+            onInstall: (item: MarketItem) => this.installFromMarket(item)
+          })
+        }
+        TabContent() {
+          SettingsView({
+            settings: this.settings,
+            embedded: true,
+            cloudStatus: this.cloudConfigured ? '' : this.modelStatus,
+            smartDetail: this.smartModeDetail()
+          })
+        }
+      }
+      .barHeight(0)
+      .scrollable(false)
+      .animationDuration(reduceMotion() ? 0 : 250)
+      .onChange((index: number) => {
+        this.tab = index;
+      })
+      .width('100%')
+      .height('100%')
+      this.tabBar()
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -2123,7 +2225,7 @@ struct Index {
         if (this.openEntry()) {
           this.detail(this.openEntry() as CapsuleEntry)
         } else {
-          this.home()
+          this.mainTabs()
         }
       }
       .width('100%')
