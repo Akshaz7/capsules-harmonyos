@@ -3,7 +3,7 @@ import {
   createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig, parseModelConfigs, DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_MISTRAL_MODEL
 } from '../main/ets/core/ModelProvider';
-import { CapsuleModel, extractJson, SYSTEM_PROMPT, V1_EXAMPLES } from '../main/ets/core/CapsuleModel';
+import { CapsuleModel, extractJson, retryMessage, SYSTEM_PROMPT, V1_EXAMPLES } from '../main/ets/core/CapsuleModel';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 
 const GOOD: string =
@@ -172,7 +172,25 @@ export default function capsuleModelTest() {
       expect(r.ok).assertTrue();
       expect(t.sent.length).assertEqual(2);
       expect(t.sent[1].body).assertContain('needs permission');
+      expect(t.sent[1].body).assertContain(JSON.stringify(retryMessage(validateCapsule(BAD).errors)).slice(1, -1));
       done();
+    });
+
+    it('quotes every validator error verbatim in the retry message', 0, () => {
+      const errors = validateCapsule('{"schemaVersion":1,"id":"x","name":"X","permissions":[],' +
+        '"state":{"score-p1":{"type":"number","initial":0}},"computed":{"a":"xs[0]"},"ui":[]}').errors;
+      expect(errors.length).assertEqual(2);
+      const msg = retryMessage(errors);
+      errors.forEach((e: string) => {
+        expect(msg).assertContain(`- "${e}"`);
+      });
+      expect(msg).assertContain('Reply with the corrected capsule JSON only.');
+    });
+
+    it('spells out the v1 name and expression rules', 0, () => {
+      expect(SYSTEM_PROMPT).assertContain('No hyphens');
+      expect(SYSTEM_PROMPT).assertContain('no [ ] indexing');
+      expect(SYSTEM_PROMPT).assertContain('if, min, max, round, abs, len');
     });
 
     it('never returns an invalid capsule', 0, async (done: Function) => {
