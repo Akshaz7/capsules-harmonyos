@@ -67,7 +67,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (216, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing and shared text.
+- **Unit tests (221, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing and shared text.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
