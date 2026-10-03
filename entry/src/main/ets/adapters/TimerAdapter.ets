@@ -25,7 +25,7 @@ export class TimerAdapter {
   private account: calendarManager.CalendarAccount = {
     name: 'Capsules',
     type: calendarManager.CalendarType.LOCAL,
-    displayName: 'Capsules'
+    displayName: 'Harmoniser'
   };
 
   constructor(ctx: common.UIAbilityContext) {

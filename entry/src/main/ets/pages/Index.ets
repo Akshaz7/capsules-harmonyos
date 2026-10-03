@@ -397,7 +397,7 @@ struct Index {
     Scroll() {
       Column({ space: 16 }) {
         Row() {
-          Text('Capsules')
+          Text('Harmoniser')
             .fontSize($r('sys.float.Subtitle_L'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('sys.color.font_secondary'))
@@ -411,6 +411,11 @@ struct Index {
           .fontColor($r('sys.color.font_primary'))
           .width('100%')
         this.inputCard()
+        Text('Tiny apps, made by asking.')
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+          .padding({ left: 4 })
         this.chips()
         if (this.message.length > 0) {
           Text(this.message)
@@ -479,8 +484,8 @@ struct Index {
             .fontWeight(FontWeight.Medium)
             .fontColor($r('sys.color.font_primary'))
         }
-        Text('1. Long-press the Capsules app icon on your home screen.\n' +
-          '2. Pick the Capsules widget.\n' +
+        Text('1. Long-press the Harmoniser app icon on your home screen.\n' +
+          '2. Pick the Harmoniser widget.\n' +
           '3. Tap "Add to home screen".')
           .fontSize($r('sys.float.Body_M'))
           .fontColor($r('sys.color.font_secondary'))
