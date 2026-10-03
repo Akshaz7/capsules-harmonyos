@@ -1,0 +1,11 @@
+{
+  "name": "cactus",
+  "version": "1.0.0",
+  "description": "Cactus on-device inference engine (v2.2.2, OHOS port) with a Node-API wrapper",
+  "main": "Index.ets",
+  "author": "",
+  "license": "SEE LICENSE IN CACTUS_LICENSE",
+  "dependencies": {
+    "libcactus_napi.so": "file:./src/main/cpp/types/libcactus_napi"
+  }
+}

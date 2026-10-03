@@ -1,0 +1,5 @@
+/build
+/.cxx
+/oh_modules
+/BuildProfile.ets
+/oh-package-lock.json5

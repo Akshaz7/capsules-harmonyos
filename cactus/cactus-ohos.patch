@@ -1,0 +1,90 @@
+diff --git a/cactus-engine/CMakeLists.txt b/cactus-engine/CMakeLists.txt
+index bba63c2..086d6ee 100644
+--- a/cactus-engine/CMakeLists.txt
++++ b/cactus-engine/CMakeLists.txt
+@@ -32,6 +32,11 @@ set(ENGINE_SOURCES
+     src/stream.cpp
+     src/tokenizer.cpp
+ )
++# OHOS port: telemetry_impl.cpp requires libcurl; use a no-op stub instead.
++if(OHOS)
++    list(REMOVE_ITEM ENGINE_SOURCES src/telemetry_impl.cpp)
++    list(APPEND ENGINE_SOURCES src/telemetry_stub.cpp)
++endif()
+ if(APPLE)
+     enable_language(OBJCXX)
+     list(APPEND ENGINE_SOURCES src/npu_ane.mm)
+diff --git a/cactus-engine/src/index.cpp b/cactus-engine/src/index.cpp
+index 940a476..774caf6 100644
+--- a/cactus-engine/src/index.cpp
++++ b/cactus-engine/src/index.cpp
+@@ -299,12 +299,12 @@ namespace index {
+             std::vector<float> embedding_f32(embedding_dim_);
+             cactus_fp16_to_fp32(entry.embedding(), embedding_f32.data(), embedding_dim_);
+ 
+-            results.emplace_back(
++            results.push_back(Document{
+                 doc_id,
+                 std::move(embedding_f32),
+                 std::string(data_entry->content(), data_entry->content_len),
+                 std::string(data_entry->metadata(), data_entry->metadata_len)
+-            );
++            });
+         }
+ 
+         return results;
+diff --git a/cactus-engine/src/index_ffi.cpp b/cactus-engine/src/index_ffi.cpp
+index 537d817..9530a28 100644
+--- a/cactus-engine/src/index_ffi.cpp
++++ b/cactus-engine/src/index_ffi.cpp
+@@ -133,12 +133,12 @@ int cactus_index_add(
+                 return -1;
+             }
+ 
+-            docs.emplace_back(
++            docs.push_back(cactus::engine::index::Document{
+                 ids[i],
+                 std::vector<float>(embeddings[i], embeddings[i] + embedding_dim),
+                 documents[i] ? std::string(documents[i]) : "",
+                 metadatas && metadatas[i] ? std::string(metadatas[i]) : ""
+-            );
++            });
+         }
+ 
+         CACTUS_LOG_INFO("index_add", "Adding " << docs.size() << " documents");
+diff --git a/cactus-engine/src/telemetry_stub.cpp b/cactus-engine/src/telemetry_stub.cpp
+new file mode 100644
+index 0000000..8833a34
+--- /dev/null
++++ b/cactus-engine/src/telemetry_stub.cpp
+@@ -0,0 +1,30 @@
++// OHOS port: no-op telemetry. telemetry_impl.cpp hard-depends on libcurl, which
++// is not available in the OpenHarmony NDK. All telemetry and cloud-key caching
++// is disabled on-device.
++#include "telemetry.h"
++
++namespace cactus {
++namespace telemetry {
++
++void init(const char*, const char*, const char*) {}
++void setEnabled(bool) {}
++void setCloudDisabled(bool) {}
++void setAppId(const char*) {}
++void setTelemetryEnvironment(const char*, const char*, const char*) {}
++void setCloudKey(const char*) {}
++void cacheCloudApiKey(const char*) {}
++std::string loadCachedCloudApiKey() { return ""; }
++void recordInit(const char*, bool, double, const char*) {}
++void recordCompletion(const char*, const CompletionMetrics&) {}
++void recordCompletion(const char*, bool, double, double, double, int, const char*) {}
++void recordEmbedding(const char*, bool, const char*) {}
++void recordTranscription(const char*, bool, double, double, double, int, double, const char*) {}
++void recordStreamTranscription(const char*, bool, double, double, double, int, double, double, double, int, const char*) {}
++void setStreamMode(bool) {}
++bool isStreamMode() { return false; }
++void markInference(bool) {}
++void flush() {}
++void shutdown() {}
++
++} // namespace telemetry
++} // namespace cactus
