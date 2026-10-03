@@ -35,6 +35,7 @@ static const char *TAG = "relay";
 #define TICK_MS 250
 #define REQUEST_TIMEOUT_MS 10000  // also covers the whole TCP and TLS connect: a cold start, a busy network
 #define BASE_URL_MAX 160
+#define HEALTH_LOG_MS (5 * 60 * 1000)  // heap, stack and request counts on the serial port this often
 #define NVS_NAMESPACE "relay"
 
 static portMUX_TYPE s_status_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -415,9 +416,18 @@ static void relay_task(void *arg)
     relay_report_t last_report;
     bool have_last_report = false;
     bool stack_logged = false;
+    unsigned polls_ok = 0, polls_failed = 0, reports_ok = 0, reports_failed = 0;
+    int64_t next_health_log = HEALTH_LOG_MS;
 
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(TICK_MS));
+        if (now_ms() >= next_health_log) {
+            next_health_log += HEALTH_LOG_MS;
+            ESP_LOGI(TAG, "up %u min: polls %u ok %u failed, reports %u ok %u failed, task stack %u bytes never used",
+                     (unsigned)(now_ms() / 60000), polls_ok, polls_failed, reports_ok, reports_failed,
+                     (unsigned)uxTaskGetStackHighWaterMark(NULL));
+            log_heap("now");
+        }
         net_status_t net;
         net_get_status(&net);
         if (net.state != NET_CONNECTED) {
@@ -448,8 +458,10 @@ static void relay_task(void *arg)
             relay_verdict_t verdict = relay_after_request(&schedule, RELAY_STEP_POLL, outcome, now_ms());
             act_on(&verdict, schedule.failures);
             if (outcome != RELAY_OUTCOME_OK) {
+                polls_failed++;
                 continue;
             }
+            polls_ok++;
         }
 
         // The state report has a schedule of its own: when it fails it is tried again later,
@@ -461,10 +473,12 @@ static void relay_task(void *arg)
             relay_outcome_t outcome = do_report(&report);
             relay_after_request(&schedule, RELAY_STEP_REPORT, outcome, now_ms());
             if (outcome == RELAY_OUTCOME_OK) {
+                reports_ok++;
                 last_report = report;
                 last_report_at = now;
                 have_last_report = true;
             } else {
+                reports_failed++;
                 ESP_LOGW(TAG, "state report failed (%u in a row), polling carries on", schedule.report_failures);
             }
         }
