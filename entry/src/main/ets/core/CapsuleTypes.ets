@@ -186,12 +186,13 @@ export interface GenerateResult {
    */
   needsCloud?: boolean;
   /**
-   * Why the model refused, when it did: "not-an-app" (nonsense such as "asdf") or "unsupported" (the
-   * request needs capabilities capsules do not have; see `unsupported`). Do not retry these elsewhere.
+   * Why the request was refused, when it was: "not-an-app" (nonsense such as "asdf"), "unsupported" (the
+   * request needs capabilities capsules do not have; see `unsupported`) or "unsupported-language" (not in
+   * English; checked before anything else, nothing was sent to a model). Do not retry these elsewhere.
    */
   failure?: FailureKind;
   /** With failure "unsupported": what is missing, e.g. ["contacts", "SMS"]. */
   unsupported?: string[];
 }
 
-export type FailureKind = 'not-an-app' | 'unsupported';
+export type FailureKind = 'not-an-app' | 'unsupported' | 'unsupported-language';

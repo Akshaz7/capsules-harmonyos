@@ -34,6 +34,7 @@ export { parseRequest } from './RuleParser';
 export { AI_NOT_CONFIGURED, NO_RULE_MATCH, CLOUD_OFF, ON_DEVICE_ONLY, GenerateMode, GenerateOptions, needsLogic
 } from './CapsuleGenerator';
 export { isEuProvider, cloudOrigin, ProviderName } from './ModelProvider';
+export { isNotEnglish, UNSUPPORTED_LANGUAGE, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
 export {
   DueTriggers, dueTimeTriggers, motionTriggers, nextFireTime, permissionForTrigger, runTrigger, scheduledOn,
   TriggerGuard, triggerKey, TriggerRun

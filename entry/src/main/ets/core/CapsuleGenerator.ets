@@ -17,6 +17,7 @@ import { GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
 import { parseRequest } from './RuleParser';
 import { CapsuleModel } from './CapsuleModel';
+import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
 import { capsuleFromSharedText, MAX_SHARED_TEXT, SHARED_EMPTY, SHARED_NOT_RECOGNISED, SHARED_TOO_LONG } from './SharedText';
 
 export const NO_RULE_MATCH: string = 'No built-in rule understands this request.';
@@ -75,24 +76,18 @@ const LOGIC_PATTERNS: RegExp[] = [
   /\b(send (an? )?(sms|texts?|text messages?|e-?mails?|money)|sms|text (my|them|everyone|all)|(make|place) (a )?(phone )?calls?|phone calls?|call (my|them|everyone|all)|read (my |all )?contacts|my contacts|e-?mail (me|them|my|people)|browse|websites?|web pages?|payments?|pay (for|my|bills?)|transfer money)\b/i
 ];
 
-/**
- * Requests not in English: the rules and the on-device templates only understand English, so smart mode
- * sends these to the cloud first. Detects CJK, Cyrillic, Greek, Arabic or Hebrew script, Polish letters,
- * and common Polish words.
- */
-export function isNonEnglish(request: string): boolean {
-  return /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u0400-\u04ff\u0370-\u03ff\u0600-\u06ff\u0590-\u05ff]/.test(request) ||
-    /[ąćęłńśźżĄĆĘŁŃŚŹŻ]/.test(request) ||
-    /\b(minut[aey]?|godzin[aey]?|licznik|lista|zakupy|dla|mnie|przypomnij|podziel|wynik|gra|trening)\b/i.test(request);
-}
-
 export function needsLogic(request: string): boolean {
   return LOGIC_PATTERNS.some((p: RegExp) => p.test(request));
 }
 
-/** Smart mode asks the cloud before the on-device templates: logic they cannot express, or another language. */
+/** Smart mode asks the cloud before the on-device templates: logic they cannot express. */
 export function cloudFirst(request: string): boolean {
-  return needsLogic(request) || isNonEnglish(request);
+  return needsLogic(request);
+}
+
+/** The failure for a request that is not in English (see Language.ets). */
+export function unsupportedLanguage(): GenerateResult {
+  return { ok: false, failure: 'unsupported-language', error: UNSUPPORTED_LANGUAGE_MESSAGE, details: [] };
 }
 
 /** The cloud model to use under the policy: the first EU provider, else a non-EU one only if allowed. */
@@ -119,6 +114,9 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
   modelUnavailableReason?: string, onDevice?: CapsuleSource | null, options?: GenerateOptions): Promise<GenerateResult> {
   if (request.trim().length === 0) {
     return { ok: false, error: 'The request is empty.', details: [] };
+  }
+  if (isNotEnglish(request)) {
+    return unsupportedLanguage(); // before the rules and every model: nothing is sent anywhere
   }
   const mode: GenerateMode = options?.mode ?? 'smart';
   const allowNonEu = options?.allowNonEu ?? false;
@@ -209,6 +207,9 @@ export async function generateFromSharedTextWith(text: string, cloud: CapsuleMod
   }
   if (t.length > MAX_SHARED_TEXT) {
     return { ok: false, error: SHARED_TOO_LONG, details: [] };
+  }
+  if (isNotEnglish(t)) {
+    return unsupportedLanguage();
   }
   const local = capsuleFromSharedText(t);
   if (local.ok && local.capsule !== undefined) {

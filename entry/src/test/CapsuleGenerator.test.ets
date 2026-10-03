@@ -2,12 +2,11 @@ import { describe, it, expect } from '@ohos/hypium';
 import { createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig } from '../main/ets/core/ModelProvider';
 import { CapsuleModel, PLAN_PROMPT, SYSTEM_PROMPT } from '../main/ets/core/CapsuleModel';
 import {
-  CapsuleSource, CLOUD_OFF, cloudFirst, generateCapsuleWith, generateFromSharedTextWith, isNonEnglish, needsLogic,
+  CapsuleSource, CLOUD_OFF, generateCapsuleWith, generateFromSharedTextWith, needsLogic,
   ON_DEVICE_ONLY, pickCloud
 } from '../main/ets/core/CapsuleGenerator';
 import { SHARED_TOO_LONG } from '../main/ets/core/SharedText';
-import { parseRequest } from '../main/ets/core/RuleParser';
-import { validateCapsule } from '../main/ets/core/CapsuleValidator';
+import { isNotEnglish, UNSUPPORTED_LANGUAGE } from '../main/ets/core/Language';
 import { Capsule, GenerateResult } from '../main/ets/core/CapsuleTypes';
 
 const GOOD: string =
@@ -408,52 +407,65 @@ export default function capsuleGeneratorTest() {
       });
     });
 
-    it('the plan prompt lists only those runtime actions and allows any language', 0, () => {
+    it('the plan prompt lists only those runtime actions; no prompt mentions other languages', 0, () => {
       expect(PLAN_PROMPT).assertContain('The only things capsules cannot do are these runtime actions: send SMS, make phone');
-      expect(PLAN_PROMPT).assertContain('never treat a request in another language as gibberish');
       expect(PLAN_PROMPT.includes('the camera or microphone')).assertFalse();
-      expect(SYSTEM_PROMPT).assertContain('Requests may be in any language (for example Chinese or Polish)');
+      expect(PLAN_PROMPT.includes('any language')).assertFalse();
+      expect(SYSTEM_PROMPT.includes('any language')).assertFalse();
     });
   });
 
-  describe('Non-English requests (T4-6)', () => {
+  describe('English-only gate (T4-11)', () => {
     const CHINESE = '根据照片做菜，帮我设置计时器';
-    const POLISH = 'makaron 9 minut, sos 15 minut';
+    const POLISH = 'licznik pompek na dziś, żółw';
 
-    it('detects Chinese and Polish, not English', 0, () => {
-      expect(isNonEnglish(CHINESE)).assertTrue();
-      expect(isNonEnglish(POLISH)).assertTrue();
-      expect(isNonEnglish('przypomnij mi o lekach')).assertTrue();
-      expect(isNonEnglish('Zażółć gęślą jaźń')).assertTrue();
-      expect(isNonEnglish('licznik pompek na dziś, żółw')).assertTrue();
-      expect(parseRequest('licznik pompek na dziś, żółw')).assertNull();
-      expect(cloudFirst('licznik pompek na dziś, żółw')).assertTrue();
-      expect(isNonEnglish('pasta 9 min, sauce 15 min')).assertFalse();
-      expect(isNonEnglish('count my squats')).assertFalse();
-      expect(cloudFirst(CHINESE)).assertTrue();
+    it('catches Chinese, Polish and other scripts', 0, () => {
+      [CHINESE, POLISH, 'makaron 9 minut, sos 15 minut', 'minutnik 10 minut', 'przypomnij mi o lekach',
+        'Zażółć gęślą jaźń', '在菜店买东西单。let me add items', 'тренировка 20 минут', 'تذكير بشرب الماء',
+        '타이머 10분'].forEach((r: string) => {
+        expect(isNotEnglish(r) ? r : `missed: ${r}`).assertEqual(r);
+      });
     });
 
-    it('goes to the EU cloud first, and asks for the cloud when it is not allowed yet', 0, async (done: Function) => {
-      const t = new CountingTransport();
-      const local = onDeviceReturning(LOCAL);
-      const r = await generateCapsuleWith(CHINESE, [modelWith(t)], '', local);
-      expect(r.origin).assertEqual('cloud-eu:mistral');
-      expect(local.calls).assertEqual(0);
-      expect(t.bodies[0]).assertContain(CHINESE);
-      const blocked = await generateCapsuleWith(POLISH, [modelWith(t)], '', local, { allowCloud: false });
-      expect(blocked.needsCloud).assertTrue();
-      const deviceOnly = await generateCapsuleWith(POLISH, [modelWith(t)], '', local, { mode: 'on-device-only' });
-      expect(deviceOnly.origin).assertEqual('on-device');
+    it('lets English through, with accents in names and emoji', 0, () => {
+      ['timer 10 minutes', 'café menu', "Zoë's chores", '💧 water 8 glasses 🥤', 'pomodoro', 'tennis game tracker',
+        'pasta 9 min, sauce 15 min', 'count my squats', 'naïve crème brûlée timer 12 min', '🍝🍝🍝', '22 + 7'
+      ].forEach((r: string) => {
+        expect(isNotEnglish(r) ? `flagged: ${r}` : r).assertEqual(r);
+      });
+    });
+
+    it('Chinese and Polish return the code and exact message, and no provider is called', 0, async (done: Function) => {
+      for (const text of [CHINESE, POLISH]) {
+        const t = new CountingTransport();
+        const local = onDeviceReturning(LOCAL);
+        const r = await generateCapsuleWith(text, [modelWith(t)], '', local, { allowNonEu: true });
+        expect(r.ok).assertFalse();
+        expect(r.failure).assertEqual(UNSUPPORTED_LANGUAGE);
+        expect(r.error).assertEqual("Harmoniser understands English for now. Try: 'timer 10 minutes'.");
+        expect(r.capsule === undefined).assertTrue();
+        expect(t.calls).assertEqual(0);
+        expect(local.calls).assertEqual(0);
+        const cloudOnly = await generateCapsuleWith(text, [modelWith(t)], '', local, { cloudOnly: true });
+        expect(cloudOnly.failure).assertEqual(UNSUPPORTED_LANGUAGE);
+        const shared = await generateFromSharedTextWith(text, [modelWith(t)]);
+        expect(shared.failure).assertEqual(UNSUPPORTED_LANGUAGE);
+        expect(t.calls).assertEqual(0);
+      }
       done();
     });
 
-    it('the rules leave them alone and the validator accepts non-English text', 0, () => {
-      expect(parseRequest(CHINESE)).assertNull();
-      expect(parseRequest(POLISH)).assertNull();
-      const r = validateCapsule('{"schemaVersion":0,"id":"pasta","name":"做菜计时器","permissions":["reminders"],' +
-        '"ui":[{"type":"timer","id":"makaron","label":"Makaron","minutes":9},' +
-        '{"type":"checklist","id":"kroki","items":["Zagotuj wodę","放盐"]}]}');
-      expect(r.errors.join('\n')).assertEqual('');
+    it('English requests are still built', 0, async (done: Function) => {
+      const t = new CountingTransport();
+      for (const text of ['timer 10 minutes', '💧 water 8 glasses 🥤']) {
+        const r = await generateCapsuleWith(text, [modelWith(t)], '', onDeviceReturning(LOCAL));
+        expect(r.ok ? text : `${text}: ${r.error}`).assertEqual(text);
+      }
+      for (const text of ['café menu', "Zoë's chores"]) {
+        const r = await generateCapsuleWith(text, [modelWith(t)], '', onDeviceReturning(LOCAL));
+        expect(r.failure === undefined ? text : `${text}: ${r.failure}`).assertEqual(text);
+      }
+      done();
     });
   });
 
