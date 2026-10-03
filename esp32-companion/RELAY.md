@@ -6,14 +6,15 @@ itself, shows a QR code and a pairing phrase, and then polls for capsules and re
 state. Its local HTTP API (`README.md`) keeps working next to this.
 
 This is a proposal written from the firmware side. `mock_relay.py` implements all of it in
-memory; `test_relay.sh <base url>` checks any implementation from outside, the fake today
-and the real routes later.
+memory; `test_relay.sh <base url>` checks any implementation from outside: the fake, and since
+2026-10-03 the live relay (106 of 106 against production, see the README).
 
 - Everything is JSON, UTF-8. Errors are `{"error":{"code":"…","message":"…"}}`, the
   envelope of the rest of the backend, on every route. The app can switch on `code`; the
   board only looks at the status and never reads an error body.
 - The base URL is build-time configuration on the board (`RELAY_URL` in `main/secrets.h`).
-  The planned one is `https://harmoniser-web.vercel.app` (not deployed when this was written).
+  It is `https://harmoniser.keanuc.net` (also `https://harmoniser-web.vercel.app`), live since
+  2026-10-03, about 21:50. Examples below that show the `vercel.app` host were written before that.
   `https://` is verified against ESP-IDF's certificate bundle; `http://` is for the fake.
 - The board does not follow redirects, so its token never goes to another host.
 
@@ -309,11 +310,12 @@ The board draws `pair_url` as a QR code, with the phrase under it as the fallbac
   until they next get a 401, and then register under the new `hw` as a new device.
 - **Erased NVS orphans the old record.** See `register`: the board comes back as a new
   device and the old one lingers on its owner's list.
-- **HTTPS is not soak-tested.** On the board, TLS was checked as a handshake against the
+- **HTTPS is soak-tested for 30 minutes only.** After the relay went live the board polled it over
+  HTTPS for 30 minutes with no gap, reboot or failed request (see the README); nothing longer has
+  been run. Before that, TLS was checked as a handshake against the
   certificate bundle (`vercel.com`, `harmoniser-web.vercel.app`, `example.com`; a
   self-signed certificate was refused), with about 50 KB of internal RAM free while the
-  connection was open. All polling so far was over plain HTTP to the fake. Polling over a
-  kept-alive TLS connection for hours has not been run.
+  connection was open. Polling over a kept-alive TLS connection for hours has not been run.
 - **A relay that only answers 404 strands the board.** The board re-registers on a 401
   alone. If a device record is ever deleted and the route answers 404 for it, that board
   keeps trying its old token every 30 seconds until it is reflashed or its NVS is erased.
