@@ -636,19 +636,20 @@ struct Index {
   @Builder
   inputCard() {
     Column({ space: 12 }) {
+      // No inner padding here: the card's 16vp is the only inset, so the text lines up with the
+      // Create button. Even a few vp of TextArea padding clipped the first glyph ("k", "W", "M").
       TextArea({ placeholder: PLACEHOLDERS[this.placeholderIndex], text: this.request })
         .height(96)
+        .width('100%')
         .fontSize($r('sys.float.Body_L'))
         .backgroundColor(Color.Transparent)
-        .padding({ left: 4, right: 4, top: 0, bottom: 0 })
+        .borderRadius(0)
+        .padding(0)
         .onChange((value: string) => {
           this.request = value;
         })
       Row() {
-        Text(this.statusLine())
-          .fontSize($r('sys.float.Caption_M'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .layoutWeight(1)
+        Blank()
         Button() {
           Row({ space: 6 }) {
             if (this.busy) {
@@ -678,6 +679,18 @@ struct Index {
     .padding(16)
     .borderRadius(24)
     .backgroundColor($r('sys.color.comp_background_primary'))
+  }
+
+  /** AI status on its own line under the input card: one line, ellipsis when long. */
+  @Builder
+  statusRow() {
+    Text(this.statusLine())
+      .fontSize($r('sys.float.Caption_M'))
+      .fontColor($r('sys.color.font_tertiary'))
+      .maxLines(1)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .width('100%')
+      .padding({ left: 4, right: 4 })
   }
 
   /** Calm, final answer for requests capsules can never do; no suggestions to retry. */
@@ -816,6 +829,12 @@ struct Index {
             .fontColor($r('sys.color.font_secondary'))
             .layoutWeight(1)
           Row({ space: 8 }) {
+            // Import is a secondary action: a small icon next to Settings and Log, not a big button.
+            SharingBar({
+              showShare: false,
+              compact: true,
+              onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+            })
             this.iconButton($r('sys.symbol.gearshape'), () => this.nav.pushPath({ name: SETTINGS_PAGE }))
             this.iconButton($r('sys.symbol.doc_text'), () => this.nav.pushPath({ name: LOG_PAGE }))
           }
@@ -827,6 +846,7 @@ struct Index {
           .fontColor($r('sys.color.font_primary'))
           .width('100%')
         this.inputCard()
+        this.statusRow()
         Text('Tiny apps, made by asking.')
           .fontSize($r('sys.float.Body_M'))
           .fontColor($r('sys.color.font_secondary'))
@@ -843,10 +863,6 @@ struct Index {
             .width('100%')
         }
         // Import from another phone. Nothing is saved until the sheet's Run.
-        SharingBar({
-          showShare: false,
-          onImported: (prepared: PreparedImport) => this.handleImported(prepared)
-        })
         Row() {
           Text('Your capsules')
             .fontSize($r('sys.float.Subtitle_L'))
