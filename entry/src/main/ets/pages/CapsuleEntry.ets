@@ -6,13 +6,39 @@ import { CapsuleRuntime } from '../renderer/CapsuleRuntime';
 export class CapsuleEntry {
   readonly capsule: Capsule;
   readonly route: CapsuleRoute;
+  readonly origin: string;
   @Trace runtime: CapsuleRuntime;
 
-  constructor(capsule: Capsule, route: CapsuleRoute, runtime: CapsuleRuntime) {
+  constructor(capsule: Capsule, route: CapsuleRoute, runtime: CapsuleRuntime, origin: string) {
     this.capsule = capsule;
     this.route = route;
     this.runtime = runtime;
+    this.origin = origin;
   }
+}
+
+/** Badge text for a stored GenerateResult.origin; '' for capsules saved before origins were kept. */
+export function originBadge(origin: string): string {
+  switch (origin) {
+    case 'rules':
+      return 'Made by rules';
+    case 'on-device':
+      return 'Made on-device';
+    case 'cloud':
+      return 'Made in the cloud';
+    default:
+      return '';
+  }
+}
+
+export function originIcon(origin: string): Resource {
+  if (origin === 'rules') {
+    return $r('sys.symbol.list_bullet');
+  }
+  if (origin === 'cloud') {
+    return $r('sys.symbol.cloud');
+  }
+  return $r('sys.symbol.wand_and_stars');
 }
 
 /** Icon for a capsule, picked from its name first, then its main component type. */

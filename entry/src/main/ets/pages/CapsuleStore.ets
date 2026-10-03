@@ -41,7 +41,29 @@ export class CapsuleStore {
     return next;
   }
 
+  /** How the capsule was made ('rules', 'on-device' or 'cloud'); '' if unknown. */
+  origin(capsuleId: string): string {
+    try {
+      return this.prefs.getSync(`origin:${capsuleId}`, '') as string;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  setOrigin(capsuleId: string, origin: string): void {
+    try {
+      this.prefs.putSync(`origin:${capsuleId}`, origin);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'setOrigin failed: %{public}s', (e as BusinessError).message);
+    }
+  }
+
   remove(capsuleId: string): Capsule[] {
+    try {
+      this.prefs.deleteSync(`origin:${capsuleId}`);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'delete origin failed: %{public}s', (e as BusinessError).message);
+    }
     const next = this.all().filter((c: Capsule) => c.id !== capsuleId);
     this.write(next);
     return next;

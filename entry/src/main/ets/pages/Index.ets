@@ -6,6 +6,7 @@ import {
   Permission,
   generateCapsule,
   getModelStatus,
+  getOnDeviceStatus,
   routeCapsule
 } from '../core';
 import { NotificationAdapter } from '../adapters/NotificationAdapter';
@@ -19,12 +20,15 @@ import {
   TimerState
 } from '../renderer/CapsuleRuntime';
 import { CapsuleView } from '../renderer/CapsuleView';
-import { CapsuleEntry, capsuleIcon, routeHeadline } from './CapsuleEntry';
+import { AppSettings } from './AppSettings';
+import { CapsuleEntry, capsuleIcon, originBadge, originIcon, routeHeadline } from './CapsuleEntry';
 import { CapsuleStore } from './CapsuleStore';
 import { ConsentView } from './ConsentView';
 import { LogView } from './LogView';
+import { SettingsView } from './SettingsView';
 
 const LOG_PAGE = 'log';
+const SETTINGS_PAGE = 'settings';
 const OPEN_CURVE: ICurve = curves.springMotion(0.45, 0.9);
 
 interface ExampleChip {
@@ -34,7 +38,7 @@ interface ExampleChip {
 }
 
 const EXAMPLES: ExampleChip[] = [
-  { label: 'Timers', icon: $r('sys.symbol.timer'), request: 'pasta 9 min, sauce 15 min, bread 6 min' },
+  { label: 'Timers', icon: $r('sys.symbol.timer'), request: '3 timers pasta 9 sauce 15 bread 6' },
   { label: 'Squats', icon: $r('sys.symbol.dumbbell'), request: 'count my squats' },
   { label: 'Water', icon: $r('sys.symbol.drop'), request: 'water 8 glasses' },
   { label: 'Checklist', icon: $r('sys.symbol.checkmark_circle'),
@@ -93,11 +97,14 @@ struct Index {
   @Local openId: string = '';
   @Local pending: Capsule | undefined = undefined;
   @Local pendingOrigin: string = '';
+  private pendingOriginRaw: string = '';
+  @Local settings: AppSettings = new AppSettings();
   @Local showSheet: boolean = false;
   @Local request: string = '';
   @Local busy: boolean = false;
   @Local message: string = '';
   @Local modelStatus: string = getModelStatus().message;
+  @Local onDeviceStatus: string = getOnDeviceStatus().message;
   @Local nav: NavPathStack = new NavPathStack();
 
   aboutToAppear(): void {
@@ -106,6 +113,7 @@ struct Index {
     this.timers = new TimerAdapter(ctx);
     this.notifications = new NotificationAdapter(ctx);
     this.store = new CapsuleStore(ctx);
+    this.settings.load(ctx);
     this.watchModelStatus();
     // Saved capsules were approved before; ones whose consent was lost get dropped.
     const gate = this.gate;
@@ -119,14 +127,16 @@ struct Index {
     clearInterval(this.statusPoll);
   }
 
-  // initCapsuleModel runs async in EntryAbility and may finish after the first render.
+  // Core initialises the cloud config and the on-device model async; they may finish after the first render.
   private watchModelStatus(): void {
     let tries = 0;
     this.statusPoll = setInterval(() => {
       const status = getModelStatus();
+      const onDevice = getOnDeviceStatus();
       this.modelStatus = status.message;
+      this.onDeviceStatus = onDevice.message;
       tries++;
-      if (status.configured || tries >= 10) {
+      if ((status.configured && onDevice.ready) || tries >= 20) {
         clearInterval(this.statusPoll);
       }
     }, 500);
@@ -146,7 +156,7 @@ struct Index {
         rt.alert = new NotifyOnFinish(this.notifications, capsule.name);
       }
     }
-    return new CapsuleEntry(capsule, routeCapsule(capsule), rt);
+    return new CapsuleEntry(capsule, routeCapsule(capsule), rt, this.store?.origin(capsule.id) ?? '');
   }
 
   /** Keeps ids unique across saved capsules so grants and calendar events never collide. */
@@ -174,14 +184,16 @@ struct Index {
     }
     this.busy = true;
     this.message = '';
-    const result: GenerateResult = await generateCapsule(text);
+    // Rules, then the on-device model, then the cloud model only if the user allowed it.
+    const result: GenerateResult = await generateCapsule(text, { allowCloud: this.settings.allowCloud });
     this.busy = false;
     if (!result.ok || !result.capsule) {
       this.message = result.error ?? 'Could not create a capsule.';
       return;
     }
     this.pending = this.uniqueCapsule(result.capsule);
-    this.pendingOrigin = result.origin === 'cloud' ? 'Made by the cloud AI fallback' : 'Made on-device';
+    this.pendingOriginRaw = result.origin ?? '';
+    this.pendingOrigin = originBadge(this.pendingOriginRaw);
     this.showSheet = true;
   }
 
@@ -191,6 +203,7 @@ struct Index {
       return;
     }
     this.gate.decide(capsule, allowed);
+    this.store?.setOrigin(capsule.id, this.pendingOriginRaw);
     this.store?.add(capsule);
     const entry = this.makeEntry(capsule);
     this.entries = [entry].concat(this.entries);
@@ -236,10 +249,35 @@ struct Index {
     this.message = note;
   }
 
+  /** Home status: on-device model state from core, then the cloud fallback state. */
+  private statusLine(): string {
+    return `${this.onDeviceStatus} · ${this.settings.allowCloud ? this.modelStatus : 'Cloud AI off'}`;
+  }
+
+  @Builder
+  originPill(origin: string) {
+    if (originBadge(origin).length > 0) {
+      Row({ space: 4 }) {
+        SymbolGlyph(originIcon(origin))
+          .fontSize(12)
+          .fontColor([$r('sys.color.icon_secondary')])
+        Text(originBadge(origin))
+          .fontSize($r('sys.float.Caption_S'))
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      .height(22)
+      .padding({ left: 8, right: 8 })
+      .borderRadius(11)
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+    }
+  }
+
   @Builder
   pageMap(name: string) {
     if (name === LOG_PAGE && this.gate) {
       LogView({ log: this.gate.log })
+    } else if (name === SETTINGS_PAGE) {
+      SettingsView({ settings: this.settings, cloudStatus: this.modelStatus })
     }
   }
 
@@ -283,7 +321,7 @@ struct Index {
           this.request = value;
         })
       Row() {
-        Text(this.modelStatus)
+        Text(this.statusLine())
           .fontSize($r('sys.float.Caption_M'))
           .fontColor($r('sys.color.font_tertiary'))
           .layoutWeight(1)
@@ -361,12 +399,13 @@ struct Index {
         .fontColor($r('sys.color.font_primary'))
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+      this.originPill(entry.origin)
       Text(entry.runtime.summary())
         .fontSize($r('sys.float.Caption_L'))
         .fontColor($r('sys.color.font_secondary'))
-        .maxLines(2)
+        .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
+      Blank()
       if (entry.route.widget) {
         Row({ space: 4 }) {
           SymbolGlyph($r('sys.symbol.square_grid_2x2'))
@@ -384,7 +423,7 @@ struct Index {
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .height(190)
+    .height(236)
     .padding(16)
     .borderRadius(24)
     .backgroundColor($r('sys.color.comp_background_primary'))
@@ -402,7 +441,10 @@ struct Index {
             .fontWeight(FontWeight.Medium)
             .fontColor($r('sys.color.font_secondary'))
             .layoutWeight(1)
-          this.iconButton($r('sys.symbol.doc_text'), () => this.nav.pushPath({ name: LOG_PAGE }))
+          Row({ space: 8 }) {
+            this.iconButton($r('sys.symbol.gearshape'), () => this.nav.pushPath({ name: SETTINGS_PAGE }))
+            this.iconButton($r('sys.symbol.doc_text'), () => this.nav.pushPath({ name: LOG_PAGE }))
+          }
         }
         .width('100%')
         Text('What do you need?')
@@ -528,6 +570,7 @@ struct Index {
 
       Scroll() {
         Column({ space: 16 }) {
+          this.originPill(entry.origin)
           CapsuleView({ runtime: entry.runtime })
           this.routeCard(entry)
           Button() {
