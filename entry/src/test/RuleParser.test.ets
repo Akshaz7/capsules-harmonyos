@@ -1,8 +1,10 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { parseRequest } from '../main/ets/core/RuleParser';
+import { initialState, renderTemplate, setInput, applyActions, StateValues } from '../main/ets/core/CapsuleProgram';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import {
-  ButtonComponent, Capsule, CapsuleComponent, ChecklistComponent, CounterComponent, TextComponent, TimerComponent
+  ButtonComponent, Capsule, CapsuleComponent, ChecklistComponent, CounterComponent, DisplayComponent, InputComponent,
+  TextComponent, TimerComponent
 } from '../main/ets/core/CapsuleTypes';
 
 function parseValid(request: string): Capsule {
@@ -95,20 +97,68 @@ export default function ruleParserTest() {
       expect(parseValid('vitamins at 9:30am, 21:00').ui.length).assertEqual(3);
     });
 
-    it('tracks a water goal', 0, () => {
+    it('tracks a water goal live: "{count} / 8 · {8 - count} to go"', 0, () => {
       const c = parseValid('water 8 glasses');
-      expect((c.ui[0] as TextComponent).text).assertEqual('Goal: 8 glasses');
-      expect((c.ui[2] as ButtonComponent).label).assertEqual('+1 glass');
-      const d = parseValid('drink 8 glasses of water');
-      expect((d.ui[1] as CounterComponent).id).assertEqual('water');
+      expect(c.schemaVersion).assertEqual(1);
+      expect(c.name).assertEqual('Water');
+      const progress = (c.ui[0] as DisplayComponent).text;
+      let s: StateValues = initialState(c);
+      expect(renderTemplate(c, s, progress)).assertEqual('0 / 8 · 8 to go');
+      const plus = c.ui[2] as ButtonComponent;
+      expect(plus.label).assertEqual('+1 glass');
+      for (let i = 0; i < 3; i++) {
+        s = applyActions(c, s, plus).state;
+      }
+      expect(renderTemplate(c, s, progress)).assertEqual('3 / 8 · 5 to go');
+      for (let i = 0; i < 6; i++) {
+        s = applyActions(c, s, plus).state;
+      }
+      expect(renderTemplate(c, s, progress)).assertEqual('9 / 8 · 0 to go');
+      s = applyActions(c, s, c.ui[3] as ButtonComponent).state;
+      expect(renderTemplate(c, s, progress)).assertEqual('0 / 8 · 8 to go');
+      expect(parseValid('drink 8 glasses of water').id).assertEqual('goal-water');
+      expect(parseValid('read 20 pages').name).assertEqual('Read');
+      expect(parseValid('pushups goal 50').id).assertEqual('goal-pushups');
     });
 
-    it('splits a bill', 0, () => {
+    it('only makes goals for progress units or an explicit goal', 0, () => {
+      expect(parseRequest('cars 3 colours')).assertNull();
+      expect(parseValid('cars target 3 colours').id).assertEqual('goal-cars');
+    });
+
+    it('leaves scoring, games, quizzes, converting, calculating and streaks to the models', 0, () => {
+      const skipped = ['darts score for 3 players', 'quiz me on 3 capitals', 'tennis game 3 sets',
+        'convert 5 km', 'calculate 84 between 4', 'reading streak 30 days', 'count my score',
+        'track my weight 80 kg and tell me', 'board game 4 players'];
+      skipped.forEach((r: string) => {
+        expect(parseRequest(r) === null ? r : `matched: ${r}`).assertEqual(r);
+      });
+    });
+
+    it('splits a bill live, prefilled with the request numbers', 0, () => {
       const c = parseValid('split 84 between 4');
-      expect((c.ui[2] as TextComponent).text).assertEqual('Each pays: 21');
-      const d = parseValid('Split the bill 100 among 3 people.');
-      expect((d.ui[2] as TextComponent).text).assertEqual('Each pays: 33.33');
+      expect(c.schemaVersion).assertEqual(1);
+      expect((c.ui[0] as InputComponent).bind).assertEqual('total');
+      expect((c.ui[1] as InputComponent).bind).assertEqual('people');
+      const each = (c.ui[2] as DisplayComponent).text;
+      let s: StateValues = initialState(c);
+      expect(renderTemplate(c, s, each)).assertEqual('Each pays: 21');
+      s = setInput(c, s, 'people', '3').state;
+      expect(renderTemplate(c, s, each)).assertEqual('Each pays: 28');
+      s = setInput(c, s, 'total', '100').state;
+      expect(renderTemplate(c, s, each)).assertEqual('Each pays: 33.33');
+      const d = parseValid('Split the bill 120.50 among 3 people.');
+      expect(renderTemplate(d, initialState(d), (d.ui[2] as DisplayComponent).text)).assertEqual('Each pays: 40.17');
       expect(parseRequest('split 84 between 0')).assertNull();
+    });
+
+    it('strips filler from a single timer and names it after the timer', 0, () => {
+      const c = parseValid('laundry done in 55 minutes');
+      expect(timerSummary(c)).assertEqual('Laundry 55');
+      expect(c.name).assertEqual('Laundry');
+      expect(parseValid('timer boiled eggs 7 min').name).assertEqual('Boiled eggs');
+      expect(parseValid('tea ready in 4 min').name).assertEqual('Tea');
+      expect(parseValid('pasta 9 min, sauce 15 min').name).assertEqual('Pasta, Sauce timers');
     });
 
     it('makes a checklist from a list of items', 0, () => {

@@ -6,11 +6,14 @@
  * - timers:   "3 timers pasta 9 sauce 15 bread 6", "timer eggs 7", "pasta 9 min, sauce 15 min, bread 6 min"
  * - counter:  "count my squats", "count coffees", "pushup counter"
  * - schedule: "medication 8am and 8pm", "vitamins at 9:30am, 21:00"
- * - goal:     "water 8 glasses", "drink 8 glasses of water"
- * - split:    "split 84 between 4", "split the bill 120.50 among 3 people"
+ * - goal:     "water 8 glasses", "drink 8 glasses of water", "pushups goal 50" (schema v1: live progress)
+ * - split:    "split 84 between 4", "split the bill 120.50 among 3 people" (schema v1: live bill split)
  * - checklist: "checklist for leaving home: keys, wallet, charger", "packing list: socks, charger"
  *
  * Note: schema v0 has no time-of-day reminder, so schedules become a checklist of doses.
+ *
+ * Requests that mention scoring, games, players, quizzes, converting, calculating, streaks or
+ * "track ... and tell me" never match a rule: they need logic the templates cannot express.
  */
 import {
   ButtonComponent,
@@ -18,11 +21,34 @@ import {
   CapsuleComponent,
   ChecklistComponent,
   CounterComponent,
+  DisplayComponent,
+  InputComponent,
   Permission,
   SCHEMA_VERSION,
+  StateVar,
+  StepObject,
   TextComponent,
-  TimerComponent
+  TimerComponent,
+  WhenComponent
 } from './CapsuleTypes';
+
+/** Requests with these words need logic (scores, games, quizzes, ...) and are left to the models. */
+const SKIP_RULES: RegExp[] = [
+  /\b(scor\w*|games?|players?|quiz\w*|convert\w*|calculat\w*|streaks?)\b/,
+  /\btrack\w*\b.*\btell me\b/
+];
+
+/** Units a goal counter makes sense for; other "thing N unit" requests need "goal" or "target". */
+const GOAL_UNITS: string[] = [
+  'glass', 'glasses', 'cup', 'cups', 'page', 'pages', 'step', 'steps', 'km', 'minute', 'minutes', 'min', 'mins',
+  'rep', 'reps'
+];
+
+/** Words around a timer's name that are not part of it: "laundry done in 55 minutes" -> "laundry". */
+const TIMER_FILLER: string[] = [
+  'done', 'in', 'ready', 'is', 'be', 'will', 'for', 'after', 'the', 'my', 'a', 'an', 'set', 'start', 'remind',
+  'me', 'when', 'until', 'at', 'to', 'of', 'please'
+];
 
 const MOTION_WORDS: string[] = [
   'squat', 'pushup', 'push-up', 'push up', 'situp', 'sit-up', 'sit up', 'jumping jack', 'jump', 'lunge', 'step', 'rep'
@@ -78,6 +104,31 @@ function capsule(id: string, name: string, permissions: Permission[], ui: Capsul
   return { schemaVersion: SCHEMA_VERSION, id: id, name: name, permissions: permissions, ui: ui };
 }
 
+function capsuleV1(id: string, name: string, state: Record<string, StateVar>, computed: Record<string, string> | null,
+  ui: CapsuleComponent[]): Capsule {
+  const c: Capsule = { schemaVersion: 1, id: id, name: name, permissions: [], ui: ui, state: state };
+  if (computed !== null) {
+    c.computed = computed;
+  }
+  return c;
+}
+
+function numberVar(initial: number): StateVar {
+  return { type: 'number', initial: initial };
+}
+
+function display(t: string): DisplayComponent {
+  return { type: 'display', text: t };
+}
+
+function numberInput(bind: string, label: string): InputComponent {
+  return { type: 'input', bind: bind, kind: 'number', label: label };
+}
+
+function doButton(label: string, steps: StepObject[]): ButtonComponent {
+  return { type: 'button', label: label, action: '', do: steps };
+}
+
 function text(t: string): TextComponent {
   return { type: 'text', text: t };
 }
@@ -105,10 +156,18 @@ function timerSpecs(text: string): TimerSpec[] | null {
   for (const token of tokens) {
     const num = token.match(/^(\d+(?:\.\d+)?)(m|min|mins|minutes?)?$/);
     if (num !== null) {
-      if (words.length > 0 && words[words.length - 1] === 'for') {
-        words.pop(); // "pasta for 9 min"
+      // Strip filler around the name, unless nothing would be left ("4 timers a 1 b 2").
+      let first = 0;
+      let last = words.length;
+      while (first < last && TIMER_FILLER.includes(words[first])) {
+        first++;
       }
-      if (words.length === 0) {
+      while (last > first && TIMER_FILLER.includes(words[last - 1])) {
+        last--;
+      }
+      if (first < last) {
+        words = words.slice(first, last);
+      } else if (words.length === 0) {
         return null;
       }
       const spec = new TimerSpec();
@@ -159,7 +218,8 @@ function parseTimers(req: string): Capsule | null {
     ui.push(button('Start', `startTimer:${(ui[0] as TimerComponent).id}`));
   }
   const labels = specs.map((s: TimerSpec) => s.label);
-  return capsule(`timers-${slug(labels.join(' '))}`, `${labels.join(', ')} timers`, ['reminders'], ui);
+  const name = labels.length === 1 ? labels[0] : `${labels.join(', ')} timers`;
+  return capsule(`timers-${slug(labels.join(' '))}`, name, ['reminders'], ui);
 }
 
 function counterCapsule(thing: string): Capsule {
@@ -205,26 +265,43 @@ function parseSchedule(req: string): Capsule | null {
   return capsule(`schedule-${slug(what)}`, what, [], ui);
 }
 
-function goalCapsule(thing: string, goal: number, unit: string): Capsule {
-  const id = slug(thing);
-  const label = `${capitalize(thing)} (${unit})`;
-  const counter: CounterComponent = { type: 'counter', id: id, label: label, source: 'manual' };
+/** A live goal: "{count} / 8 · {8 - count} to go", +1 and Reset, and a note when it is reached. */
+function goalCapsule(thing: string, goal: number, unit: string): Capsule | null {
+  if (goal <= 0) {
+    return null;
+  }
+  const state: Record<string, StateVar> = {};
+  state['count'] = numberVar(0);
+  const reached: WhenComponent = { type: 'when', if: `count >= ${goal}`, show: [text('Goal reached!')] };
+  const step: StepObject = { set: 'count', to: 'count + 1' };
+  const reset: StepObject = { reset: 'count' };
   const ui: CapsuleComponent[] = [
-    text(`Goal: ${goal} ${unit}`), counter, button(`+1 ${singular(unit)}`, `increment:${id}`), button('Reset', `reset:${id}`)
+    display(`{count} / ${goal} · {max(${goal} - count, 0)} to go`),
+    reached,
+    doButton(`+1 ${singular(unit)}`, [step]),
+    doButton('Reset', [reset])
   ];
-  return capsule(`goal-${id}`, capitalize(thing), [], ui);
+  return capsuleV1(`goal-${slug(thing)}`, capitalize(thing), state, null, ui);
 }
 
 function parseGoal(req: string): Capsule | null {
+  const explicit = /\b(goal|target)\b/.test(req);
+  const plain = req.replace(/\b(goal|target)\b(\s+of)?/g, ' ').replace(/\s+/g, ' ').trim();
+  const fits = (unit: string): boolean => explicit || GOAL_UNITS.includes(unit);
   // "drink 8 glasses of water"
-  let m = req.match(/^(?:drink|eat|do|read|take)?\s*(\d+)\s+([a-z]+)\s+of\s+([a-z][a-z ]*)$/);
-  if (m !== null) {
+  let m = plain.match(/^(?:drink|eat|do|read|take|walk|run)?\s*(\d+)\s+([a-z]+)\s+of\s+([a-z][a-z ]*)$/);
+  if (m !== null && fits(m[2])) {
     return goalCapsule(m[3].trim(), parseInt(m[1], 10), m[2]);
   }
-  // "water 8 glasses"
-  m = req.match(/^([a-z][a-z ]*?)\s+(\d+)\s+([a-z]+)$/);
-  if (m !== null && !/\b(timers?|split|count)\b/.test(m[1])) {
+  // "water 8 glasses", "pushups goal 50 reps"
+  m = plain.match(/^([a-z][a-z ]*?)\s+(\d+)\s+([a-z]+)$/);
+  if (m !== null && fits(m[3]) && !/\b(timers?|split|count)\b/.test(m[1])) {
     return goalCapsule(m[1].trim(), parseInt(m[2], 10), m[3]);
+  }
+  // "pushups goal 50"
+  m = explicit ? plain.match(/^([a-z][a-z ]*?)\s+(\d+)$/) : null;
+  if (m !== null) {
+    return goalCapsule(m[1].trim(), parseInt(m[2], 10), 'times');
   }
   return null;
 }
@@ -240,10 +317,17 @@ function parseSplit(req: string): Capsule | null {
   if (people <= 0) {
     return null;
   }
+  // Live: both inputs start with the request's numbers and "each pays" follows any change.
+  const state: Record<string, StateVar> = {};
+  state['total'] = numberVar(total);
+  state['people'] = numberVar(people);
+  const computed: Record<string, string> = {};
+  computed['each'] = 'if(people > 0, round(total / people, 2), 0)';
   const ui: CapsuleComponent[] = [
-    text(`Total: ${formatAmount(total)}`), text(`People: ${people}`), text(`Each pays: ${formatAmount(total / people)}`)
+    numberInput('total', 'Total'), numberInput('people', 'People'), display('Each pays: {each}')
   ];
-  return capsule(`split-${slug(m[1])}-${people}`, `Split ${formatAmount(total)} between ${people}`, [], ui);
+  return capsuleV1(`split-${slug(m[1])}-${people}`, `Split ${formatAmount(total)} between ${people}`, state, computed,
+    ui);
 }
 
 const MAX_CHECKLIST_ITEMS: number = 20;
@@ -276,7 +360,7 @@ function parseChecklist(req: string): Capsule | null {
 /** Returns a capsule for a recognised request, or null. Output is meant to pass the validator. */
 export function parseRequest(request: string): Capsule | null {
   const req = normalize(request);
-  if (req.length === 0) {
+  if (req.length === 0 || SKIP_RULES.some((p: RegExp) => p.test(req))) {
     return null;
   }
   const rules: ((r: string) => Capsule | null)[] = [

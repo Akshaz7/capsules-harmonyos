@@ -126,12 +126,14 @@ export default function widgetModelTest() {
     it('picks the most recent widget-suitable, not-removed capsule for a new widget', 0, () => {
       const saved: SavedCapsule[] = [
         { capsule: rules('count coffees'), savedAt: 1 },
-        { capsule: rules('water 8 glasses'), savedAt: 3 },
-        { capsule: rules('4 timers a 1 b 2 c 3 d 4'), savedAt: 5 },
-        { capsule: rules('split 84 between 4'), savedAt: 4 }
+        { capsule: rules('medication 8am and 8pm'), savedAt: 2 },
+        { capsule: rules('water 8 glasses'), savedAt: 3 }, // v1: app only
+        { capsule: rules('4 timers a 1 b 2 c 3 d 4'), savedAt: 5 }, // too many components
+        { capsule: rules('split 84 between 4'), savedAt: 4 } // v1: app only
       ];
-      expect(pickCapsuleForNewWidget(saved, (id: string) => false)?.id).assertEqual('split-84-4');
-      expect(pickCapsuleForNewWidget(saved, (id: string) => id === 'split-84-4')?.id).assertEqual('goal-water');
+      expect(pickCapsuleForNewWidget(saved, (id: string) => false)?.id).assertEqual('schedule-medication');
+      expect(pickCapsuleForNewWidget(saved, (id: string) => id === 'schedule-medication')?.id)
+        .assertEqual('count-coffees');
       expect(pickCapsuleForNewWidget([], (id: string) => false)).assertNull();
     });
   });

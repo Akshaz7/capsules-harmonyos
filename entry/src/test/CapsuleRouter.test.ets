@@ -18,13 +18,20 @@ function fromJson(ui: string): Capsule {
 
 export default function capsuleRouterTest() {
   describe('CapsuleRouter', () => {
-    it('routes all five rule-parser examples to widgets', 0, () => {
-      const requests = ['3 timers pasta 9 sauce 15 bread 6', 'count my squats', 'medication 8am and 8pm',
-        'water 8 glasses', 'split 84 between 4'];
+    it('routes the v0 rule-parser examples to widgets', 0, () => {
+      const requests = ['3 timers pasta 9 sauce 15 bread 6', 'count my squats', 'medication 8am and 8pm'];
       requests.forEach((req: string) => {
         const route = routeCapsule(fromRules(req));
         expect(`${req}: ${route.widget}`).assertEqual(`${req}: true`);
         expect(route.reason).assertContain('Widget-suitable');
+      });
+    });
+
+    it('keeps the live v1 goal and bill split in the app', 0, () => {
+      ['water 8 glasses', 'split 84 between 4'].forEach((req: string) => {
+        const route = routeCapsule(fromRules(req));
+        expect(`${req}: ${route.widget}`).assertEqual(`${req}: false`);
+        expect(route.reason).assertContain('schema v1');
       });
     });
 
