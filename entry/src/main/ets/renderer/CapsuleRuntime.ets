@@ -65,6 +65,11 @@ export interface TimerScheduler {
   scheduleTimer(capsuleId: string, t: TimerState): void;
 }
 
+/** Told when a running timer reaches zero, e.g. to post a notification. */
+export interface TimerAlert {
+  timerFinished(capsuleId: string, t: TimerState): void;
+}
+
 /** Approves each action before it runs (the gatekeeper). */
 export interface ActionGuard {
   allowAction(action: string): boolean;
@@ -80,6 +85,7 @@ export class CapsuleRuntime {
   @Trace numbers: NumberState[] = [];
   scheduler?: TimerScheduler;
   guard?: ActionGuard;
+  alert?: TimerAlert;
   // Per ui index: '' if the component may render, else why it is blocked.
   @Trace blockReasons: string[] = [];
   private tickHandle: number = -1;
@@ -199,6 +205,7 @@ export class CapsuleRuntime {
       if (left === 0) {
         t.running = false;
         t.done = true;
+        this.alert?.timerFinished(this.capsule.id, t);
       } else {
         anyRunning = true;
       }
