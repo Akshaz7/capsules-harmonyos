@@ -1,0 +1,13 @@
+version: "0.1.0"
+
+dependencies:
+  idf: ">=5.5,<6.1"
+  # Waveshare board support package: display, touch, LVGL port, audio codec.
+  waveshare/esp32_s3_touch_amoled_1_8:
+    version: "^2.0.3"
+    public: true
+  # IMU driver for the experimental rep counter.
+  waveshare/qmi8658:
+    version: "^2.0.0"
+  espressif/mdns:
+    version: "^1.8.0"
