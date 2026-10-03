@@ -8,7 +8,8 @@ const TAG = 'AppSettings';
 const STORE = 'settings';
 const AI_MODE_KEY = 'aiMode';
 const ALLOW_NON_EU_KEY = 'allowNonEuProviders';
-const CLOUD_NOTICE_KEY = 'cloudNoticeAccepted';
+const LEGACY_CLOUD_NOTICE_KEY = 'cloudNoticeAccepted'; // boolean; only the Mistral notice existed then
+const CLOUD_CONSENT_KEY = 'cloudConsentProvider';
 
 /** 'smart': rules and on-device first, Mistral (EU) when they can't. 'on-device': never the cloud. */
 export type AiMode = 'smart' | 'on-device';
@@ -19,8 +20,8 @@ export class AppSettings {
   @Trace aiMode: AiMode = 'smart';
   /** Advanced: allow cloud providers outside the EU. Off by default. */
   @Trace allowNonEu: boolean = false;
-  /** The user saw the one-time cloud notice and chose OK. */
-  @Trace cloudNoticeAccepted: boolean = false;
+  /** The cloud provider ('mistral', 'anthropic', ...) whose notice the user accepted; '' if none. */
+  @Trace cloudConsentProvider: string = '';
   private prefs: preferences.Preferences | undefined = undefined;
 
   load(ctx: common.Context): void {
@@ -29,7 +30,10 @@ export class AppSettings {
       this.prefs = preferences.getPreferencesSync(ctx, options);
       this.aiMode = (this.prefs.getSync(AI_MODE_KEY, 'smart') as string) === 'on-device' ? 'on-device' : 'smart';
       this.allowNonEu = this.prefs.getSync(ALLOW_NON_EU_KEY, false) as boolean;
-      this.cloudNoticeAccepted = this.prefs.getSync(CLOUD_NOTICE_KEY, false) as boolean;
+      this.cloudConsentProvider = this.prefs.getSync(CLOUD_CONSENT_KEY, '') as string;
+      if (this.cloudConsentProvider.length === 0 && (this.prefs.getSync(LEGACY_CLOUD_NOTICE_KEY, false) as boolean)) {
+        this.cloudConsentProvider = 'mistral';
+      }
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'load failed: %{public}s', (e as BusinessError).message);
     }
@@ -45,9 +49,14 @@ export class AppSettings {
     this.save(ALLOW_NON_EU_KEY, value);
   }
 
-  acceptCloudNotice(): void {
-    this.cloudNoticeAccepted = true;
-    this.save(CLOUD_NOTICE_KEY, true);
+  /** Consent is per provider: accepting Mistral (EU) does not cover a non-EU provider. */
+  hasCloudConsent(provider: string): boolean {
+    return provider.length > 0 && this.cloudConsentProvider === provider;
+  }
+
+  acceptCloudNotice(provider: string): void {
+    this.cloudConsentProvider = provider;
+    this.save(CLOUD_CONSENT_KEY, provider);
   }
 
   private save(key: string, value: preferences.ValueType): void {

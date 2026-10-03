@@ -70,8 +70,32 @@ function demoFixture(text: string): string | null {
   return t === 'demo tennis' ? TENNIS_CAPSULE : t === 'demo bill split' ? BILL_SPLIT_CAPSULE : null;
 }
 
-const CLOUD_NOTICE =
-  'For advanced apps, Harmoniser sends only your request text to Mistral AI (EU). No personal data or app data.';
+interface CloudNotice {
+  title: string;
+  message: string;
+}
+
+/** The one-time notice names the provider that will actually get the request, and says if it is outside the EU. */
+function cloudNotice(provider: string): CloudNotice {
+  if (provider === 'mistral') {
+    return { title: 'Use Mistral AI (EU)?', message:
+      'For advanced apps, Harmoniser sends only your request text to Mistral AI (EU). No personal data or app data.' };
+  }
+  const who = provider === 'anthropic' ? 'Claude by Anthropic' : provider === 'openai' ? 'OpenAI' : 'a cloud AI provider';
+  const name = provider === 'anthropic' ? 'Claude' : provider === 'openai' ? 'OpenAI' : 'cloud AI';
+  return { title: `Use ${name} (outside the EU)?`, message:
+    `For advanced apps, Harmoniser sends only your request text to ${who}, which is outside the EU. ` +
+      'No personal data or app data.' };
+}
+/** What capsules can do, for the "can't do that by design" card. */
+const CAPSULE_ABILITIES = 'timers, counters, checklists, calculations, inputs and lists, reminders, ' +
+  'notifications, vibration and the motion sensor';
+
+function joinWords(words: string[]): string {
+  return words.length <= 1 ? words.join('') :
+    `${words.slice(0, words.length - 1).join(', ')} and ${words[words.length - 1]}`;
+}
+
 const FAILED_MESSAGE =
   "I couldn't build that offline. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
 
@@ -145,6 +169,8 @@ struct Index {
   @Local busy: boolean = false;
   @Local message: string = '';
   @Local failed: boolean = false;
+  /** When core refused a request by design: what it would need, e.g. ["contacts", "SMS"]. Else empty. */
+  @Local unsupported: string[] = [];
   @Local modelStatus: string = getModelStatus().message;
   @Local cloudConfigured: boolean = getModelStatus().configured;
   @Local euCloud: boolean = getModelStatus().euAvailable;
@@ -270,6 +296,7 @@ struct Index {
     this.busy = true;
     this.message = '';
     this.failed = false;
+    this.unsupported = [];
     const fixture = demoFixture(text);
     if (fixture !== null) {
       const v = validateCapsule(fixture);
@@ -280,9 +307,10 @@ struct Index {
       return;
     }
     const smart = this.settings.aiMode === 'smart';
-    const result = await this.generate(text, smart && this.settings.cloudNoticeAccepted);
+    const consent = this.settings.hasCloudConsent(this.cloudKey());
+    const result = await this.generate(text, smart && consent);
     this.busy = false;
-    if (!result.ok && smart && !this.settings.cloudNoticeAccepted && this.cloudUsable()) {
+    if (!result.ok && result.failure === undefined && smart && !consent && this.cloudUsable()) {
       // The device couldn't build it and the cloud would be next: ask once before the first cloud request.
       hilog.info(0x0001, 'Index', 'on-device failed (%{public}s); showing the cloud notice', result.error ?? '');
       this.showCloudNotice(() => this.retryWithCloud(text), () => {
@@ -311,8 +339,8 @@ struct Index {
   /** One-time notice before the first cloud request. OK retries with the cloud; the other choice switches modes. */
   private showCloudNotice(onOk: () => void, onDeclined: () => void): void {
     this.getUIContext().showAlertDialog({
-      title: 'Use Mistral AI (EU)?',
-      message: CLOUD_NOTICE,
+      title: cloudNotice(this.cloudKey()).title,
+      message: cloudNotice(this.cloudKey()).message,
       autoCancel: false,
       // Stacked so "On-device only" is not cut off.
       buttonDirection: DialogButtonDirection.VERTICAL,
@@ -321,7 +349,7 @@ struct Index {
           value: 'OK',
           style: DialogButtonStyle.HIGHLIGHT,
           action: () => {
-            this.settings.acceptCloudNotice();
+            this.settings.acceptCloudNotice(this.cloudKey());
             onOk();
           }
         },
@@ -349,6 +377,8 @@ struct Index {
       // The user sees a friendly message; the real error only goes to the log.
       hilog.error(0x0001, 'Index', 'generateCapsule failed for "%{private}s": %{public}s [%{public}s]',
         text, result.error ?? 'no error', result.details.join('; '));
+      this.unsupported = result.failure === 'unsupported' ?
+        ((result.unsupported ?? []).length > 0 ? (result.unsupported ?? []) : ['that']) : [];
       this.failed = true;
       return;
     }
@@ -386,6 +416,7 @@ struct Index {
     this.request = '';
     this.message = '';
     this.failed = false;
+    this.unsupported = [];
     if (this.ctx) {
       refreshCapsuleWidgets(this.ctx);
     }
@@ -454,7 +485,7 @@ struct Index {
 
   /** Rebuilds a capsule with the cloud from its original request, then asks for consent again. */
   private makeSmarter(entry: CapsuleEntry): void {
-    if (!this.settings.cloudNoticeAccepted) {
+    if (!this.settings.hasCloudConsent(this.cloudKey())) {
       this.showCloudNotice(() => this.rebuildWithCloud(entry), () => {
       });
       return;
@@ -509,6 +540,14 @@ struct Index {
     .padding({ left: 12, right: 12, top: 6, bottom: 6 })
     .enabled(this.smarterBusyId.length === 0)
     .onClick(() => this.makeSmarter(entry))
+  }
+
+  /** The provider smart mode will send cloud requests to: Mistral when an EU provider is set up, else the default. */
+  private cloudKey(): string {
+    if (this.euCloud) {
+      return 'mistral';
+    }
+    return this.cloudProviders.length > 0 ? this.cloudProviders[0] : '';
   }
 
   /** The cloud provider smart mode will use, as users know it. Core prefers an EU provider. */
@@ -641,6 +680,32 @@ struct Index {
     .backgroundColor($r('sys.color.comp_background_primary'))
   }
 
+  /** Calm, final answer for requests capsules can never do; no suggestions to retry. */
+  @Builder
+  unsupportedCard() {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.lock'))
+        .fontSize(20)
+        .fontColor([$r('sys.color.icon_secondary')])
+      Column({ space: 6 }) {
+        Text(`Harmoniser can't do ${joinWords(this.unsupported)} by design.`)
+          .fontSize($r('sys.float.Body_L'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+        Text(`Capsules can only use: ${CAPSULE_ABILITIES}.`)
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .alignItems(VerticalAlign.Top)
+    .width('100%')
+    .padding(16)
+    .borderRadius(20)
+    .backgroundColor($r('sys.color.comp_background_primary'))
+  }
+
   @Builder
   failedCard() {
     Column({ space: 12 }) {
@@ -767,7 +832,9 @@ struct Index {
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
           .padding({ left: 4 })
-        if (this.failed) {
+        if (this.failed && this.unsupported.length > 0) {
+          this.unsupportedCard()
+        } else if (this.failed) {
           this.failedCard()
         } else if (this.message.length > 0) {
           Text(this.message)
