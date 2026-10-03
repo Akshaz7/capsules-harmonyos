@@ -120,10 +120,8 @@ export struct CapsuleView {
             .select(s ? s.checked[i] : false)
             .selectedColor($r('sys.color.brand'))
             .onChange((value: boolean) => {
-              if (s) {
-                const next = s.checked.slice();
-                next[i] = value;
-                s.checked = next;
+              if (s && s.checked[i] !== value) {
+                this.runtime.setChecked(c.id, i, value);
               }
             })
           Text(item)

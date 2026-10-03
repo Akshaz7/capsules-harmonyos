@@ -24,6 +24,9 @@ import { AppSettings } from './AppSettings';
 import { CapsuleEntry, capsuleIcon, originBadge, originIcon, routeHeadline } from './CapsuleEntry';
 import { CapsuleStore } from './CapsuleStore';
 import { ConsentView } from './ConsentView';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { refreshCapsuleWidgets } from '../widget/WidgetService';
+import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
 
@@ -92,6 +95,7 @@ struct Index {
   private timers: TimerAdapter | undefined = undefined;
   private notifications: NotificationAdapter | undefined = undefined;
   private store: CapsuleStore | undefined = undefined;
+  private ctx: common.UIAbilityContext | undefined = undefined;
   private statusPoll: number = -1;
   @Local entries: CapsuleEntry[] = [];
   @Local openId: string = '';
@@ -109,6 +113,7 @@ struct Index {
 
   aboutToAppear(): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    this.ctx = ctx;
     this.gate = new Gatekeeper(ctx);
     this.timers = new TimerAdapter(ctx);
     this.notifications = new NotificationAdapter(ctx);
@@ -156,7 +161,30 @@ struct Index {
         rt.alert = new NotifyOnFinish(this.notifications, capsule.name);
       }
     }
+    if (this.ctx) {
+      // Shared with the home-screen widget: start from its saved state, write every change back.
+      rt.applyState(loadState(this.ctx, capsule));
+      rt.onChange = () => this.persist(rt);
+    }
     return new CapsuleEntry(capsule, routeCapsule(capsule), rt, this.store?.origin(capsule.id) ?? '');
+  }
+
+  private persist(rt: CapsuleRuntime): void {
+    if (!this.ctx) {
+      return;
+    }
+    saveState(this.ctx, rt.exportState());
+    refreshCapsuleWidgets(this.ctx, rt.capsule.id);
+  }
+
+  // Widget taps change the shared state while the app is in the background; pick them up on return.
+  onPageShow(): void {
+    const ctx = this.ctx;
+    if (!ctx) {
+      return;
+    }
+    this.entries.forEach((e: CapsuleEntry) => e.runtime.applyState(loadState(ctx, e.capsule)));
+    hilog.info(0x0001, 'Index', 'reloaded widget state for %{public}d capsules', this.entries.length);
   }
 
   /** Keeps ids unique across saved capsules so grants and calendar events never collide. */
@@ -214,6 +242,9 @@ struct Index {
     this.showSheet = false;
     this.request = '';
     this.message = '';
+    if (this.ctx) {
+      refreshCapsuleWidgets(this.ctx);
+    }
     setTimeout(() => this.open(capsule.id), 300);
   }
 
@@ -245,6 +276,9 @@ struct Index {
     this.gate.forget(capsule.id, note);
     this.store?.remove(capsule.id);
     this.close();
+    if (this.ctx) {
+      refreshCapsuleWidgets(this.ctx, capsule.id);
+    }
     this.entries = this.entries.filter((e: CapsuleEntry) => e.capsule.id !== capsule.id);
     this.message = note;
   }

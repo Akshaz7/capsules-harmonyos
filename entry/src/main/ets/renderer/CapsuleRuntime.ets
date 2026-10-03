@@ -7,6 +7,7 @@ import {
   NumberComponent,
   TimerComponent
 } from '../core/CapsuleTypes';
+import { CapsuleState, ChecklistTicks, CounterValue, TimerRun } from '../core/WidgetModel';
 
 const DOMAIN = 0x0001;
 const TAG = 'CapsuleRuntime';
@@ -95,6 +96,8 @@ export class CapsuleRuntime {
   scheduler?: TimerScheduler;
   guard?: ActionGuard;
   alert?: TimerAlert;
+  /** Called after the user changes persisted state (timers started, counts, ticks). */
+  onChange?: () => void;
   // Per ui index: '' if the component may render, else why it is blocked.
   @Trace blockReasons: string[] = [];
   private tickHandle: number = -1;
@@ -193,6 +196,85 @@ export class CapsuleRuntime {
         break;
       default:
         hilog.warn(DOMAIN, TAG, 'unknown action %{public}s', action);
+        return;
+    }
+    if (kind !== 'notify') {
+      this.onChange?.();
+    }
+  }
+
+  /** Ticks or unticks one checklist item (user tap). */
+  setChecked(listId: string, index: number, value: boolean): void {
+    const list = this.checklist(listId);
+    if (!list || index < 0 || index >= list.checked.length) {
+      return;
+    }
+    const next = list.checked.slice();
+    next[index] = value;
+    list.checked = next;
+    this.onChange?.();
+  }
+
+  /** Persistable state shared with the home-screen widget (core/WidgetModel). */
+  exportState(): CapsuleState {
+    const timers: TimerRun[] = this.timers.map((t: TimerState): TimerRun => {
+      const run: TimerRun = { id: t.timerId, endAt: t.running || t.done ? t.endAt : 0 };
+      return run;
+    });
+    const counters: CounterValue[] = this.counters.map((c: CounterState): CounterValue => {
+      const v: CounterValue = { id: c.counterId, value: c.value };
+      return v;
+    });
+    const checklists: ChecklistTicks[] = this.checklists.map((l: ChecklistState): ChecklistTicks => {
+      const ticks: ChecklistTicks = { id: l.listId, checked: l.checked.slice() };
+      return ticks;
+    });
+    const state: CapsuleState = {
+      capsuleId: this.capsule.id, timers: timers, counters: counters, checklists: checklists
+    };
+    return state;
+  }
+
+  /** Adopts saved state (e.g. after the widget changed it). Does not call onChange. */
+  applyState(state: CapsuleState): void {
+    if (state.capsuleId !== this.capsule.id) {
+      return;
+    }
+    const now = Date.now();
+    state.timers.forEach((run: TimerRun) => {
+      const t = this.timer(run.id);
+      if (!t) {
+        return;
+      }
+      t.endAt = run.endAt;
+      if (run.endAt === 0) {
+        t.running = false;
+        t.done = false;
+        t.remainingSec = Math.round(t.minutes * 60);
+      } else if (run.endAt > now) {
+        t.running = true;
+        t.done = false;
+        t.remainingSec = Math.ceil((run.endAt - now) / 1000);
+      } else {
+        t.running = false;
+        t.done = true;
+        t.remainingSec = 0;
+      }
+    });
+    state.counters.forEach((v: CounterValue) => {
+      const c = this.counter(v.id);
+      if (c) {
+        c.value = v.value;
+      }
+    });
+    state.checklists.forEach((ticks: ChecklistTicks) => {
+      const l = this.checklist(ticks.id);
+      if (l && ticks.checked.length === l.checked.length) {
+        l.checked = ticks.checked.slice();
+      }
+    });
+    if (this.timers.some((t: TimerState) => t.running)) {
+      this.ensureTicking();
     }
   }
 
