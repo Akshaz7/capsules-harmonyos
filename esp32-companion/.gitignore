@@ -1,0 +1,18 @@
+# ESP-IDF build output and generated config
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+.cache/
+
+# Secrets: Wi-Fi credentials and anything else kept local
+# (copy main/secrets.h.example to main/secrets.h)
+main/secrets.h
+*.local
+
+# Written by find_esp32.sh
+esp32_ip.txt
+
+# Python
+__pycache__/
+*.pyc
