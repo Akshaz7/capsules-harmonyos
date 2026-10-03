@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import {
-  createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig, DEFAULT_ANTHROPIC_MODEL
+  createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig, parseModelConfigs, DEFAULT_ANTHROPIC_MODEL,
+  DEFAULT_MISTRAL_MODEL
 } from '../main/ets/core/ModelProvider';
 import { CapsuleModel, extractJson, SYSTEM_PROMPT, V1_EXAMPLES } from '../main/ets/core/CapsuleModel';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
@@ -72,6 +73,43 @@ export default function capsuleModelTest() {
       expect(http).assertContain('https://');
       expect(http.includes('secret')).assertFalse();
     });
+
+    it('defaults Mistral to its API and a JSON-mode model', 0, () => {
+      const r = parseModelConfig('{"provider":"mistral","apiKey":"k"}');
+      expect(r.config?.provider).assertEqual('mistral');
+      expect(r.config?.model).assertEqual(DEFAULT_MISTRAL_MODEL);
+      expect(r.config?.baseUrl).assertEqual('https://api.mistral.ai/v1');
+    });
+
+    it('reads several providers and picks the default', 0, () => {
+      const text = '{"default":"mistral","providers":{"anthropic":{"apiKey":"a"},' +
+        '"mistral":{"apiKey":"m","model":"mistral-small-latest"}}}';
+      const all = parseModelConfigs(text);
+      expect(all.error === undefined).assertTrue();
+      expect(all.configs.map((c: ModelConfig) => c.provider).join(',')).assertEqual('anthropic,mistral');
+      expect(all.defaultConfig?.provider).assertEqual('mistral');
+      expect(all.defaultConfig?.model).assertEqual('mistral-small-latest');
+      const one = parseModelConfig(text);
+      expect(one.config?.provider).assertEqual('mistral');
+      expect(one.config?.apiKey).assertEqual('m');
+      expect(parseModelConfig('{"providers":{"anthropic":{"apiKey":"a"}}}').config?.provider).assertEqual('anthropic');
+    });
+
+    it('rejects a bad multi-provider config without leaking keys', 0, () => {
+      const errorOf = (text: string): string => parseModelConfigs(text).error ?? '';
+      expect(errorOf('{"providers":{"anthropic":{"apiKey":"a"},"mistral":{"apiKey":"m"}}}'))
+        .assertContain('"default" must name one of the providers');
+      expect(errorOf('{"default":"openai","providers":{"mistral":{"apiKey":"m"}}}'))
+        .assertContain('"default" is "openai", which is not in "providers"');
+      expect(errorOf('{"providers":{"mistral":{"model":"x"}}}')).assertContain('providers.mistral: "apiKey" is missing');
+      expect(errorOf('{"providers":{"gemini":{"apiKey":"secret"}}}')).assertContain('unknown provider "gemini"');
+      expect(errorOf('{"providers":{}}')).assertContain('at least one provider');
+      const bad = errorOf('{"default":"mistral","providers":{"mistral":{"apiKey":"secret","baseUrl":"http://x"}}}');
+      expect(bad).assertContain('https://');
+      expect(bad.includes('secret')).assertFalse();
+      expect(parseModelConfigs('{"providers":{"mistral":{"apiKey":"m"}},"default":"mistral"}').configs.length)
+        .assertEqual(1);
+    });
   });
 
   describe('CapsuleModel', () => {
@@ -97,12 +135,34 @@ export default function capsuleModelTest() {
       done();
     });
 
+    it('calls Mistral chat completions with JSON output mode', 0, async (done: Function) => {
+      const t = new FakeTransport([openaiReply(GOOD)]);
+      const r = await new CapsuleModel(createProvider(config('mistral'), t)).generate('track my plants');
+      expect(r.ok).assertTrue();
+      expect(r.origin).assertEqual('cloud');
+      expect(t.sent[0].url).assertEqual('https://api.mistral.ai/v1/chat/completions');
+      expect(t.sent[0].headers['authorization']).assertEqual('Bearer test-key');
+      expect(t.sent[0].body).assertContain('"response_format":{"type":"json_object"}');
+      expect(t.sent[0].body).assertContain('"model":"m-1"');
+      expect(t.sent[0].body).assertContain('JSON');
+      done();
+    });
+
+    it('reports Mistral HTTP errors by name', 0, async (done: Function) => {
+      const t = new FakeTransport([{ status: 401, body: '{"message":"Unauthorized"}' }]);
+      const r = await new CapsuleModel(createProvider(config('mistral'), t)).generate('track my plants');
+      expect(r.ok).assertFalse();
+      expect(r.error).assertContain('Mistral returned HTTP 401');
+      done();
+    });
+
     it('works with an OpenAI-compatible provider', 0, async (done: Function) => {
       const t = new FakeTransport([openaiReply(GOOD)]);
       const r = await new CapsuleModel(createProvider(config('openai'), t)).generate('track my plants');
       expect(r.ok).assertTrue();
       expect(t.sent[0].url).assertEqual('https://api.openai.com/v1/chat/completions');
       expect(t.sent[0].headers['authorization']).assertEqual('Bearer test-key');
+      expect(t.sent[0].body.includes('response_format')).assertFalse();
       done();
     });
 
