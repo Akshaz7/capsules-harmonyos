@@ -9,7 +9,9 @@ This is a proposal written from the firmware side. `mock_relay.py` implements al
 memory; `test_relay.sh <base url>` checks any implementation from outside, the fake today
 and the real routes later.
 
-- Everything is JSON, UTF-8. Errors are `{"error":"<text>"}`; the board only looks at the status.
+- Everything is JSON, UTF-8. Errors are `{"error":{"code":"…","message":"…"}}`, the
+  envelope of the rest of the backend, on every route. The app can switch on `code`; the
+  board only looks at the status and never reads an error body.
 - The base URL is build-time configuration on the board (`RELAY_URL` in `main/secrets.h`).
   The planned one is `https://harmoniser-web.vercel.app` (not deployed when this was written).
   `https://` is verified against ESP-IDF's certificate bundle; `http://` is for the fake.
@@ -148,22 +150,43 @@ capsule to another device" in the team repo's `esp32-companion/README.md`; the t
 meant to say the same thing, and [the differences](#where-the-fake-goes-beyond-the-app-section)
 are listed below.
 
-Every request carries `Authorization: Bearer <install token>`, the anonymous install token
-of the app. There are no accounts. A device belongs to the install that claimed it. The
-fake takes any non-empty bearer token as an install.
+Every request carries `X-Harmoniser-Token: <token>`, the same anonymous token the app
+already uses for the marketplace routes: 32 to 256 characters of `A-Z a-z 0-9 _ -`, made up
+by the app itself on first run (a browser makes its own). Nothing issues it and there are
+no accounts. A device belongs to the token that claimed it. `Authorization: Bearer` is the
+board's header, with the device token from the registration; it does nothing on these routes.
 
 | Route | Body | Answer |
 | --- | --- | --- |
-| `POST /api/devices/claim` | `{"code":"brave-otter-lamp"}` | `200 {"id":"…","kind":"wrist"}`. `404` for an unknown, used or expired code. `429` after too many wrong codes (fake: 10 within a minute per install token; then even the right code is refused until the minute is over). `400` if `code` is not three words. |
-| `GET /api/devices` | | `200 {"devices":[{"id":"…","kind":"wrist","last_seen_ms_ago":N}]}`: the devices this install has claimed. |
-| `PUT /api/devices/{id}/capsule` | like the local `POST /capsule` | `200 {"version":N}`. The version goes up and a pending action is dropped. `400 {"error":"…"}` under the board's rules (`README.md`), and then nothing changes. |
+| `POST /api/devices/claim` | `{"code":"brave-otter-lamp"}` | `200 {"id":"…","kind":"wrist"}`. `404` for an unknown, used or expired code. `429` after too many wrong codes (fake: 10 within a minute per token; then even the right code is refused until the minute is over). `400` if `code` is not three words. |
+| `GET /api/devices` | | `200 {"devices":[{"id":"…","kind":"wrist","last_seen_ms_ago":N}]}`: the devices this token has claimed. |
+| `PUT /api/devices/{id}/capsule` | like the local `POST /capsule` | `200 {"version":N}`. The version goes up and a pending action is dropped. `400` under the board's rules (`README.md`), and then nothing changes. |
 | `POST /api/devices/{id}/action` | `{"action":"start"}`, or `pause`, `toggle`, `reset`, `increment` | `200 {"action_seq":N}`. `400` for anything that is not an action. |
 | `GET /api/devices/{id}/state` | | `200`: the state the board last reported, with its `version`, plus `last_seen_ms_ago`, the time since the board's last request (poll or report). |
 | `DELETE /api/devices/{id}` | | `204`. Unpairs: the device keeps its id and token, loses its owner, its capsule and its pending action, and gets a new code, which the board shows after its next poll. |
 | `GET /pair?code=…` | | The web page behind the QR code, see below. No token needed to open it. |
 
-`401` without a bearer token. `404` for a device that does not exist, is not claimed, or
-was claimed by another install: the three look the same on purpose.
+`401` when `X-Harmoniser-Token` is missing or not of that shape. `404` for a device that
+does not exist, is not claimed, or was claimed by another token: the three look the same
+on purpose.
+
+Error codes, taken from the backend's `lib/devices/errors.ts`:
+
+| Status | `code` | When |
+| --- | --- | --- |
+| 400 | `invalid_json` | The body is not a JSON object, is nested deeper than 8, or holds a NUL. |
+| 400 | `invalid_capsule` | `PUT …/capsule` with a capsule the board would refuse. |
+| 400 | `invalid_action` | `POST …/action` with something that is not an action. |
+| 400 | `invalid_code` | `claim` with a `code` that is not three words. |
+| 401 | `unauthorized` | No usable `X-Harmoniser-Token`; on the device side, an unknown id or device token. |
+| 404 | `code_not_found` | `claim` with an unknown, used or expired code. |
+| 404 | `not_found` | No such device for this token; unknown path. |
+| 413 | `payload_too_large` | Body over 1024 bytes. |
+| 429 | `rate_limited` | Too many wrong codes. |
+
+Device-side only: `invalid_registration` and `invalid_state` (400). The fake also answers
+`405 method_not_allowed`. It never answers 409, 415 or 503, and sends no `Retry-After`
+with a 429; the real backend may.
 
 Reading `GET …/state`: `version` says which capsule the board is showing. It is the version
 a `PUT` returned, or `0` when the board shows something that did not come from the relay.
@@ -175,6 +198,10 @@ most 30 seconds when the relay does not answer).
 
 The app section leaves these open; this is what the fake does, for the backend to copy or change:
 
+- **The token header.** The app section says `Authorization: Bearer <install token>`. The
+  backend's convention, and the fake's since this was written, is `X-Harmoniser-Token`
+  (above). The app section needs that one line changed.
+- **The error body.** The app section shows `{"error":"…"}`; it is `{"error":{"code","message"}}`.
 - `claim` answers `400` to a `code` that is not three words. An app that only handles 404 and
   429 should treat any other 4xx as "not paired".
 - The shape of `GET /api/devices` (above) and the `204` of `DELETE` are choices made here.
@@ -212,12 +239,13 @@ The board draws `pair_url` as a QR code, with the phrase under it as the fallbac
   the `Host` header of the board's request (so the address the board reached the fake on),
   or from `--public-url`. `GET /pair?code=…` answers with a small page with a
   "Pair this device" button, which posts the code to `/api/devices/claim`. Opening the page
-  pairs nothing; the button does. Any phone camera can scan the code and get there. A
-  browser has no install token, so the page makes one up and keeps it in `localStorage`:
+  pairs nothing; the button does. Any phone camera can scan the code and get there. The
+  page sends the browser's token in `X-Harmoniser-Token`, kept in `localStorage` under
+  `harmoniser.deviceToken`, the key the real site uses (it makes one up if there is none):
   a device paired that way belongs to that browser, not to the app.
 - The real backend puts its own page at `pair_url`. The app's Scan Kit scanner reads the
   same QR code: if the scanned text is a URL whose path is `/pair` and which has a `code`
-  parameter, take the `code` and call `claim` with it and the install token.
+  parameter, take the `code` and call `claim` with it and the app's token.
 - Size. The code is drawn at error correction level M on a 300 px white square, with whole
   pixels per module and a quiet zone of at least 4 modules:
 
@@ -237,7 +265,7 @@ The board draws `pair_url` as a QR code, with the phrase under it as the fallbac
 
 ## Known gaps
 
-- **One action at a time.** The relay holds only the latest action. Two actions between two
+- **Only the latest action is held.** The relay holds only the latest action. Two actions between two
   polls (2 seconds apart) reach the board as one. For "+1" from the phone that loses taps;
   if that matters, send a new capsule with the count instead, or make `action` a queue.
 - **No acknowledgement.** The board does not say which `action_seq` it ran. The state it
@@ -249,4 +277,13 @@ The board draws `pair_url` as a QR code, with the phrase under it as the fallbac
 - **Unpairing leaves the capsule.** After `DELETE` the board gets a new code, but a capsule
   that is on its screen stays there (with "pair: …" in the small line at the top) until
   somebody sends another; the QR code is on the idle screen only. The board has no "clear".
+- **Registering again unclaims.** A board that registers its `hw` again is unpaired from
+  its owner. `hw` is derived from the MAC and is not a secret, so anyone who knows it can
+  knock a device off its owner (they cannot read what was sent to it, and get no access to
+  the owner's token). The backend may want to keep the claim, or ask for the old token.
+- **HTTPS is not soak-tested.** On the board, TLS was checked as a handshake against the
+  certificate bundle (`vercel.com`, `harmoniser-web.vercel.app`, `example.com`; a
+  self-signed certificate was refused), with about 50 KB of internal RAM free while the
+  connection was open. All polling so far was over plain HTTP to the fake. Polling over a
+  kept-alive TLS connection for hours has not been run.
 - **Polling.** One request every 2 seconds per board, for as long as it is on.

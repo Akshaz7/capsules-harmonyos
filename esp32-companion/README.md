@@ -27,7 +27,7 @@ As of 2026-10-03.
 | | State |
 | --- | --- |
 | Mock server | Passes `test_api.sh` (72 checks) and its unit tests. |
-| Host unit tests | `make -C tests test`: 1,448 checks in C on the firmware's own source files, 19 Python tests on the mock and 33 on the fake relay. All pass. |
+| Host unit tests | `make -C tests test`: 1,448 checks in C on the firmware's own source files, 19 Python tests on the mock and 35 on the fake relay. All pass. |
 | Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,717,472 bytes, 80% of the app partition free. |
 | Boot on hardware | One board (revision V2): boots, display and touch drivers start, accelerometer and audio codec answer, HTTP server starts. |
 | Wi-Fi on hardware | Joins the phone hotspot (WPA3) and the venue network `HackYeah2026`, which it sees on 2.4 GHz channel 1. Joining the venue network often takes several attempts. |
@@ -422,7 +422,7 @@ The contract, for the backend and the app, is in [`RELAY.md`](RELAY.md).
 
 ```sh
 python3 mock_relay.py --port 8090 --host 0.0.0.0   # the fake; it prints nothing secret
-./test_relay.sh http://localhost:8090              # 90 checks, with a simulated board
+./test_relay.sh http://localhost:8090              # 106 checks, with a simulated board
 ```
 
 Put `#define RELAY_URL "http://<laptop ip>:8090"` into `main/secrets.h`, build and flash.
@@ -430,7 +430,7 @@ The idle screen then shows the QR code, "or type:" with the phrase, and the IP a
 Scan it with a phone on the same network, or:
 
 ```sh
-T='Authorization: Bearer any-token'      # the fake takes any install token
+T='X-Harmoniser-Token: any-32-or-more-characters-you-like'   # the app's own anonymous token
 curl -X POST http://localhost:8090/api/devices/claim -H "$T" -d '{"code":"brave otter lamp"}'
 curl -X PUT http://localhost:8090/api/devices/<id>/capsule -H "$T" -d '{"type":"counter","label":"Squats","count":0}'
 curl http://localhost:8090/api/devices/<id>/state -H "$T"
