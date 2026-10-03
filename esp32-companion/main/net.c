@@ -153,17 +153,22 @@ static void scan(bool visible[NETWORK_COUNT], bool list_all)
     free(records);
 }
 
-static void configure(const network_t *network)
+static bool configure(const network_t *network)
 {
     wifi_config_t config = { 0 };
-    strlcpy((char *)config.sta.ssid, network->ssid, sizeof(config.sta.ssid));
-    strlcpy((char *)config.sta.password, network->password, sizeof(config.sta.password));
+    // Not strlcpy: a 32-character SSID or a 64-character key fills its field with no terminator.
+    memcpy(config.sta.ssid, network->ssid, strnlen(network->ssid, sizeof(config.sta.ssid)));
+    memcpy(config.sta.password, network->password, strnlen(network->password, sizeof(config.sta.password)));
     // Accept WPA2 and anything stronger (WPA3 or WPA2/WPA3 transition); PMF if the AP offers it.
     config.sta.threshold.authmode = network->password[0] ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     config.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
     config.sta.pmf_cfg.capable = true;
     config.sta.pmf_cfg.required = false;
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &config));
+    esp_err_t err = esp_wifi_set_config(WIFI_IF_STA, &config);
+    if (err != ESP_OK) {  // e.g. a password shorter than 8 characters: skip this network, do not reboot
+        ESP_LOGE(TAG, "cannot use the settings for \"%s\": %s", network->ssid, esp_err_to_name(err));
+    }
+    return err == ESP_OK;
 }
 
 // Tries one network for at most JOIN_TIMEOUT_MS. True once it has an IP address.
@@ -171,7 +176,9 @@ static bool join(const network_t *network)
 {
     ESP_LOGI(TAG, "joining \"%s\"", network->ssid);
     set_status(NET_JOINING, network->ssid, "");
-    configure(network);
+    if (!configure(network)) {
+        return false;
+    }
     xEventGroupClearBits(s_events, GOT_IP_BIT | DISCONNECTED_BIT);
     esp_wifi_connect();
 
@@ -197,24 +204,36 @@ static bool join(const network_t *network)
 }
 
 // One machine-readable line so a script (or a person) can pick the address off the serial port.
-static void announce(esp_netif_t *netif, const network_t *network)
+// False if the driver has no access point any more: a disconnect event can get lost (join()
+// clears it when it arrives together with the address), and nothing else would notice.
+static bool announce(esp_netif_t *netif, const network_t *network)
 {
     esp_netif_ip_info_t info = { 0 };
     wifi_ap_record_t ap = { 0 };
+    if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) {
+        return false;
+    }
     esp_netif_get_ip_info(netif, &info);
-    esp_wifi_sta_get_ap_info(&ap);
     char ip[16];
     esp_ip4addr_ntoa(&info.ip, ip, sizeof(ip));
     set_status(NET_CONNECTED, network->ssid, ip);
     printf("HARMONISER_IP=%s SSID=%s RSSI=%d\n", ip, network->ssid, ap.rssi);
+    return true;
 }
 
 static void stay_connected(esp_netif_t *netif, const network_t *network)
 {
-    do {
-        announce(netif, network);
-    } while (!(xEventGroupWaitBits(s_events, DISCONNECTED_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(ANNOUNCE_PERIOD_MS)) &
-               DISCONNECTED_BIT));
+    for (;;) {
+        if (!announce(netif, network)) {
+            ESP_LOGW(TAG, "no link to \"%s\" and no disconnect event was seen", network->ssid);
+            esp_wifi_disconnect();  // whatever the driver is in the middle of, start from scratch
+            break;
+        }
+        if (xEventGroupWaitBits(s_events, DISCONNECTED_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(ANNOUNCE_PERIOD_MS)) &
+            DISCONNECTED_BIT) {
+            break;
+        }
+    }
     ESP_LOGW(TAG, "lost \"%s\", looking for a network again", network->ssid);
     set_status(NET_OFFLINE, "", "");
 }
