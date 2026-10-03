@@ -1,0 +1,26 @@
+{
+  "forms": [
+    {
+      "name": "harmoniser",
+      "displayName": "Harmoniser",
+      "description": "Keep one of your capsules on the home screen: live timers, counters and checklists.",
+      "src": "./ets/widget/pages/HarmoniserCard.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "renderingMode": "fullColor",
+      "isDefault": true,
+      "isDynamic": true,
+      "updateEnabled": true,
+      "updateDuration": 1,
+      "defaultDimension": "2*2",
+      "supportDimensions": [
+        "2*2",
+        "2*4"
+      ],
+      "metadata": []
+    }
+  ]
+}
