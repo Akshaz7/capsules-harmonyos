@@ -45,7 +45,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
 - **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **243 unit tests**, plus a provider eval with held-out and refusal sets.
+- **249 unit tests**, plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 
@@ -59,7 +59,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 | **Calendar Kit** | Capsule timers become system calendar events |
 | **Notification Kit** | Timer-finished notifications |
 | **Share Kit / Scan Kit / Document picker** | Share capsules as files or QR codes |
-| **ArkUI + ArkData Preferences** | Native rendering, dark mode, saved capsules, grants and the block log |
+| **ArkUI + ArkData Preferences** | Native rendering, saved capsules, grants and the block log |
 
 *Note for the speaker:* the Cactus port is original work: 3 patches, telemetry stubbed out, our own Node-API wrapper.
 

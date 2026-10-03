@@ -46,16 +46,15 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 | The UI says capsules can use "vibration and the motion sensor", but neither is built for capsules: no capsule can vibrate or read a sensor, and there is no sensor permission (the app's own save vibration, UI-1, is not a capsule ability). Still in the text at d9bf333 | `pages/Index.ets` `CAPSULE_ABILITIES` | **T3**: remove the words, or build the features |
 | The cloud prompt tells the model "steps and reps can use the motion sensor" and that capsules can use "vibration, the motion sensor, location and a home [widget]". A user asking for automatic step counting gets a tap counter. | `core/CapsuleModel.ets` lines 135–137 | **T4**: align the prompt with what is built |
 | The schema has `location` and `widget` permissions that nothing uses | `SCHEMA.md` | **Ash** decides (SCHEMA is the contract). The README already says so. |
-| `HACKATHON_BRIEF.md` is still the empty template | repo root | **Ash**: fill in or delete. Judges may read it. |
-| No screenshots | README | **Ash**: `docs/screenshots/` (widget, gatekeeper sheet, dark mode, Calendar, tennis); T2 adds the section |
-| The README doesn't say what was built during the hackathon versus the template | README | **T2**: add a short "Built at HackYeah" note (doing it under T2-4) |
+| No screenshots | README | **Ash**: `docs/screenshots/` (widget, gatekeeper sheet, Calendar, tennis; dark mode is off while the redesign locks light mode); T2 adds the section |
+| The live marketplace search (T6-5, 28b7fa1) sends the request text to the marketplace server with no consent notice, also in **On-device only** mode. This contradicts "On-device only never calls the cloud" and "tiers 0–1 stay on the device" (both now corrected in the docs) | `core/templates/MarketMatch.ets`, `core/index.ets` `getMarketOptions()` | **Ash** decides; **T6/T4**: skip the search in On-device only mode and/or put it behind a consent notice |
 
 ## Reproducibility
 
 | Item | Status | Notes and owner |
 | --- | --- | --- |
 | Tool versions | ✅ | DevEco Studio 6.1.1, SDK API 24 (min API 20), `devecocli` 1.3.4, Node 18+ for the eval |
-| Unit tests | ✅ | 243 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
+| Unit tests | ✅ | 249 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
 | On-device model | ✅ | URL, tag and sha256 in `docs/THIRD_PARTY.md`; `scripts/push-model.sh` |
 | Rebuilding `libcactus_engine.so` | ✅ | Fixed by T5-5 (`755fbc3`): `cactus/BUILD.md` and `cactus/build-engine.sh`; a clean rebuild matches the committed `.so` apart from the build ID |
 | Untracked `.cache/` folder | ✅ | Fixed: ignored in `783a1ee` |
