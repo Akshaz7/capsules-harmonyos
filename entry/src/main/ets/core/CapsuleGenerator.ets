@@ -41,10 +41,12 @@ export async function generateCapsuleWith(request: string, model: CapsuleModel |
   let onDeviceError = '';
   if (onDevice !== undefined && onDevice !== null) {
     const local = await onDevice.generate(request);
-    if (local.ok) {
-      return local;
+    // Re-check here so the "always validated" promise holds whatever source is plugged in.
+    const checked = local.ok && local.capsule !== undefined ? validateCapsule(JSON.stringify(local.capsule)) : null;
+    if (checked !== null && checked.ok) {
+      return { ok: true, capsule: checked.capsule, origin: 'on-device', details: [] };
     }
-    onDeviceError = local.error ?? '';
+    onDeviceError = checked !== null ? 'The on-device model produced an invalid capsule.' : (local.error ?? '');
   }
   if (options !== undefined && !options.allowCloud) {
     const why = onDeviceError.length > 0 ? onDeviceError : 'Cloud AI is turned off.';

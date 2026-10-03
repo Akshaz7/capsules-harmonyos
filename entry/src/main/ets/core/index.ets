@@ -18,6 +18,7 @@ import { fileIo } from '@kit.CoreFileKit';
 import { GenerateResult } from './CapsuleTypes';
 import { CapsuleModel } from './CapsuleModel';
 import { AI_NOT_CONFIGURED, GenerateOptions, generateCapsuleWith } from './CapsuleGenerator';
+import { parseRequest } from './RuleParser';
 import { createProvider, HttpResponse, HttpTransport, ModelConfigResult, parseModelConfig } from './ModelProvider';
 import { CactusProvider, OnDeviceStatus } from './providers/CactusProvider';
 
@@ -140,6 +141,10 @@ export function getOnDeviceStatus(): OnDeviceStatus {
  * options.allowCloud is not false). Returns a validated capsule or a clear error.
  */
 export async function generateCapsule(request: string, options?: GenerateOptions): Promise<GenerateResult> {
+  if (parseRequest(request) !== null) {
+    // A rule matches: answer now instead of waiting for the on-device model to finish loading.
+    return generateCapsuleWith(request, model, modelError, null, options);
+  }
   await onDevice.whenInitialised();
   return generateCapsuleWith(request, model, modelError, onDevice.isReady() ? onDevice : null, options);
 }

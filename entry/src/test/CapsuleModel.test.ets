@@ -78,7 +78,7 @@ export default function capsuleModelTest() {
       const t = new FakeTransport([anthropicReply('```json\n' + GOOD + '\n```')]);
       const r = await new CapsuleModel(createProvider(config('anthropic'), t)).generate('track my plants');
       expect(r.ok).assertTrue();
-      expect(r.origin).assertEqual('model');
+      expect(r.origin).assertEqual('cloud');
       expect(r.capsule?.id).assertEqual('plants');
       expect(t.sent[0].url).assertEqual('https://api.anthropic.com/v1/messages');
       expect(t.sent[0].headers['x-api-key']).assertEqual('test-key');
