@@ -24,27 +24,13 @@ As of 2026-10-03.
 | | State |
 | --- | --- |
 | Mock server | Passes `test_api.sh` (72 checks) and its unit tests. |
-| Host unit tests | `make -C tests test`: 1,092 checks in C on the firmware's own source files, 19 Python tests on the mock. All pass. |
-| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,533,552 bytes, 82% of the app partition free. |
+| Host unit tests | `make -C tests test`: 1,108 checks in C on the firmware's own source files, 19 Python tests on the mock. All pass. |
+| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,533,616 bytes, 82% of the app partition free. |
 | Boot on hardware | One board (revision V2): boots, display and touch drivers start, accelerometer and audio codec answer, HTTP server starts. |
 | Wi-Fi on hardware | Joins the phone hotspot (WPA3) and the venue network `HackYeah2026`, which it sees on 2.4 GHz channel 1. Joining the venue network often takes several attempts. |
-| HTTP API on hardware | **Confirmed with the previous build**: `test_api.sh` passed 50 of 50 against the board. **The current build has not been tested over HTTP on the board**, see below. |
+| HTTP API on hardware | **Confirmed**: `./test_api.sh http://<board ip>` passes 72 of 72 against the board over the venue Wi-Fi. JSON nested 300 and 1024 levels deep gets a 400 and the board keeps running (it used to reboot). |
 | Screen, touch, beep | **Confirmed on hardware** by the owner: the screen shows the UI, a tap on + raises the count, the speaker beeps when a timer ends. `/screenshot` works on the board. |
 | Rep counting | Experimental and **still untuned**. Off unless asked for. |
-
-**Open point.** The current build fixes a crash: JSON nested about 100 levels deep overflowed
-the HTTP task's stack and rebooted the board. The fix and the 22 new checks in `test_api.sh`
-pass on the host and against the mock. They could not be run against the board: after the
-last flash the board joined the venue network while the laptop was on the phone hotspot,
-which had moved to 6 GHz where the board cannot follow. On the board the new build has only
-been seen to boot, join Wi-Fi and keep announcing its address. With both on one network:
-
-```sh
-./test_api.sh http://<board ip>                      # wants: 72 passed, 0 failed
-curl -s -m 5 -X POST http://<board ip>/capsule -d "$(printf '[%.0s' $(seq 300))"
-                                                     # wants: {"error":"JSON nested too deeply"}
-curl -s http://<board ip>/state                      # still answers: the board did not reboot
-```
 
 Full list in [Tested and not tested](#tested-and-not-tested).
 
@@ -148,7 +134,9 @@ Errors are `{"error":"<what was wrong>"}`.
 | 500 | Out of memory on the board; a bug in the mock |
 | 503 | `motion_on` for a counter on a board whose motion sensor did not start; `/screenshot` without a display |
 
-After a 408 or a 413 the connection is closed. Half a surrogate pair (`"\ud83d"`) is not a
+After a 408 the connection is closed. A body that is too large is read and thrown away up
+to 8192 bytes beyond the limit, so that the 413 reaches the client; past that the connection
+is closed, and the client may see a reset instead of the answer. Half a surrogate pair (`"\ud83d"`) is not a
 character: such a body is not JSON and gets the first 400.
 
 A rejected request leaves the current capsule untouched.
@@ -342,19 +330,24 @@ Tested:
   `/capsule` and `/action`, 408/413 closing the socket, the `/screenshot` BMP layout.
 - `mock_esp32.py` against `test_api.sh`: 72 of 72 checks, and `tests/test_mock.py`.
 - Firmware build: no compiler warnings, ESP-IDF v5.5, Waveshare BSP 2.0.3, LVGL 9.6.0.
-- On one V2 board, with the build before the review fixes: `test_api.sh` 50 of 50 over
-  Wi-Fi; the screen shows the UI; a tap on + raises the count; the speaker beeps at the end
-  of a timer; `GET /screenshot` returns the picture.
-- On the same board, with the current build, from the serial log: boots without a crash,
-  display, touch, accelerometer and codec initialise, HTTP server starts, joins the hotspot
-  and the venue network, prints the `HARMONISER_IP=` line every 10 seconds.
+- On one V2 board, over the venue Wi-Fi, with the serial log captured throughout:
+  `test_api.sh` 72 of 72; bodies of 300 and 1024 `[` and of 200 nested objects to `/capsule`
+  and `/action` each get `400 JSON nested too deeply`, with no panic and no second boot
+  banner, and `/state` answers afterwards; bodies of 1025 to 8000 bytes get the 413 with
+  its JSON text; `GET /screenshot` returns a 238,432-byte BMP.
+- On the same board, seen by the owner with an earlier build: the screen shows the UI, a
+  tap on + raises the count, the speaker beeps at the end of a timer.
+- From the serial log: boots without a crash, display, touch, accelerometer and codec
+  initialise, joins the hotspot and the venue network, prints the `HARMONISER_IP=` line
+  every 10 seconds.
 - `find_esp32.sh`: the not-found path, and the MAC lookup using another device's MAC
   (before the change that makes it check the API; not re-run since).
 
 Not tested:
 
-- **The current build's HTTP API on the board**, including the fix for the nested-JSON
-  crash, the label checks and the closed socket after a 413. See [Status](#status).
+- The 408 path on the board (a body that stops arriving), and a body more than 8192 bytes
+  over the limit. Both are covered by the host tests only.
+- The 503 for `motion_on` (this board's sensor works), also host tests only.
 - The link check that rejoins after a lost disconnect event: it needs a network that
   drops the board without telling it.
 - Rep counting with a moving board. Thresholds are guesses.
