@@ -1,0 +1,18 @@
+# Research pack
+
+AI-assisted desk research written during HackYeah 2026 (3–4 October). None of it was run on a
+device or emulator. Each file says what it read and what it could not verify. Line references
+are to the commit named in the file.
+
+| File | What it answers |
+| --- | --- |
+| [`SUBMISSION_CHECKLIST.md`](SUBMISSION_CHECKLIST.md) | Every deliverable and rule for the Huawei track, its status in the repositories, statements the code does not back, and the order of work before the deadline. **Read this first.** |
+| [`DEMO_REVIEW.md`](DEMO_REVIEW.md) | The demo script scored against the judging criteria, risky beats, and two rewritten cuts shot by shot: "everything landed" and "safe". |
+| [`DESIGN_PRINCIPLES.md`](DESIGN_PRINCIPLES.md) | Sourced UI/UX principles turned into rules for capsules, cards, widgets and the wrist screen; layout templates; tokens; an audit of the current cards with changes by file and line. |
+| [`../JUDGES_FEEDBACK_RESEARCH.md`](../JUDGES_FEEDBACK_RESEARCH.md) | Why "task list + weather" failed, the fix order, a router design, on-device models, widget sizing. |
+| [`../WIDGET_RESEARCH.md`](../WIDGET_RESEARCH.md) | Adding a widget per capsule, widget reliability, card design rules. |
+| [`../HARMONYOS_DIGEST.md`](../HARMONYOS_DIGEST.md) | ArkTS / ArkUI cheat sheet for assistants. |
+| [`../SKILLS_VETTING.md`](../SKILLS_VETTING.md) | Safety and accuracy review of community skill documents. |
+| [`../../esp32-companion/RELAY.md`](../../esp32-companion/RELAY.md) | The device relay contract. |
+
+Some of the linked files arrive through separate pull requests and may not be on `main` yet.
