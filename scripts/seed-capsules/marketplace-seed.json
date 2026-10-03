@@ -1022,7 +1022,10 @@
       {
        "type": "button",
        "label": "Start washer",
-       "action": "startTimer:washer"
+       "do": [
+        "stopTimer:dryer",
+        "startTimer:washer"
+       ]
       },
       {
        "type": "button",
@@ -1037,11 +1040,6 @@
     {
      "type": "row",
      "items": [
-      {
-       "type": "button",
-       "label": "Start both",
-       "action": "startAllTimers"
-      },
       {
        "type": "button",
        "label": "Stop all",

@@ -56,6 +56,8 @@ export default function templatesTest() {
       expect(m.template.id).assertEqual('pomodoro');
       expect(JSON.stringify(timers(m.capsule))).assertEqual('[50,10]');
       expect(JSON.stringify(m.capsule)).assertContain('"do":["stopTimer:focus","startTimer:rest","increment:rounds"]');
+      expect(JSON.stringify(m.capsule)).assertContain('"label":"Start focus","action":"","do":["stopTimer:rest","startTimer:focus"]');
+      expect(JSON.stringify(m.capsule).indexOf('startAllTimers')).assertEqual(-1); // BUG-10: no Start all
     });
 
     it('numbers next to a hint word go to that slot', 0, () => {
