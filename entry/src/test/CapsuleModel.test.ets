@@ -3,7 +3,10 @@ import {
   createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig, parseModelConfigs, DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_MISTRAL_MODEL
 } from '../main/ets/core/ModelProvider';
-import { CapsuleModel, extractJson, retryMessage, SYSTEM_PROMPT, V1_EXAMPLES } from '../main/ets/core/CapsuleModel';
+import {
+  CapsuleModel, CapsuleModelOptions, extractJson, parsePlan, parseSelfCheck, PLAN_PROMPT, retryMessage, SYSTEM_PROMPT,
+  V1_EXAMPLES
+} from '../main/ets/core/CapsuleModel';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 
 const GOOD: string =
@@ -41,6 +44,14 @@ class FakeTransport implements HttpTransport {
     return next ?? { status: 500, body: 'no more replies' };
   }
 }
+
+/** Tests of the single capsule pass (validation, retry, extraction) skip the plan and self-check calls. */
+const ONE_PASS: CapsuleModelOptions = { planAndCheck: false };
+
+const PLAN: string = '{"plan":["Show a checklist of plants","One item: Fern"]}';
+/** A valid capsule that the self-check might return as a revision. */
+const REVISED: string =
+  '{"schemaVersion":0,"id":"plants","name":"My plants","permissions":[],"ui":[{"type":"checklist","id":"p","items":["Fern","Ivy"]}]}';
 
 function anthropicReply(text: string): HttpResponse {
   return { status: 200, body: `{"content":[{"type":"text","text":${JSON.stringify(text)}}]}` };
@@ -124,7 +135,7 @@ export default function capsuleModelTest() {
 
     it('sends request plus schema to Anthropic and returns a validated capsule', 0, async (done: Function) => {
       const t = new FakeTransport([anthropicReply('```json\n' + GOOD + '\n```')]);
-      const r = await new CapsuleModel(createProvider(config('anthropic'), t)).generate('track my plants');
+      const r = await new CapsuleModel(createProvider(config('anthropic'), t), ONE_PASS).generate('track my plants');
       expect(r.ok).assertTrue();
       expect(r.origin).assertEqual('cloud:anthropic');
       expect(r.capsule?.id).assertEqual('plants');
@@ -137,7 +148,7 @@ export default function capsuleModelTest() {
 
     it('calls Mistral chat completions with JSON output mode', 0, async (done: Function) => {
       const t = new FakeTransport([openaiReply(GOOD)]);
-      const r = await new CapsuleModel(createProvider(config('mistral'), t)).generate('track my plants');
+      const r = await new CapsuleModel(createProvider(config('mistral'), t), ONE_PASS).generate('track my plants');
       expect(r.ok).assertTrue();
       expect(r.origin).assertEqual('cloud-eu:mistral');
       expect(t.sent[0].url).assertEqual('https://api.mistral.ai/v1/chat/completions');
@@ -150,15 +161,75 @@ export default function capsuleModelTest() {
 
     it('reports Mistral HTTP errors by name', 0, async (done: Function) => {
       const t = new FakeTransport([{ status: 401, body: '{"message":"Unauthorized"}' }]);
-      const r = await new CapsuleModel(createProvider(config('mistral'), t)).generate('track my plants');
+      const r = await new CapsuleModel(createProvider(config('mistral'), t), ONE_PASS).generate('track my plants');
       expect(r.ok).assertFalse();
       expect(r.error).assertContain('Mistral returned HTTP 401');
       done();
     });
 
+    it('plans, writes the capsule from the plan, then self-checks it', 0, async (done: Function) => {
+      const t = new FakeTransport([anthropicReply(PLAN), anthropicReply(GOOD), anthropicReply('{"complete": true}')]);
+      const r = await new CapsuleModel(createProvider(config('anthropic'), t)).generate('track my plants');
+      expect(r.ok).assertTrue();
+      expect(r.capsule?.name).assertEqual('Plants');
+      expect(r.origin).assertEqual('cloud:anthropic');
+      expect(t.sent.length).assertEqual(3);
+      expect(t.sent[0].body).assertContain(JSON.stringify(PLAN_PROMPT).slice(1, -1));
+      expect(t.sent[1].body).assertContain('Plan (implement every point):\\n1. Show a checklist of plants\\n2. One item: Fern');
+      expect(t.sent[2].body).assertContain('Check that capsule against every point of the plan');
+      done();
+    });
+
+    it('uses the self-check revision when it is valid', 0, async (done: Function) => {
+      const revision = `{"complete": false, "missing": ["Ivy"], "capsule": ${REVISED}}`;
+      const t = new FakeTransport([openaiReply(PLAN), openaiReply(GOOD), openaiReply(revision)]);
+      const r = await new CapsuleModel(createProvider(config('mistral'), t)).generate('track my plants');
+      expect(r.ok).assertTrue();
+      expect(r.capsule?.name).assertEqual('My plants');
+      expect(r.origin).assertEqual('cloud-eu:mistral');
+      done();
+    });
+
+    it('keeps the valid capsule when the revision is invalid or the check fails', 0, async (done: Function) => {
+      const bad = `{"complete": false, "capsule": ${BAD}}`;
+      const t1 = new FakeTransport([anthropicReply(PLAN), anthropicReply(GOOD), anthropicReply(bad)]);
+      const r1 = await new CapsuleModel(createProvider(config('anthropic'), t1)).generate('track my plants');
+      expect(r1.ok).assertTrue();
+      expect(r1.capsule?.name).assertEqual('Plants');
+      const t2 = new FakeTransport([anthropicReply(PLAN), anthropicReply(GOOD), { status: 500, body: 'down' }]);
+      const r2 = await new CapsuleModel(createProvider(config('anthropic'), t2)).generate('track my plants');
+      expect(r2.ok).assertTrue();
+      expect(r2.capsule?.name).assertEqual('Plants');
+      done();
+    });
+
+    it('retries with validator errors after planning, and skips the check without a plan', 0, async (done: Function) => {
+      const t = new FakeTransport([anthropicReply(PLAN), anthropicReply(BAD), anthropicReply(GOOD),
+        anthropicReply('{"complete": true}')]);
+      const r = await new CapsuleModel(createProvider(config('anthropic'), t)).generate('plants');
+      expect(r.ok).assertTrue();
+      expect(t.sent.length).assertEqual(4);
+      expect(t.sent[2].body).assertContain('The validator rejected that capsule');
+      const noPlan = new FakeTransport([anthropicReply('no plan here'), anthropicReply(GOOD)]);
+      const r2 = await new CapsuleModel(createProvider(config('anthropic'), noPlan)).generate('plants');
+      expect(r2.ok).assertTrue();
+      expect(noPlan.sent.length).assertEqual(2);
+      done();
+    });
+
+    it('parses plans and self-check replies defensively', 0, () => {
+      expect(parsePlan('```json\n{"plan":["a"," b ",3,""]}\n```').join('|')).assertEqual('a|b');
+      expect(parsePlan('{"plan":["1","2","3","4","5","6","7","8","9"]}').length).assertEqual(8);
+      expect(parsePlan('nonsense').length).assertEqual(0);
+      expect(parseSelfCheck('{"complete": true}')).assertNull();
+      expect(parseSelfCheck('{"complete": false}')).assertNull();
+      expect(parseSelfCheck(`{"complete": false, "capsule": ${REVISED}}`)).assertContain('My plants');
+      expect(parseSelfCheck('garbage')).assertNull();
+    });
+
     it('works with an OpenAI-compatible provider', 0, async (done: Function) => {
       const t = new FakeTransport([openaiReply(GOOD)]);
-      const r = await new CapsuleModel(createProvider(config('openai'), t)).generate('track my plants');
+      const r = await new CapsuleModel(createProvider(config('openai'), t), ONE_PASS).generate('track my plants');
       expect(r.ok).assertTrue();
       expect(t.sent[0].url).assertEqual('https://api.openai.com/v1/chat/completions');
       expect(t.sent[0].headers['authorization']).assertEqual('Bearer test-key');
@@ -168,7 +239,7 @@ export default function capsuleModelTest() {
 
     it('retries once with validator errors, then succeeds', 0, async (done: Function) => {
       const t = new FakeTransport([anthropicReply(BAD), anthropicReply(GOOD)]);
-      const r = await new CapsuleModel(createProvider(config('anthropic'), t)).generate('plants');
+      const r = await new CapsuleModel(createProvider(config('anthropic'), t), ONE_PASS).generate('plants');
       expect(r.ok).assertTrue();
       expect(t.sent.length).assertEqual(2);
       expect(t.sent[1].body).assertContain('needs permission');
@@ -195,7 +266,7 @@ export default function capsuleModelTest() {
 
     it('never returns an invalid capsule', 0, async (done: Function) => {
       const t = new FakeTransport([anthropicReply(BAD), anthropicReply('sorry, I cannot')]);
-      const r = await new CapsuleModel(createProvider(config('anthropic'), t)).generate('plants');
+      const r = await new CapsuleModel(createProvider(config('anthropic'), t), ONE_PASS).generate('plants');
       expect(r.ok).assertFalse();
       expect(r.capsule).assertUndefined();
       expect(r.error).assertContain('did not produce a valid capsule');
@@ -216,7 +287,7 @@ export default function capsuleModelTest() {
 
     it('rejects empty and overlong requests without calling the model', 0, async (done: Function) => {
       const t = new FakeTransport([]);
-      const m = new CapsuleModel(createProvider(config('anthropic'), t));
+      const m = new CapsuleModel(createProvider(config('anthropic'), t), ONE_PASS);
       expect((await m.generate('  ')).error).assertContain('empty');
       expect((await m.generate('x'.repeat(501))).error).assertContain('too long');
       expect(t.sent.length).assertEqual(0);

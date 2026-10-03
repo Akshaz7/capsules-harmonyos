@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig } from '../main/ets/core/ModelProvider';
-import { CapsuleModel, SYSTEM_PROMPT } from '../main/ets/core/CapsuleModel';
+import { CapsuleModel, PLAN_PROMPT, SYSTEM_PROMPT } from '../main/ets/core/CapsuleModel';
 import {
   CapsuleSource, CLOUD_OFF, generateCapsuleWith, needsLogic, ON_DEVICE_ONLY
 } from '../main/ets/core/CapsuleGenerator';
@@ -31,10 +31,11 @@ class CountingTransport implements HttpTransport {
   }
 }
 
-function modelWith(t: HttpTransport, provider?: string): CapsuleModel {
+/** Routing tests count one call per cloud generation, so they skip the plan and self-check calls. */
+function modelWith(t: HttpTransport, provider?: string, planAndCheck?: boolean): CapsuleModel {
   const config = parseModelConfig(`{"provider":"${provider ?? 'mistral'}","apiKey":"test-key","model":"m"}`)
     .config as ModelConfig;
-  return new CapsuleModel(createProvider(config, t));
+  return new CapsuleModel(createProvider(config, t), { planAndCheck: planAndCheck ?? false });
 }
 
 /** A stand-in on-device source that returns a fixed result and counts calls. */
@@ -294,17 +295,21 @@ export default function capsuleGeneratorTest() {
       done();
     });
 
-    it('sends only the request text to the cloud', 0, async (done: Function) => {
+    it('sends only the request text to the cloud, in every step', 0, async (done: Function) => {
       const t = new CountingTransport();
-      await generateCapsuleWith(LOGIC, [modelWith(t)], '', onDeviceReturning(LOCAL));
-      const body = JSON.parse(t.bodies[0]) as OpenAIBodyShape;
-      expect(body.messages.length).assertEqual(2);
-      expect(body.messages[0].role).assertEqual('system');
-      expect(body.messages[0].content).assertEqual(SYSTEM_PROMPT);
-      expect(body.messages[1].role).assertEqual('user');
-      expect(body.messages[1].content).assertEqual(`Request: ${LOGIC}`);
-      expect(Object.keys(JSON.parse(t.bodies[0]) as Record<string, Object>).sort().join(','))
-        .assertEqual('max_tokens,messages,model,response_format');
+      await generateCapsuleWith(LOGIC, [modelWith(t, 'mistral', true)], '', onDeviceReturning(LOCAL));
+      // GOOD has no "plan", so this run is plan -> capsule (no self-check without a plan).
+      expect(t.bodies.length).assertEqual(2);
+      t.bodies.forEach((raw: string, i: number) => {
+        const body = JSON.parse(raw) as OpenAIBodyShape;
+        expect(body.messages[0].role).assertEqual('system');
+        expect(body.messages[0].content).assertEqual(i === 0 ? PLAN_PROMPT : SYSTEM_PROMPT);
+        expect(body.messages[1].role).assertEqual('user');
+        expect(body.messages[1].content).assertEqual(`Request: ${LOGIC}`);
+        expect(body.messages.length).assertEqual(2);
+        expect(Object.keys(JSON.parse(raw) as Record<string, Object>).sort().join(','))
+          .assertEqual('max_tokens,messages,model,response_format');
+      });
       done();
     });
   });
