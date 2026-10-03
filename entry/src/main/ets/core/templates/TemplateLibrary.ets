@@ -612,6 +612,10 @@ export interface TemplateMatch {
   unfilledSlots: string[];
   template: TemplateEntry;
   values: Record<string, SlotValue>;
+  /** "template" (built-in, filled on the phone) or "community" (a marketplace capsule, see MarketMatch.ets). */
+  origin: 'template' | 'community';
+  /** What it was made from, e.g. "Tennis scoreboard" or the marketplace capsule's name. */
+  source: string;
 }
 
 /**
@@ -629,7 +633,10 @@ export function matchTemplateIn(library: TemplateLibrary, request: string, thres
     }
     const f = fillTemplate(hit.template, request);
     if (f.capsule !== undefined) {
-      return { capsule: f.capsule, score: hit.score, unfilledSlots: f.unclear, template: hit.template, values: f.values };
+      return {
+        capsule: f.capsule, score: hit.score, unfilledSlots: f.unclear, template: hit.template, values: f.values,
+        origin: 'template', source: hit.template.name
+      };
     }
   }
   return null;

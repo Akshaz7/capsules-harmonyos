@@ -116,7 +116,8 @@ export async function fillUnclearSlots(match: TemplateMatch, request: string, mo
     return match;
   }
   return {
-    capsule: f.capsule, score: match.score, template: match.template, values: f.values,
+    capsule: f.capsule, score: match.score, template: match.template, values: f.values, origin: match.origin,
+    source: match.source,
     unfilledSlots: match.unfilledSlots.filter((n: string) => names.indexOf(n) < 0)
   };
 }

@@ -11,6 +11,37 @@ import { fillUnclearSlots, parseSlotReply, slotPrompt } from '../main/ets/core/t
 import { MemoryStore, normaliseRequest, RequestCache } from '../main/ets/core/templates/RequestCache';
 import { CapsuleSource, generateCapsuleWith, LocalSources } from '../main/ets/core/CapsuleGenerator';
 import { GenerateResult } from '../main/ets/core/CapsuleTypes';
+import { MarketReply, MarketTransport, matchTemplateAsync } from '../main/ets/core/templates/MarketMatch';
+
+const STREAK_CAPSULE: string = '{"schemaVersion":1,"id":"theirs","name":"Pomodoro streak","permissions":[],' +
+  '"state":{"days":{"type":"number","initial":0}},"ui":[{"type":"display","text":"{days} days"},' +
+  '{"type":"button","label":"Done today","do":[{"set":"days","to":"days + 1"}]}]}';
+
+/** Fake marketplace: canned replies by URL part, a call log, and an optional delay. */
+class FakeMarket implements MarketTransport {
+  calls: string[] = [];
+  search: string = '';
+  capsule: string = '';
+  delayMs: number = 0;
+
+  async get(url: string, timeoutMs: number): Promise<MarketReply> {
+    this.calls.push(url);
+    if (this.delayMs > 0) {
+      await new Promise<void>((done: () => void) => {
+        setTimeout(done, this.delayMs);
+      });
+    }
+    const body = url.indexOf('/api/capsules?') >= 0 ? this.search : this.capsule;
+    return { status: body.length > 0 ? 200 : 404, body: body };
+  }
+}
+
+function marketWith(name: string, tags: string, capsule: string): FakeMarket {
+  const m = new FakeMarket();
+  m.search = `{"capsules":[{"id":"m1","name":"${name}","description":"","tags":${tags}}],"nextCursor":null}`;
+  m.capsule = capsule.length > 0 ? `{"id":"m1","capsule":${capsule}}` : '';
+  return m;
+}
 
 class CountingSource implements CapsuleSource {
   calls: number = 0;
@@ -133,7 +164,7 @@ export default function templatesTest() {
       const base = match('pomodoro');
       const m: TemplateMatch = {
         capsule: base.capsule, score: base.score, template: base.template, values: base.values,
-        unfilledSlots: ['work', 'rest']
+        unfilledSlots: ['work', 'rest'], origin: 'template', source: base.source
       };
       const request = 'pomodoro focus fifty 50 then rest 7';
       expect(slotPrompt(m.template, request, m.unfilledSlots)).assertContain('{"work":NUMBER,"rest":NUMBER}');
@@ -189,6 +220,58 @@ export default function templatesTest() {
       expect(smarter.ok).assertFalse(); // "Make it smarter" skips the cache (no cloud configured here)
       const plain = await generateCapsuleWith('tennis scoreboard me vs Sam', [], '', device);
       expect(plain.origin).assertEqual('on-device'); // without local sources nothing changes
+    });
+  it('marketplace: offline or no base URL -> local only, no request', 0, async () => {
+      const m = marketWith('Pomodoro streak', '["pomodoro","streak"]', STREAK_CAPSULE);
+      const off = await matchTemplateAsync(library, 'pomodoro streak', { baseUrl: 'https://m.example', transport: m,
+        online: false });
+      expect(off === null).assertTrue(); // local pomodoro alone scores too low for "pomodoro streak"
+      const none = await matchTemplateAsync(library, 'pomodoro 50/10', { baseUrl: '', transport: m });
+      expect(none?.origin).assertEqual('template');
+      expect(m.calls.length).assertEqual(0);
+    });
+
+    it('marketplace: a timeout falls back to local templates', 0, async () => {
+      const m = marketWith('Tennis pro', '["tennis","scoreboard"]', STREAK_CAPSULE);
+      m.delayMs = 300;
+      const r = await matchTemplateAsync(library, 'tennis scoreboard me vs Sam',
+        { baseUrl: 'https://m.example', transport: m, timeoutMs: 50 });
+      expect(r?.origin).assertEqual('template');
+      expect(r?.capsule.name).assertEqual('Tennis: Me vs Sam');
+    });
+
+    it('marketplace: a better marketplace hit beats a weaker local one, validated with a fresh id', 0, async () => {
+      const m = marketWith('Pomodoro streak', '["pomodoro","streak","focus-streak"]', STREAK_CAPSULE);
+      const r = await matchTemplateAsync(library, 'pomodoro streak', { baseUrl: 'https://m.example/', transport: m });
+      expect(r?.origin).assertEqual('community');
+      expect(r?.source).assertEqual('Pomodoro streak');
+      expect(r?.capsule.name).assertEqual('Pomodoro streak');
+      expect(r?.capsule.id.startsWith('community-')).assertTrue();
+      expect(m.calls[0]).assertEqual('https://m.example/api/capsules?q=pomodoro%20streak&limit=20');
+      expect(m.calls[1]).assertEqual('https://m.example/api/capsules/m1');
+    });
+
+    it('marketplace: local wins a tie, and invalid marketplace JSON is dropped', 0, async () => {
+      const tie = marketWith('Tennis scoreboard', '["tennis","scoreboard"]', STREAK_CAPSULE);
+      const t = await matchTemplateAsync(library, 'tennis scoreboard', { baseUrl: 'https://m.example', transport: tie });
+      expect(t?.score).assertEqual(1);
+      expect(t?.origin).assertEqual('template');
+      expect(tie.calls.length).assertEqual(1); // searched, but nothing downloaded
+      const bad = marketWith('Pomodoro streak', '["pomodoro","streak"]',
+        '{"schemaVersion":1,"id":"x","name":"Evil","permissions":[],"ui":[{"type":"script","code":"rm"}]}');
+      expect(await matchTemplateAsync(library, 'pomodoro streak', { baseUrl: 'https://m.example', transport: bad }) ===
+        null).assertTrue();
+      const garbage = new FakeMarket();
+      garbage.search = '<html>502</html>';
+      const g = await matchTemplateAsync(library, 'pomodoro 50/10', { baseUrl: 'https://m.example', transport: garbage });
+      expect(g?.origin).assertEqual('template');
+    });
+
+    it('routing: a community capsule comes back with origin community', 0, async () => {
+      const m = marketWith('Pomodoro streak', '["pomodoro","streak"]', STREAK_CAPSULE);
+      const local: LocalSources = { library: library, market: { baseUrl: 'https://m.example', transport: m } };
+      const r = await generateCapsuleWith('pomodoro streak', [], '', new CountingSource(), undefined, local);
+      expect(r.origin).assertEqual('community');
     });
 });
 }

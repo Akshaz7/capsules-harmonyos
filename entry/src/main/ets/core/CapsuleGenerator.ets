@@ -5,7 +5,8 @@
  * Policy (mode "smart", the default):
  *   0. The same request made a capsule before (request cache): reuse it.
  *   1. A built-in rule matches: use it. Nothing leaves the device.
- *   1b. A built-in template explains the request (core/templates): fill it on the phone (origin "template").
+ *   1b. A built-in template explains the request (core/templates): fill it on the phone (origin "template"),
+ *       or a better-scoring live marketplace capsule (origin "community"; 1.5 s budget, skipped offline).
  *   2. The request implies logic the on-device templates cannot express (scoring, converters, calculators,
  *      quizzes, streaks, conditions, inputs, lists; see needsLogic) and a cloud provider may be used: ask
  *      the cloud first. If the cloud fails, try on-device. If the cloud is configured but this call does
@@ -20,7 +21,8 @@ import { validateCapsule } from './CapsuleValidator';
 import { parseRequest } from './RuleParser';
 import { CapsuleModel } from './CapsuleModel';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
-import { matchTemplateIn, TemplateLibrary, TemplateMatch } from './templates/TemplateLibrary';
+import { TemplateLibrary, TemplateMatch } from './templates/TemplateLibrary';
+import { MarketOptions, matchTemplateAsync } from './templates/MarketMatch';
 import { fillUnclearSlots, SlotModel } from './templates/SlotFill';
 import { RequestCache } from './templates/RequestCache';
 import { capsuleFromSharedText, MAX_SHARED_TEXT, SHARED_EMPTY, SHARED_NOT_RECOGNISED, SHARED_TOO_LONG } from './SharedText';
@@ -43,6 +45,8 @@ export interface LocalSources {
   library?: TemplateLibrary;
   /** The on-device model, to fill template slots the rules missed. */
   slotModel?: SlotModel;
+  /** The live marketplace, searched with the templates (1.5 s budget; skipped offline or without a base URL). */
+  market?: MarketOptions;
 }
 
 export interface GenerateOptions {
@@ -167,13 +171,14 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
     // A rule produced an invalid capsule (a bug); fall through to the models rather than return it.
   }
 
-  // A built-in template that explains the whole request: made on the phone, no model, no internet.
-  let template: TemplateMatch | null = local?.library !== undefined ? matchTemplateIn(local.library, request) : null;
+  // A built-in template or a marketplace capsule that explains the whole request, without a model.
+  let template: TemplateMatch | null = local?.library !== undefined ?
+    await matchTemplateAsync(local.library, request, local.market) : null;
   if (template !== null) {
     if (template.unfilledSlots.length > 0 && local?.slotModel !== undefined) {
       template = await fillUnclearSlots(template, request, local.slotModel); // never worse than the rules' values
     }
-    return { ok: true, capsule: template.capsule, origin: 'template', details: [] };
+    return { ok: true, capsule: template.capsule, origin: template.origin, details: [] };
   }
 
   const logic = cloudFirst(request);

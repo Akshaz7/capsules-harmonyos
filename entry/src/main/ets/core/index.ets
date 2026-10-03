@@ -25,7 +25,7 @@ import {
   createProvider, HttpResponse, HttpTransport, isEuProvider, ModelConfig, ModelConfigResult, parseModelConfig, ProviderName,
   parseModelConfigs
 } from './ModelProvider';
-import { getRequestCache, getTemplateLibrary } from './templates';
+import { getMarketOptions, getRequestCache, getTemplateLibrary } from './templates';
 import { CactusProvider, DeviceOcr, loadImage, OnDeviceStatus, runPhotoEvalIfRequested } from './providers/CactusProvider';
 import { generateFromImageWith } from './providers/CloudVision';
 import { runSpeechEvalIfRequested } from './providers/SpeechInput';
@@ -47,8 +47,8 @@ export {
   SHARED_TOO_LONG
 } from './SharedText';
 export { OnDeviceStatus } from './providers/CactusProvider';
-export { initTemplates, matchTemplate, getTemplateLibrary, getRequestCache, TEMPLATE_BADGE, TEMPLATE_ORIGIN
-} from './templates';
+export { initTemplates, matchTemplate, matchTemplateAsync, getTemplateLibrary, getRequestCache, TEMPLATE_BADGE,
+  TEMPLATE_ORIGIN } from './templates';
 export { VoiceInput, VOICE_LANGUAGE, VOICE_NOTHING_HEARD, VOICE_PERMISSION, VOICE_UNAVAILABLE
 } from './providers/SpeechInput';
 export { IMAGE_NOT_READABLE, IMAGE_NOT_UNDERSTOOD, IMAGE_TOO_LARGE, IMAGE_UNSUPPORTED, MAX_IMAGE_BYTES
@@ -232,7 +232,7 @@ async function onDeviceSlots(prompt: string): Promise<string> {
 }
 
 /**
- * Routes a request: the request cache, rules, built-in templates, then on-device and the cloud as the policy
+ * Routes a request: the request cache, rules, built-in templates and the live marketplace, then on-device and the cloud as the policy
  * in CapsuleGenerator.ets says (mode "smart" by default; the cloud only with EU providers unless
  * options.allowNonEu). Returns a validated capsule or a clear error. Only the request text is sent to a cloud
  * provider. Model-made capsules are cached for the same request; "Make it smarter" (cloudOnly) skips the cache
@@ -241,7 +241,7 @@ async function onDeviceSlots(prompt: string): Promise<string> {
 export async function generateCapsule(request: string, options?: GenerateOptions): Promise<GenerateResult> {
   const cache = getRequestCache();
   const r = await generateCapsuleWith(request, models, modelError, lazyOnDevice, options,
-    { cache: cache, library: getTemplateLibrary(), slotModel: onDeviceSlots });
+    { cache: cache, library: getTemplateLibrary(), slotModel: onDeviceSlots, market: getMarketOptions() });
   if (r.ok && r.capsule !== undefined && r.origin !== undefined && r.origin !== 'rules' && r.origin !== 'template') {
     cache.put(request, r.capsule, r.origin); // async; a failed write only means it is made again next time
   }
