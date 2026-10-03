@@ -4,8 +4,8 @@ import {
   DEFAULT_MISTRAL_MODEL
 } from '../main/ets/core/ModelProvider';
 import {
-  CapsuleModel, CapsuleModelOptions, extractJson, parsePlan, parseSelfCheck, PLAN_PROMPT, retryMessage, SYSTEM_PROMPT,
-  V1_EXAMPLES
+  CapsuleModel, CapsuleModelOptions, extractJson, NOT_AN_APP, parsePlan, parsePlanReply, parseSelfCheck, PLAN_PROMPT,
+  refusalIn, retryMessage, SYSTEM_PROMPT, V1_EXAMPLES
 } from '../main/ets/core/CapsuleModel';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 
@@ -225,6 +225,49 @@ export default function capsuleModelTest() {
       expect(parseSelfCheck('{"complete": false}')).assertNull();
       expect(parseSelfCheck(`{"complete": false, "capsule": ${REVISED}}`)).assertContain('My plants');
       expect(parseSelfCheck('garbage')).assertNull();
+    });
+
+    it('returns an error, not a capsule, for nonsense like "asdf"', 0, async (done: Function) => {
+      const t = new FakeTransport([openaiReply('{"error": "asdf is not an app request"}')]);
+      const r = await new CapsuleModel(createProvider(config('mistral'), t)).generate('asdf');
+      expect(r.ok).assertFalse();
+      expect(r.capsule).assertUndefined();
+      expect(r.failure).assertEqual('not-an-app');
+      expect(r.error).assertEqual(NOT_AN_APP);
+      expect(r.details.join()).assertContain('asdf is not an app request');
+      expect(t.sent.length).assertEqual(1);
+      const onePass = new FakeTransport([openaiReply('{"error": "gibberish"}')]);
+      const r2 = await new CapsuleModel(createProvider(config('mistral'), onePass), ONE_PASS).generate('asdf');
+      expect(r2.failure).assertEqual('not-an-app');
+      expect(onePass.sent.length).assertEqual(1);
+      done();
+    });
+
+    it('lists unsupported capabilities from the plan step instead of building a weaker capsule', 0,
+      async (done: Function) => {
+        const t = new FakeTransport([anthropicReply(
+          '{"unsupported": ["contacts", "SMS"], "message": "Capsules cannot read contacts or send texts."}')]);
+        const r = await new CapsuleModel(createProvider(config('anthropic'), t)).generate('text all my contacts happy new year');
+        expect(r.ok).assertFalse();
+        expect(r.failure).assertEqual('unsupported');
+        expect((r.unsupported ?? []).join('|')).assertEqual('contacts|SMS');
+        expect(r.error).assertEqual("Capsules can't do this: it needs contacts, SMS.");
+        expect(t.sent.length).assertEqual(1);
+        expect(t.sent[0].body).assertContain('They cannot read or send contacts, SMS');
+        done();
+      });
+
+    it('reads plan replies: plan, unsupported or error', 0, () => {
+      expect(parsePlanReply('{"plan":["a"]}').plan.join()).assertEqual('a');
+      const u = parsePlanReply('{"unsupported":["camera",""," payments "],"message":"no camera"}');
+      expect(u.unsupported.join('|')).assertEqual('camera|payments');
+      expect(u.plan.length).assertEqual(0);
+      expect(u.message).assertEqual('no camera');
+      expect(parsePlanReply('{"error":"nonsense"}').notAnApp).assertTrue();
+      expect(parsePlanReply('{"plan":["a"],"error":"x"}').notAnApp).assertFalse();
+      expect(refusalIn('{"error":"nope"}')).assertEqual('nope');
+      expect(refusalIn('{"schemaVersion":0,"error":"x","ui":[]}')).assertNull();
+      expect(refusalIn('not json')).assertNull();
     });
 
     it('works with an OpenAI-compatible provider', 0, async (done: Function) => {

@@ -67,7 +67,9 @@ const LOGIC_PATTERNS: RegExp[] = [
   // inputs and lists
   /\b(type|enter|input)\b/i,
   /\b(add (items?|things|it) to|shopping list|to-?do list|list (that|where|of things))\b/i,
-  /%|\d\s*[-+*/x×]\s*\d/
+  /%|\d\s*[-+*/x×]\s*\d/,
+  // capabilities capsules do not have: the cloud plan step reports them instead of a weaker capsule
+  /\b(contacts?|sms|text (messages?|my|them)|phone calls?|e-?mail (me|them|my|people)|(send|read)( my| an)? e-?mails?|internet|websites?|online|weather|news|stocks?|photos?|camera|pictures?|files?|payments?|pay for|bluetooth|microphone|record (audio|voice))\b/i
 ];
 
 export function needsLogic(request: string): boolean {
@@ -145,8 +147,8 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
   let cloudResult: GenerateResult | null = null;
   if (chosen !== null && logic) {
     cloudResult = await chosen.generate(request);
-    if (cloudResult.ok) {
-      return cloudResult;
+    if (cloudResult.ok || cloudResult.failure !== undefined) {
+      return cloudResult; // a refusal (nonsense, unsupported) must not become a weaker on-device capsule
     }
   }
 

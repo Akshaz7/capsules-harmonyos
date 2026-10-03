@@ -14,9 +14,11 @@ class CountingTransport implements HttpTransport {
   calls: number = 0;
   bodies: string[] = [];
   private status: number;
+  private reply: string;
 
-  constructor(status?: number) {
+  constructor(status?: number, reply?: string) {
     this.status = status ?? 200;
+    this.reply = reply ?? GOOD;
   }
 
   async post(url: string, headers: Record<string, string>, body: string, timeoutMs: number): Promise<HttpResponse> {
@@ -25,7 +27,7 @@ class CountingTransport implements HttpTransport {
     if (this.status !== 200) {
       return { status: this.status, body: '{"message":"down"}' };
     }
-    const text = JSON.stringify(GOOD);
+    const text = JSON.stringify(this.reply);
     return url.endsWith('/v1/messages') ? { status: 200, body: `{"content":[{"type":"text","text":${text}}]}` } :
       { status: 200, body: `{"choices":[{"message":{"role":"assistant","content":${text}}}]}` };
   }
@@ -314,6 +316,30 @@ export default function capsuleGeneratorTest() {
     });
   });
 
+  describe('CapsuleGenerator refusals', () => {
+    it('"asdf" ends in an error from the cloud, not a capsule', 0, async (done: Function) => {
+      const t = new CountingTransport(200, '{"error": "not an app"}');
+      const r = await generateCapsuleWith('asdf', [modelWith(t, 'mistral', true)], '', onDeviceFailing());
+      expect(r.ok).assertFalse();
+      expect(r.capsule).assertUndefined();
+      expect(r.failure).assertEqual('not-an-app');
+      done();
+    });
+
+    it('does not fall back to on-device after the cloud reports unsupported capabilities', 0,
+      async (done: Function) => {
+        const t = new CountingTransport(200, '{"unsupported": ["contacts", "SMS"]}');
+        const local = onDeviceReturning(LOCAL);
+        const r = await generateCapsuleWith('text my contacts happy birthday', [modelWith(t, 'mistral', true)], '',
+          local);
+        expect(r.failure).assertEqual('unsupported');
+        expect((r.unsupported ?? []).join(',')).assertEqual('contacts,SMS');
+        expect(local.calls).assertEqual(0);
+        expect(t.calls).assertEqual(1);
+        done();
+      });
+  });
+
   describe('needsLogic', () => {
     it('flags maths, scoring, converting, conditions, inputs and lists', 0, () => {
       const logic = ['km to miles converter', 'darts for 3 players', 'quiz me on capitals', 'tip calculator',
@@ -321,7 +347,8 @@ export default function capsuleGeneratorTest() {
         'warn me if my budget is over 100', 'shopping list where I type items', 'what is 12 x 7', '20% discount',
         'tennis game tracker', 'football match score', 'chess game tracker', 'keep track of points in our card game',
         'cost per person for the trip', 'habit streak for reading', 'how many days in a row did I run',
-        'track my weight and tell me if I gained', 'flashcards for Spanish', 'inches to cm', 'basketball for 2 teams'];
+        'track my weight and tell me if I gained', 'flashcards for Spanish', 'inches to cm', 'basketball for 2 teams',
+        'text my contacts happy birthday', 'show the weather', 'take a photo every day', 'email me a summary'];
       logic.forEach((r: string) => {
         expect(needsLogic(r) ? r : `missed: ${r}`).assertEqual(r);
       });

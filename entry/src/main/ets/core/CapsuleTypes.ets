@@ -165,4 +165,13 @@ export interface GenerateResult {
    * user, then retry with the cloud allowed.
    */
   needsCloud?: boolean;
+  /**
+   * Why the model refused, when it did: "not-an-app" (nonsense such as "asdf") or "unsupported" (the
+   * request needs capabilities capsules do not have; see `unsupported`). Do not retry these elsewhere.
+   */
+  failure?: FailureKind;
+  /** With failure "unsupported": what is missing, e.g. ["contacts", "SMS"]. */
+  unsupported?: string[];
 }
+
+export type FailureKind = 'not-an-app' | 'unsupported';
