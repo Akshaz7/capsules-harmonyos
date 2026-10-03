@@ -390,6 +390,25 @@ export default function capsuleGeneratorTest() {
     });
   });
 
+  describe('Photos and receipts (vision path)', () => {
+    it('are not treated as unsupported capabilities', 0, () => {
+      ['photo diary checklist', 'remind me to photograph the meter', 'keep my receipts in order'].forEach((r: string) => {
+        expect(needsLogic(r) ? `flagged: ${r}` : r).assertEqual(r);
+      });
+      expect(PLAN_PROMPT).assertContain('Photos and receipts are fine');
+      expect(PLAN_PROMPT.includes('files or photos')).assertFalse();
+    });
+
+    it('a receipt request reaches the cloud plan and is built, not refused', 0, async (done: Function) => {
+      const t = new CountingTransport();
+      const local = onDeviceFailing();
+      const r = await generateCapsuleWith('split this receipt between 3 of us', [modelWith(t)], '', local);
+      expect(r.ok).assertTrue();
+      expect(r.failure).assertUndefined();
+      done();
+    });
+  });
+
   describe('needsLogic', () => {
     it('flags maths, scoring, converting, conditions, inputs and lists', 0, () => {
       const logic = ['km to miles converter', 'darts for 3 players', 'quiz me on capitals', 'tip calculator',
@@ -398,7 +417,7 @@ export default function capsuleGeneratorTest() {
         'tennis game tracker', 'football match score', 'chess game tracker', 'keep track of points in our card game',
         'cost per person for the trip', 'habit streak for reading', 'how many days in a row did I run',
         'track my weight and tell me if I gained', 'flashcards for Spanish', 'inches to cm', 'basketball for 2 teams',
-        'text my contacts happy birthday', 'show the weather', 'take a photo every day', 'email me a summary'];
+        'text my contacts happy birthday', 'show the weather', 'open the camera', 'email me a summary'];
       logic.forEach((r: string) => {
         expect(needsLogic(r) ? r : `missed: ${r}`).assertEqual(r);
       });

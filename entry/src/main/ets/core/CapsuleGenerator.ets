@@ -69,8 +69,9 @@ const LOGIC_PATTERNS: RegExp[] = [
   /\b(type|enter|input)\b/i,
   /\b(add (items?|things|it) to|shopping list|to-?do list|list (that|where|of things))\b/i,
   /%|\d\s*[-+*/x×]\s*\d/,
-  // capabilities capsules do not have: the cloud plan step reports them instead of a weaker capsule
-  /\b(contacts?|sms|text (messages?|my|them)|phone calls?|e-?mail (me|them|my|people)|(send|read)( my| an)? e-?mails?|internet|websites?|online|weather|news|stocks?|photos?|camera|pictures?|files?|payments?|pay for|bluetooth|microphone|record (audio|voice))\b/i
+  // capabilities capsules do not have: the cloud plan step reports them instead of a weaker capsule.
+  // Photos and receipts are not here: they go to the vision path, and a request about them is fine.
+  /\b(contacts?|sms|text (messages?|my|them)|phone calls?|e-?mail (me|them|my|people)|(send|read)( my| an)? e-?mails?|internet|websites?|online|weather|news|stocks?|camera|files?|payments?|pay for|bluetooth|microphone|record (audio|voice))\b/i
 ];
 
 export function needsLogic(request: string): boolean {
