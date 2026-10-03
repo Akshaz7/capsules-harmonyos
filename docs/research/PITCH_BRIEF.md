@@ -2,6 +2,14 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04, about 01:30–01:50). Written from the code, tests and documents of both repositories. Nothing was built or run. Line references are to the commits named in the text and will drift. Where it says a document contradicts the code, the code is what was read.
 
+> **Update, 4 Oct about 02:00 (after this briefing was written; from reading `origin/main` at `bfa70f5`, nothing run):**
+> - **PRs #8 to #12 are merged.** Wherever this document says a pull request is unmerged or a feature is "not on main", that is out of date. Weather (Open-Meteo, 12 bundled cities), the accelerometer (shakes) and the battery reading are on main.
+> - **Four capsule permissions are enforced in code, not one:** `reminders`, `motion`, `battery` and `weather`. `notifications` is checked but its `notify` action does nothing. `vibration`, `location` and `widget` have consent wording and no effect. The statements here that only `reminders` works are out of date; see [`PERMISSIONS_AND_MAPS.md`](PERMISSIONS_AND_MAPS.md) and the table in the README.
+> - **The judges' request is still not fixed.** `a task list and the weather for Kraków` still goes to the on-device model, and `task list and weather` returns a weather card with no city and no list ([`PR12_REVIEW.md`](PR12_REVIEW.md)). A weather request for one bundled city works. Do not say the request is fixed.
+> - **"The wrist is a permission, not a product" is withdrawn.** There is no `wrist` capsule permission. Each send to another device is confirmed in a dialog that shows what leaves the phone, and sends and refusals are logged. The ESP32 board is not a Huawei device and does not run HarmonyOS.
+> - **The relay is live** at `https://harmoniser.keanuc.net`; the board is verified against it, the app is not.
+> - Of the 20 contradictions in the closing list, the pull request "docs: make the documents match the code" corrects the documents for 1, 2, 4 to 9, 12, 13, 16, 18 and 20. Still open because they need a code, schema or backend change: 3 (the ability list still names vibration), 10, 11, 14, 15, 17 and 19; `cactus/BUILD.md` in 8 is also unchanged.
+
 **Written:** Sunday 4 Oct 2026, about 02:00. Submission 11:00. Finalist pitches about 16:00.
 
 **How this was produced:** AI-assisted desk reading (Claude Code). Nothing was built, run, installed or changed. App repo read at `origin/main` `7292381` (220 commits, all dated 3 Oct, 14:59 to 22:36). Web repo read at `origin/main` `f13b42d` (25 commits). Unmerged branches were read as branches. The web repo and firmware line references were collected by a separate reading pass and spot-checked, not all re-opened. Outside facts were checked on the web and carry a URL.
