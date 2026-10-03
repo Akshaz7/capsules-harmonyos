@@ -49,54 +49,53 @@ static void timer_reset(void)
     s_state.done = false;
 }
 
-static void timer_start(void)
+// The timer functions take the time from their caller, which reads the clock once per
+// operation: expiry and the time left are then worked out from the same instant.
+static void timer_start(int64_t now)
 {
     if (s_state.done) {
         timer_reset();
     }
     if (!s_state.running) {
-        s_deadline_ms = now_ms() + s_remaining_ms;
+        s_deadline_ms = now + s_remaining_ms;
         s_state.running = true;
     }
 }
 
-static void timer_pause(void)
+static void timer_pause(int64_t now)
 {
     if (s_state.running) {
-        s_remaining_ms = s_deadline_ms - now_ms();
-        if (s_remaining_ms < 1) {
-            s_remaining_ms = 1;  // paused on the last tick: not done yet
-        }
+        s_remaining_ms = s_deadline_ms - now;  // at least 1: timer_sync() saw it still running
         s_state.running = false;
     }
 }
 
 // Nothing ticks in the background: expiry is noticed whenever the state is read or changed.
-static void timer_sync(void)
+static void timer_sync(int64_t now)
 {
-    if (s_state.type == CAPSULE_TIMER && s_state.running && now_ms() >= s_deadline_ms) {
+    if (s_state.type == CAPSULE_TIMER && s_state.running && now >= s_deadline_ms) {
         s_remaining_ms = 0;
         s_state.running = false;
         s_state.done = true;
     }
 }
 
-static bool timer_apply(capsule_action_t action)
+static bool timer_apply(capsule_action_t action, int64_t now)
 {
     switch (action) {
     case CAPSULE_ACT_START:
-        timer_start();
+        timer_start(now);
         return true;
     case CAPSULE_ACT_PAUSE:
-        timer_pause();
+        timer_pause(now);
         return true;
     case CAPSULE_ACT_TOGGLE:
         if (s_state.done) {
             timer_reset();
         } else if (s_state.running) {
-            timer_pause();
+            timer_pause(now);
         } else {
-            timer_start();
+            timer_start(now);
         }
         return true;
     case CAPSULE_ACT_RESET:
@@ -149,10 +148,11 @@ const char *capsule_type_name(capsule_type_t type)
 void capsule_get(capsule_state_t *out)
 {
     lock();
-    timer_sync();
+    int64_t now = now_ms();
+    timer_sync(now);
     *out = s_state;
     if (s_state.type == CAPSULE_TIMER) {
-        int64_t ms = s_state.running ? s_deadline_ms - now_ms() : s_remaining_ms;
+        int64_t ms = s_state.running ? s_deadline_ms - now : s_remaining_ms;
         out->remaining_seconds = (int)((ms + 999) / 1000);
     }
     unlock();
@@ -167,7 +167,7 @@ void capsule_set_timer(const char *label, int seconds, bool running)
     s_state.seconds = seconds;
     timer_reset();
     if (running) {
-        timer_start();
+        timer_start(now_ms());
     }
     unlock();
 }
@@ -187,9 +187,10 @@ bool capsule_apply(capsule_action_t action)
 {
     bool applied = false;
     lock();
-    timer_sync();
+    int64_t now = now_ms();
+    timer_sync(now);
     if (s_state.type == CAPSULE_TIMER) {
-        applied = timer_apply(action);
+        applied = timer_apply(action, now);
     } else if (s_state.type == CAPSULE_COUNTER) {
         applied = counter_apply(action);
     }
