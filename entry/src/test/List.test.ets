@@ -6,6 +6,7 @@ import capsuleGeneratorTest from './CapsuleGenerator.test';
 import capsuleRouterTest from './CapsuleRouter.test';
 import widgetModelTest from './WidgetModel.test';
 import exprTest from './Expr.test';
+import capsuleV1Test from './CapsuleV1.test';
 import sharingTest from './Sharing.test';
 
 export default function testsuite() {
@@ -17,5 +18,6 @@ export default function testsuite() {
   capsuleRouterTest();
   widgetModelTest();
   exprTest();
+  capsuleV1Test();
   sharingTest();
 }
