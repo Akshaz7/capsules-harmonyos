@@ -28,6 +28,11 @@ import {
   StateVar,
   StepObject,
   TextComponent,
+  Trigger,
+  TriggerKind,
+  TRIGGER_KINDS,
+  MAX_TRIGGERS,
+  MAX_TRIGGER_LABEL,
   TimerComponent,
   V1_COMPONENT_TYPES,
   ValidationResult,
@@ -51,7 +56,7 @@ type JsonValue = Object | null | undefined;
 type JsonRecord = Record<string, Object | null>;
 
 const CAPSULE_FIELDS: string[] = ['schemaVersion', 'id', 'name', 'permissions', 'ui'];
-const V1_CAPSULE_FIELDS: string[] = ['state', 'computed'];
+const V1_CAPSULE_FIELDS: string[] = ['state', 'computed', 'triggers'];
 const VAR_TYPES: string[] = ['number', 'text', 'bool', 'list'];
 export const MAX_COMPONENTS: number = 60;
 export const MAX_NESTING: number = 5;
@@ -176,6 +181,8 @@ class Checker {
   v1: boolean = false;
   count: number = 0;
   placed: Placed[] = [];
+  /** Each valid trigger's steps as a stand-in button, checked like a button's "do". */
+  triggerSteps: Placed[] = [];
 
   add(path: string, message: string): void {
     this.errors.push(`${path}: ${message}`);
@@ -392,25 +399,91 @@ class Checker {
       b.enabledIf = this.str(obj, 'enabledIf', path);
     }
     if (hasDo) {
-      const raw: JsonValue = obj['do'];
-      if (!Array.isArray(raw) || (raw as JsonValue[]).length === 0) {
-        this.add(`${path}.do`, `must be a non-empty array of steps, got ${describe(raw)}`);
-        return b;
+      const steps = this.steps(obj['do'], path);
+      if (steps !== null) {
+        b.do = steps;
       }
-      const list = raw as JsonValue[];
-      if (list.length > MAX_STEPS) {
-        this.add(`${path}.do`, `has ${list.length} steps (max ${MAX_STEPS})`);
-      }
-      const steps: ButtonStep[] = [];
-      list.forEach((item: JsonValue, i: number) => {
-        const step = this.step(item, `${path}.do[${i}]`);
-        if (step !== null) {
-          steps.push(step);
-        }
-      });
-      b.do = steps;
     }
     return b;
+  }
+
+  /** A "do" list (button or trigger): 1 to MAX_STEPS steps. Null if it is not a non-empty array. */
+  steps(raw: JsonValue, path: string): ButtonStep[] | null {
+    if (!Array.isArray(raw) || (raw as JsonValue[]).length === 0) {
+      this.add(`${path}.do`, `must be a non-empty array of steps, got ${describe(raw)}`);
+      return null;
+    }
+    const list = raw as JsonValue[];
+    if (list.length > MAX_STEPS) {
+      this.add(`${path}.do`, `has ${list.length} steps (max ${MAX_STEPS})`);
+    }
+    const steps: ButtonStep[] = [];
+    list.forEach((item: JsonValue, i: number) => {
+      const step = this.step(item, `${path}.do[${i}]`);
+      if (step !== null) {
+        steps.push(step);
+      }
+    });
+    return steps;
+  }
+
+  /** v1.1 triggers. Returns the valid ones; each also gets a stand-in button so its steps are checked like one. */
+  triggers(raw: JsonValue, permissions: Permission[]): Trigger[] {
+    const out: Trigger[] = [];
+    if (raw === undefined) {
+      return out;
+    }
+    if (!Array.isArray(raw)) {
+      this.add('$.triggers', `must be an array, got ${describe(raw)}`);
+      return out;
+    }
+    const list = raw as JsonValue[];
+    if (list.length > MAX_TRIGGERS) {
+      this.add('$.triggers', `has ${list.length} triggers (max ${MAX_TRIGGERS})`);
+    }
+    list.forEach((item: JsonValue, i: number) => {
+      const path = `$.triggers[${i}]`;
+      if (!isRecord(item)) {
+        this.add(path, `must be an object, got ${describe(item)}`);
+        return;
+      }
+      const obj = item as JsonRecord;
+      const before = this.errors.length;
+      const on: JsonValue = obj['on'];
+      if (typeof on !== 'string' || !TRIGGER_KINDS.includes(on as string)) {
+        this.add(`${path}.on`, `must be one of ${TRIGGER_KINDS.join(', ')}, got ${describe(on)}`);
+        return;
+      }
+      const t: Trigger = { on: on as TriggerKind, do: [] };
+      if (t.on === 'time') {
+        this.checkFields(obj, ['on', 'at', 'do'], path, ['label']);
+        const at = this.str(obj, 'at', path);
+        if (at.length > 0 && !/^([01]\d|2[0-3]):[0-5]\d$/.test(at)) {
+          this.add(`${path}.at`, `must be a 24-hour time "HH:MM" (00:00-23:59), got ${JSON.stringify(at)}`);
+        }
+        t.at = at;
+      } else {
+        this.checkFields(obj, ['on', 'do'], path, ['label']);
+      }
+      if (obj['label'] !== undefined) {
+        const label = this.str(obj, 'label', path);
+        if (label.length > MAX_TRIGGER_LABEL) {
+          this.add(`${path}.label`, `is ${label.length} characters (max ${MAX_TRIGGER_LABEL})`);
+        }
+        t.label = label;
+      }
+      t.do = this.steps(obj['do'], path) ?? [];
+      const needed: Permission = t.on === 'time' ? 'reminders' : 'motion';
+      if (!permissions.includes(needed)) {
+        this.add(path, `a "${t.on}" trigger needs permission "${needed}", which is not listed in "permissions"`);
+      }
+      if (this.errors.length === before) {
+        out.push(t);
+        const standIn: ButtonComponent = { type: 'button', label: '', action: '', do: t.do };
+        this.triggerSteps.push(new Placed(standIn, path));
+      }
+    });
+    return out;
   }
 
   step(raw: JsonValue, path: string): ButtonStep | null {
@@ -772,8 +845,10 @@ export function validateCapsuleObject(root: JsonValue): ValidationResult {
   });
   const hasTimer = ck.placed.some((p: Placed) => p.c.type === 'timer');
 
-  // permissions and v0 actions
-  ck.placed.forEach((p: Placed) => {
+  const triggers: Trigger[] = ck.v1 ? ck.triggers(obj['triggers'], permissions) : [];
+
+  // permissions and v0 actions (trigger steps included)
+  ck.placed.concat(ck.triggerSteps).forEach((p: Placed) => {
     const c = p.c;
     const needed = permissionForComponent(c);
     if (needed !== null && !permissions.includes(needed)) {
@@ -809,7 +884,7 @@ export function validateCapsuleObject(root: JsonValue): ValidationResult {
       ck.add('$.computed', e instanceof ExprError ? (e as ExprError).message : String(e));
     }
     if (types !== null) {
-      checkV1(ck, ck.placed, state ?? {}, types);
+      checkV1(ck, ck.placed.concat(ck.triggerSteps), state ?? {}, types);
     }
   }
 
@@ -826,6 +901,9 @@ export function validateCapsuleObject(root: JsonValue): ValidationResult {
   }
   if (computed !== null) {
     capsule.computed = computed;
+  }
+  if (triggers.length > 0) {
+    capsule.triggers = triggers;
   }
   return { ok: true, capsule: capsule, errors: [] };
 }

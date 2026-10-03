@@ -68,10 +68,17 @@ function v1(state: string, computed: string, ui: string, permissions?: string): 
     `"computed":${computed},"ui":${ui}}`;
 }
 
+/** A v1 capsule with NUM state, the given permissions and triggers. */
+function v1Triggers(permissions: string, triggers: string): string {
+  return `{"schemaVersion":1,"id":"x","name":"X","permissions":${permissions},"state":${NUM_STATE},` +
+    `"ui":[{"type":"display","text":"{n}"}],"triggers":${triggers}}`;
+}
+
 function errorsOf(json: string): string {
   return validateCapsule(json).errors.join('\n');
 }
 
+const NUM_STATE: string = '{"n":{"type":"number","initial":0},"t":{"type":"text","initial":"hi"}}';
 const NUM: string = '{"n":{"type":"number","initial":0},"t":{"type":"text","initial":"hi"},' +
   '"xs":{"type":"list","initial":[1,2]},"on":{"type":"bool","initial":true}}';
 
@@ -304,6 +311,62 @@ export default function capsuleV1Test() {
       expect(errorsOf('{"schemaVersion":0,"id":"x","name":"X","permissions":[],' +
         '"ui":[{"type":"checklist","id":"c","items":["Day {n}"]}]}')).assertContain('$.ui[0].items[0]: "{n}"');
       expect(errorsOf(v1(streak, '{}', '[{"type":"text","text":"Use {{braces}} and {} freely"}]'))).assertEqual('');
+    });
+
+    it('v1.1: accepts daily time and motion-start triggers and keeps them through a round trip', 0, () => {
+      const json = v1Triggers('["reminders","motion","notifications"]', '[' +
+        '{"on":"time","at":"07:30","label":"Morning reset","do":[{"reset":"n"},"notify:New day"]},' +
+        '{"on":"motion","do":[{"set":"n","to":"n + 1"}]}]');
+      const r = validateCapsule(json);
+      expect(r.errors.join('\n')).assertEqual('');
+      const triggers = r.capsule?.triggers ?? [];
+      expect(triggers.length).assertEqual(2);
+      expect(triggers[0].on).assertEqual('time');
+      expect(triggers[0].at).assertEqual('07:30');
+      expect(triggers[0].label).assertEqual('Morning reset');
+      expect(triggers[1].at).assertUndefined();
+      expect(JSON.stringify(validateCapsule(JSON.stringify(r.capsule)).capsule)).assertEqual(JSON.stringify(r.capsule));
+      expect(validateCapsule(v1(NUM, '{}', '[]')).capsule?.triggers).assertUndefined();
+    });
+
+    it('v1.1: rejects bad trigger kinds, times and fields', 0, () => {
+      const perms = '["reminders","motion"]';
+      expect(errorsOf(v1Triggers(perms, '[{"on":"time","at":"25:00","do":[{"reset":"n"}]}]')))
+        .assertContain('$.triggers[0].at: must be a 24-hour time "HH:MM"');
+      expect(errorsOf(v1Triggers(perms, '[{"on":"time","at":"7:30","do":[{"reset":"n"}]}]'))).assertContain('"HH:MM"');
+      expect(errorsOf(v1Triggers(perms, '[{"on":"time","do":[{"reset":"n"}]}]')))
+        .assertContain('$.triggers[0]: missing required field "at"');
+      expect(errorsOf(v1Triggers(perms, '[{"on":"motion","at":"08:00","do":[{"reset":"n"}]}]')))
+        .assertContain('unknown field "at"');
+      expect(errorsOf(v1Triggers(perms, '[{"on":"sunrise","do":[{"reset":"n"}]}]')))
+        .assertContain('$.triggers[0].on: must be one of time, motion');
+      expect(errorsOf(v1Triggers(perms, '[{"on":"motion","do":[]}]'))).assertContain('$.triggers[0].do: must be a non-empty');
+      expect(errorsOf(v1Triggers(perms, '{"on":"motion"}'))).assertContain('$.triggers: must be an array');
+      const many: string[] = [];
+      for (let i = 0; i < 6; i++) {
+        many.push('{"on":"motion","do":[{"reset":"n"}]}');
+      }
+      expect(errorsOf(v1Triggers(perms, `[${many.join(',')}]`))).assertContain('has 6 triggers (max 5)');
+      const long = 'x'.repeat(61);
+      expect(errorsOf(v1Triggers(perms, `[{"on":"motion","label":"${long}","do":[{"reset":"n"}]}]`)))
+        .assertContain('is 61 characters (max 60)');
+      expect(errorsOf('{"schemaVersion":0,"id":"x","name":"X","permissions":[],"ui":[],' +
+        '"triggers":[{"on":"motion","do":["notify:x"]}]}')).assertContain('unknown field "triggers"');
+    });
+
+    it('v1.1: needs the trigger permission and checks trigger steps like button steps', 0, () => {
+      expect(errorsOf(v1Triggers('[]', '[{"on":"time","at":"08:00","do":[{"reset":"n"}]}]')))
+        .assertContain('$.triggers[0]: a "time" trigger needs permission "reminders"');
+      expect(errorsOf(v1Triggers('["reminders"]', '[{"on":"motion","do":[{"reset":"n"}]}]')))
+        .assertContain('a "motion" trigger needs permission "motion"');
+      expect(errorsOf(v1Triggers('["motion"]', '[{"on":"motion","do":[{"set":"missing","to":"1"}]}]')))
+        .assertContain('$.triggers[0].do[0]');
+      expect(errorsOf(v1Triggers('["motion"]', '[{"on":"motion","do":[{"set":"n","to":"t"}]}]')))
+        .assertContain('"n" is number, but the expression is text');
+      expect(errorsOf(v1Triggers('["motion"]', '[{"on":"motion","do":["notify:hi"]}]')))
+        .assertContain('$.triggers[0].do[0]: action "notify:hi" needs permission "notifications"');
+      expect(errorsOf(v1Triggers('["motion"]', '[{"on":"motion","do":["increment:nope"]}]')))
+        .assertContain('refers to id "nope"');
     });
 
     it('applies permissions and ids to nested components and do-actions', 0, () => {

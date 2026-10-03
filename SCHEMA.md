@@ -57,3 +57,17 @@ Button (v1): { type, label, action?, do?, enabledIf? }   at least one of action 
 
 Limits: max 60 components in total, counting components nested in when/row (max nesting 5).
 The validator checks every expression against the grammar, that every name exists, and that types fit.
+
+# Capsule schema v1.1: triggers (approved by Ash, 2026-10-03)
+Backwards compatible: an optional "triggers" field on v1 capsules ("schemaVersion": 1). Every v0 and v1 capsule stays valid.
+
+  "triggers": [ trigger ]     optional, max 5
+
+trigger:
+- { "on": "time", "at": "HH:MM", "do": [step], "label"?: string }   runs every day at local time HH:MM (24-hour, 00:00-23:59). Needs "reminders".
+- { "on": "motion", "do": [step], "label"?: string }                 runs when the motion sensor detects the user starting to move. Needs "motion".
+
+- "do" takes the same steps as a v1 button (max 20, run in order, all-or-nothing): {set,to}, {push,value}, {pop}, {reset} or a v0 action string. A v0 action needs its usual permission.
+- "label" (max 60 characters) is how the app names the trigger, e.g. "Morning reset".
+- A trigger whose permission is not listed is invalid. A listed permission the user did not grant is blocked and logged by the gatekeeper when the trigger fires; nothing changes.
+- A trigger never runs while the capsule is removed. Each firing runs its steps once.

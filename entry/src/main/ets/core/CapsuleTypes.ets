@@ -118,7 +118,22 @@ export interface Capsule {
   ui: CapsuleComponent[];
   state?: Record<string, StateVar>; // v1
   computed?: Record<string, string>; // v1: name -> expression
+  triggers?: Trigger[]; // v1.1
 }
+
+/** v1.1: what starts a trigger. "time" = every day at `at` (HH:MM); "motion" = the user starts moving. */
+export type TriggerKind = 'time' | 'motion';
+
+export interface Trigger {
+  on: TriggerKind;
+  at?: string; // "HH:MM", only for "time"
+  do: ButtonStep[]; // same steps as a v1 button
+  label?: string;
+}
+
+export const TRIGGER_KINDS: string[] = ['time', 'motion'];
+export const MAX_TRIGGERS: number = 5;
+export const MAX_TRIGGER_LABEL: number = 60;
 
 // ---- Shared constants and result types used by the core (validator, parser, generator). ----
 
