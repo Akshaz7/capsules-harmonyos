@@ -2,8 +2,9 @@ import { describe, it, expect } from '@ohos/hypium';
 import { createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig } from '../main/ets/core/ModelProvider';
 import { CapsuleModel, PLAN_PROMPT, SYSTEM_PROMPT } from '../main/ets/core/CapsuleModel';
 import {
-  CapsuleSource, CLOUD_OFF, generateCapsuleWith, needsLogic, ON_DEVICE_ONLY, pickCloud
+  CapsuleSource, CLOUD_OFF, generateCapsuleWith, generateFromSharedTextWith, needsLogic, ON_DEVICE_ONLY, pickCloud
 } from '../main/ets/core/CapsuleGenerator';
+import { SHARED_TOO_LONG } from '../main/ets/core/SharedText';
 import { Capsule, GenerateResult } from '../main/ets/core/CapsuleTypes';
 
 const GOOD: string =
@@ -350,6 +351,42 @@ export default function capsuleGeneratorTest() {
       expect(pickCloud(both, false)?.providerName).assertEqual('mistral');
       expect(pickCloud(both, true)?.providerName).assertEqual('mistral');
       expect(pickCloud([], true)).assertNull();
+    });
+  });
+
+  describe('Shared text routing', () => {
+    it('uses the built-in extractors first, without calling the cloud', 0, async (done: Function) => {
+      const t = new CountingTransport();
+      const r = await generateFromSharedTextWith('Shopping:\n- milk\n- eggs', [modelWith(t)]);
+      expect(r.origin).assertEqual('rules');
+      expect(t.calls).assertEqual(0);
+      done();
+    });
+
+    it('sends unrecognised text to the EU cloud as a quoted request, up to 2000 characters', 0,
+      async (done: Function) => {
+        const t = new CountingTransport();
+        const text = 'Grandma says the garden needs looking after while she travels. ' + 'x'.repeat(900);
+        const r = await generateFromSharedTextWith(text, [modelWith(t)]);
+        expect(r.origin).assertEqual('cloud-eu:mistral');
+        expect(t.calls).assertEqual(1);
+        expect(t.bodies[0]).assertContain('Make a capsule from this text the user shared with the app');
+        expect(t.bodies[0]).assertContain('Grandma says the garden');
+        done();
+      });
+
+    it('keeps the cloud policy and the length limit', 0, async (done: Function) => {
+      const t = new CountingTransport();
+      const long = await generateFromSharedTextWith('a'.repeat(2001), [modelWith(t)]);
+      expect(long.error).assertEqual(SHARED_TOO_LONG);
+      const deviceOnly = await generateFromSharedTextWith(PLAIN, [modelWith(t)], { mode: 'on-device-only' });
+      expect(deviceOnly.error).assertContain(ON_DEVICE_ONLY);
+      const off = await generateFromSharedTextWith(PLAIN, [modelWith(t)], { allowCloud: false });
+      expect(off.needsCloud).assertTrue();
+      const nonEu = await generateFromSharedTextWith(PLAIN, [modelWith(t, 'anthropic')]);
+      expect(nonEu.error).assertContain('outside the EU');
+      expect(t.calls).assertEqual(0);
+      done();
     });
   });
 

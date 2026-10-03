@@ -17,7 +17,9 @@ import { util } from '@kit.ArkTS';
 import { fileIo } from '@kit.CoreFileKit';
 import { GenerateResult } from './CapsuleTypes';
 import { CapsuleModel } from './CapsuleModel';
-import { AI_NOT_CONFIGURED, CapsuleSource, GenerateOptions, generateCapsuleWith, pickCloud } from './CapsuleGenerator';
+import {
+  AI_NOT_CONFIGURED, CapsuleSource, GenerateOptions, generateCapsuleWith, generateFromSharedTextWith, pickCloud
+} from './CapsuleGenerator';
 import { parseRequest } from './RuleParser';
 import {
   createProvider, HttpResponse, HttpTransport, isEuProvider, ModelConfig, ModelConfigResult, parseModelConfig, ProviderName,
@@ -32,6 +34,10 @@ export { parseRequest } from './RuleParser';
 export { AI_NOT_CONFIGURED, NO_RULE_MATCH, CLOUD_OFF, ON_DEVICE_ONLY, GenerateMode, GenerateOptions, needsLogic
 } from './CapsuleGenerator';
 export { isEuProvider, cloudOrigin, ProviderName } from './ModelProvider';
+export {
+  capsuleFromSharedText, MAX_SHARED_TEXT, SharedKind, SharedTextResult, SHARED_EMPTY, SHARED_NOT_RECOGNISED,
+  SHARED_TOO_LONG
+} from './SharedText';
 export { OnDeviceStatus } from './providers/CactusProvider';
 export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';
 export { StateValues, EvalResult, ApplyResult, DISPLAY_ERROR, initialState, restoreState, evaluate, computedValues,
@@ -196,4 +202,14 @@ const lazyOnDevice: LazyOnDevice = new LazyOnDevice();
  */
 export async function generateCapsule(request: string, options?: GenerateOptions): Promise<GenerateResult> {
   return generateCapsuleWith(request, models, modelError, lazyOnDevice, options);
+}
+
+/**
+ * Text shared into the app (share sheet) -> capsule: recipes become timers, chats with amounts a live bill
+ * split, workouts a checklist with timers, lists a checklist; anything else goes to the cloud under the same
+ * policy as generateCapsule. Rejects text over MAX_SHARED_TEXT (2000) characters. Nothing is saved here:
+ * show the result on the consent screen like any capsule.
+ */
+export async function generateCapsuleFromSharedText(text: string, options?: GenerateOptions): Promise<GenerateResult> {
+  return generateFromSharedTextWith(text, models, options);
 }

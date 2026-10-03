@@ -17,6 +17,7 @@ import { GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
 import { parseRequest } from './RuleParser';
 import { CapsuleModel } from './CapsuleModel';
+import { capsuleFromSharedText, MAX_SHARED_TEXT, SHARED_EMPTY, SHARED_NOT_RECOGNISED, SHARED_TOO_LONG } from './SharedText';
 
 export const NO_RULE_MATCH: string = 'No built-in rule understands this request.';
 export const AI_NOT_CONFIGURED: string = 'AI fallback not configured.';
@@ -170,4 +171,44 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
     return chosen.generate(request);
   }
   return failure([onDeviceError, cloudWhy]);
+}
+
+/** What the cloud model is asked when shared text matches no built-in kind. */
+export function sharedTextRequest(text: string): string {
+  return `Make a capsule from this text the user shared with the app:\n"""\n${text.trim()}\n"""`;
+}
+
+/**
+ * Shared text (share sheet) -> capsule: the built-in recipe, bill, workout and list extractors first
+ * (origin "rules"), then the cloud under the same policy as generateCapsuleWith (mode, allowNonEu,
+ * allowCloud). Text over MAX_SHARED_TEXT characters is rejected before anything else.
+ */
+export async function generateFromSharedTextWith(text: string, cloud: CapsuleModel[],
+  options?: GenerateOptions): Promise<GenerateResult> {
+  const t = text.trim();
+  if (t.length === 0) {
+    return { ok: false, error: SHARED_EMPTY, details: [] };
+  }
+  if (t.length > MAX_SHARED_TEXT) {
+    return { ok: false, error: SHARED_TOO_LONG, details: [] };
+  }
+  const local = capsuleFromSharedText(t);
+  if (local.ok && local.capsule !== undefined) {
+    return { ok: true, capsule: local.capsule, origin: 'rules', details: [] };
+  }
+  const mode: GenerateMode = options?.mode ?? 'smart';
+  if (mode === 'on-device-only') {
+    return { ok: false, error: `${SHARED_NOT_RECOGNISED} ${ON_DEVICE_ONLY}`, details: [] };
+  }
+  if (options?.allowCloud === false) {
+    return { ok: false, error: `${SHARED_NOT_RECOGNISED} ${CLOUD_OFF}`, details: [], needsCloud: pickCloud(cloud,
+      options?.allowNonEu ?? false) !== null };
+  }
+  const chosen = pickCloud(cloud, options?.allowNonEu ?? false);
+  if (chosen === null) {
+    const why = cloud.length > 0 ? `The configured cloud provider (${cloud[0].providerName}) is outside the EU.` :
+      AI_NOT_CONFIGURED;
+    return { ok: false, error: `${SHARED_NOT_RECOGNISED} ${why}`, details: [] };
+  }
+  return chosen.generate(sharedTextRequest(t), MAX_SHARED_TEXT + 100);
 }

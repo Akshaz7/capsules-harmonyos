@@ -278,13 +278,14 @@ export class CapsuleModel {
    * Sends only the request text (with fixed prompts, and the model's own plan and capsule) to the
    * provider: no capsules from the device, state, device data or settings.
    */
-  async generate(request: string): Promise<GenerateResult> {
+  async generate(request: string, maxLength?: number): Promise<GenerateResult> {
     const req = request.trim();
+    const limit = maxLength ?? MAX_REQUEST_LENGTH;
     if (req.length === 0) {
       return { ok: false, error: 'The request is empty.', details: [] };
     }
-    if (req.length > MAX_REQUEST_LENGTH) {
-      return { ok: false, error: `The request is too long (max ${MAX_REQUEST_LENGTH} characters).`, details: [] };
+    if (req.length > limit) {
+      return { ok: false, error: `The request is too long (max ${limit} characters).`, details: [] };
     }
     let plan: string[] = [];
     if (this.planAndCheck) {
