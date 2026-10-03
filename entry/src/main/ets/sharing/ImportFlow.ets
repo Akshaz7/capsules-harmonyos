@@ -14,6 +14,7 @@ import { picker } from '@kit.CoreFileKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { scanBarcode } from '@kit.ScanKit';
 import { scanCore } from '@kit.ScanKit';
+import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { ImportResult, MAX_SHARE_BYTES, prepareImport } from './CapsuleShare';
@@ -28,7 +29,11 @@ export interface ImportOutcome {
   result?: ImportResult;
 }
 
-/** Reads the picked .json file, refusing anything over the cap before reading it. */
+/**
+ * Reads the picked .json file, refusing anything over the cap before reading it.
+ * Reads through the open fd: openSync accepts the picker's URI, but readTextSync
+ * only accepts a sandbox path.
+ */
 function readPickedFile(uri: string): ImportResult {
   const file = fileIo.openSync(uri, fileIo.OpenMode.READ_ONLY);
   try {
@@ -36,7 +41,10 @@ function readPickedFile(uri: string): ImportResult {
     if (size > MAX_SHARE_BYTES) {
       return { ok: false, error: 'File too large (max 8 KB)' };
     }
-    return prepareImport(fileIo.readTextSync(uri));
+    const buffer: ArrayBuffer = new ArrayBuffer(size);
+    const read: number = fileIo.readSync(file.fd, buffer);
+    const text: string = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(buffer, 0, read));
+    return prepareImport(text);
   } finally {
     fileIo.closeSync(file);
   }
