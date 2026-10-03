@@ -33,6 +33,9 @@ The pairing code is three words from WORDS below ("brave-otter-lamp"). It works 
 for --code-ttl seconds (default 600); after that the board gets a new one with its next poll.
 pair_url is http://<the Host header of the board's request>/pair?code=<the code>, so it
 points at this fake by the address the board reached it on (--public-url overrides that).
+
+--always-401 is a test aid for the firmware: registrations get their 201, every poll and
+state report a 401. A board must then register less and less often, not in a loop.
 """
 
 from __future__ import annotations
@@ -186,8 +189,9 @@ def clean_capsule(body: Json) -> Json:
 class Relay:
     """All devices. Every public method is one route; they raise ApiError."""
 
-    def __init__(self, code_ttl: float = CODE_TTL_SECONDS, public_url: str = "") -> None:
+    def __init__(self, code_ttl: float = CODE_TTL_SECONDS, public_url: str = "", always_401: bool = False) -> None:
         self.code_ttl = code_ttl
+        self.always_401 = always_401  # test aid: registrations work, every poll and report is refused
         self.public_url = public_url.rstrip("/")  # empty: use the Host header of each request
         self.lock = threading.Lock()
         self.by_id: Dict[str, Device] = {}
@@ -243,6 +247,8 @@ class Relay:
         """The device a board's request is about. The lock must be held."""
         device = self.by_id.get(device_id)
         scheme, _, token = (authorization or "").partition(" ")
+        if self.always_401:
+            raise ApiError(401, ERR_UNAUTHORIZED)
         if device is None or scheme.lower() != "bearer" or not token:
             raise ApiError(401, ERR_UNAUTHORIZED)
         if not hmac.compare_digest(token.strip().encode(), device.token.encode()):
@@ -571,6 +577,9 @@ def main() -> None:
                         help="how long a pairing code works (default: 600)")
     parser.add_argument("--public-url", default="", metavar="URL",
                         help="base of pair_url (default: http://<Host header of the board's request>)")
+    parser.add_argument("--always-401", action="store_true",
+                        help="test aid: answer 201 to registrations and 401 to every poll and state report, "
+                             "to watch a board back off instead of registering in a loop")
     parser.add_argument("--quiet-polls", action="store_true",
                         help="do not log the board's polls and reports (one or two lines a second)")
     args = parser.parse_args()
@@ -578,7 +587,7 @@ def main() -> None:
     if args.quiet_polls:
         log.addFilter(lambda record: not _is_device_chatter(record))
 
-    Handler.relay = Relay(args.code_ttl, args.public_url)
+    Handler.relay = Relay(args.code_ttl, args.public_url, args.always_401)
     ThreadingHTTPServer.daemon_threads = True
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     log.info("mock relay listening on http://%s:%d", args.host, args.port)

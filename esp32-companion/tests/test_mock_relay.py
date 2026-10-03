@@ -164,6 +164,16 @@ class DeviceSide(RelayCase):
         self.assertEqual(self.request("POST", f"/api/devices/{device['id']}/state", STATE, token="wrong"),
                          unauthorized)
 
+    def test_always_401_registers_but_refuses_every_device_request(self) -> None:
+        Handler.relay = Relay(always_401=True)
+        device = self.register()
+        unauthorized = (401, mock_relay.error_body(401, mock_relay.ERR_UNAUTHORIZED))
+        self.assertEqual(self.request("GET", f"/api/devices/{device['id']}/capsule", token=device["token"]),
+                         unauthorized)
+        self.assertEqual(self.request("POST", f"/api/devices/{device['id']}/state", STATE, token=device["token"]),
+                         unauthorized)
+        self.assertEqual(self.register()["id"], device["id"])  # and registering again still works
+
     def test_state_report_is_204_without_a_body(self) -> None:
         device = self.claimed_device()
         self.assertEqual(self.request("POST", f"/api/devices/{device['id']}/state", STATE, token=device["token"]),
