@@ -33,6 +33,7 @@ import {
 } from '../widget/WidgetService';
 import { WidgetCapsulePicker } from './WidgetCapsulePicker';
 import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
+import { ShareLaunch, shareLaunch } from './ShareLaunch';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
@@ -172,6 +173,9 @@ struct Index {
   @Local widgets: WidgetInfo[] = [];
   /** Set by EntryAbility when a blank widget asks the user to choose a capsule. */
   @Local launch: WidgetLaunch = widgetLaunch();
+  /** Set by EntryAbility when text, a link or an image is shared to Harmoniser. */
+  @Local share: ShareLaunch = shareLaunch();
+  private handledShare: number = 0;
   @Local settings: AppSettings = new AppSettings();
   @Local showSheet: boolean = false;
   @Local request: string = '';
@@ -208,6 +212,27 @@ struct Index {
     if (this.launch.formId.length > 0) {
       // Cold start from a blank widget: open the picker once the Navigation is up.
       setTimeout(() => this.openCapsulePicker(), 0);
+    }
+    if (this.share.seq > 0) {
+      setTimeout(() => this.onShared(), 0); // cold start from the share sheet
+    }
+  }
+
+  /** Shared text or a link becomes the request and goes through the normal create + consent flow. */
+  @Monitor('share.seq')
+  onShared(): void {
+    if (this.share.seq === this.handledShare) {
+      return;
+    }
+    this.handledShare = this.share.seq;
+    this.close();
+    this.nav.clear();
+    if (this.share.text.length > 0) {
+      this.request = this.share.text;
+      this.create();
+    } else if (this.share.imageUri.length > 0) {
+      // TODO(T3-2): send the image to generateCapsuleFromImage once core exports it (T5-3).
+      this.toast("Harmoniser can't build from photos yet. Describe it in words instead.");
     }
   }
 

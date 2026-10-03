@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { initCapsuleModel } from '../core';
 import { takeWidgetWant } from '../pages/WidgetLaunch';
+import { takeShareWant } from '../pages/ShareLaunch';
 
 const DOMAIN = 0x0000;
 
@@ -15,6 +16,7 @@ export default class EntryAbility extends UIAbility {
     }
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
     takeWidgetWant(want); // a blank widget asking the user to choose a capsule
+    takeShareWant(want, launchParam); // text, a link or an image from the system share sheet
     // Loads the optional AI fallback config; stays rules-only if missing. Never throws.
     initCapsuleModel(this.context).then((ready: boolean) => {
       hilog.info(DOMAIN, 'testTag', 'initCapsuleModel ready=%{public}s', String(ready));
@@ -23,6 +25,7 @@ export default class EntryAbility extends UIAbility {
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     takeWidgetWant(want);
+    takeShareWant(want, launchParam);
   }
 
   onDestroy(): void {
