@@ -649,6 +649,18 @@ struct Index {
     return this.cloudProviders.length > 0 ? this.cloudProviders[0] : '';
   }
 
+  /** Settings > Smart: names the provider Smart mode would actually use (BUG-3). */
+  private smartModeDetail(): string {
+    if (this.euCloud) {
+      return 'On-device + Mistral EU when needed';
+    }
+    if (!this.cloudConfigured) {
+      return 'On-device + cloud AI when set up';
+    }
+    return this.settings.allowNonEu ? `On-device + ${this.cloudName()} (outside the EU) when needed` :
+      `On-device only: ${this.cloudName()} is outside the EU`;
+  }
+
   /** The cloud provider smart mode will use, as users know it. Core prefers an EU provider. */
   private cloudName(): string {
     if (this.euCloud) {
@@ -705,7 +717,11 @@ struct Index {
         onPick: (capsuleId: string) => this.pickForWidget(capsuleId)
       })
     } else if (name === SETTINGS_PAGE) {
-      SettingsView({ settings: this.settings, cloudStatus: this.cloudConfigured ? '' : this.modelStatus })
+      SettingsView({
+        settings: this.settings,
+        cloudStatus: this.cloudConfigured ? '' : this.modelStatus,
+        smartDetail: this.smartModeDetail()
+      })
     }
   }
 

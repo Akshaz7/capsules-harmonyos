@@ -5,6 +5,8 @@ import { AiMode, AppSettings } from './AppSettings';
 export struct SettingsView {
   @Require @Param settings: AppSettings;
   @Param cloudStatus: string = '';
+  /** Second line of the Smart option: which cloud provider Smart mode would use. */
+  @Param smartDetail: string = 'On-device + Mistral EU when needed';
 
   @Builder
   modeRow(mode: AiMode, icon: Resource, title: string, detail: string) {
@@ -51,8 +53,7 @@ export struct SettingsView {
           .width('100%')
           .padding({ left: 4, right: 4, top: 4 })
         Column() {
-          this.modeRow('smart', $r('sys.symbol.wand_and_stars'), 'Smart',
-            'On-device + Mistral EU when needed')
+          this.modeRow('smart', $r('sys.symbol.wand_and_stars'), 'Smart', this.smartDetail)
           Divider()
             .color($r('sys.color.comp_divider'))
             .margin({ left: 52 })
