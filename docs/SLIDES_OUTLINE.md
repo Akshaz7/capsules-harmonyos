@@ -1,6 +1,6 @@
 # Pitch deck outline (6 slides)
 
-Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim vibration, motion counting or alerts firing with the app closed.
+Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim vibration, motion counting, alerts firing with the app closed, marketplace publishing, or photo input and capsule editing in the app (core only).
 
 ## 1. Problem
 
@@ -19,7 +19,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - Describe it in one sentence, and get a working native mini-app (a *capsule*) in seconds.
 - A capsule is JSON, not code. A strict schema plus our own expression interpreter means nothing from a model ever executes.
 - You decide what each capsule may use, on a consent sheet. Denied actions are blocked and logged.
-- Simple capsules live on the home screen as widgets. Any capsule can be shared as a file or QR code.
+- Simple capsules live on the home screen as widgets. Any capsule can be shared as a file or QR code, or installed from a marketplace (still validated, still behind consent).
 
 *Visual:* request, then consent sheet, then running capsule, then widget (four screenshots).
 
@@ -30,8 +30,9 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 1. `pasta 9 min, sauce 15 min, bread 6 min`: made by rules, instantly and offline, with calendar events and a widget.
 2. `km to miles converter`: logic, so it goes to an EU cloud model after a one-time consent. It comes back as a live v1 capsule.
 3. `demo tennis`: a full scoreboard (deuce, advantage) run by the safe interpreter.
-4. `read my contacts and text them…`: refused by design.
-5. Real phone: the on-device LLM, with no network.
+4. Marketplace: search `squat`, Install, consent "From the marketplace", Run.
+5. `read my contacts and text them…`: refused by design.
+6. Real phone: the on-device LLM, with no network.
 
 *Visual:* the step list beside a QR code to the recorded demo.
 
@@ -43,7 +44,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
 - **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **228 unit tests**, plus a provider eval with held-out and refusal sets.
+- **243 unit tests**, plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 
