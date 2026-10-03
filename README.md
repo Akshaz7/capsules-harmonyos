@@ -70,6 +70,37 @@ The timer adapter uses Calendar Kit rather than `reminderAgentManager`. On phone
 
 Timers are saved as system Calendar events. On the emulator the calendar alert doesn't fire; on a real device, background alerts need the agent reminder capability (AppGallery approval). We'll test calendar alerts on the Pura 70.
 
+## On-device AI: the Cactus port
+
+[Cactus](https://github.com/cactus-compute/cactus) had no HarmonyOS build, so we ported it.
+
+- **Cross-compile:** Cactus v2.2.2 (commit `2cfcdb8`) is built for arm64-v8a with the OHOS NDK toolchain, using 3 small patches ([`cactus/cactus-ohos.patch`](cactus/cactus-ohos.patch)). A no-op telemetry stub replaces the libcurl-based telemetry, so the engine makes no network calls. Two `emplace_back` aggregate initialisations are rewritten for the SDK's Clang 15. The result is `libcactus_engine.so`: 3.5 MB, 2.5 MB stripped, with 182 exported `cactus_*` symbols. It needs only OHOS libc and `libc++_shared.so`.
+- **Node-API wrapper:** our own C++ (`cactus/src/main/cpp/napi_init.cpp`) exposes `initModel`, `complete` and `freeModel` to ArkTS as Promises. They run on the libuv worker pool, so inference never blocks the UI thread. The HAR adds about 3.8 MB to the `.hap`: the engine, `libcactus_napi.so` (75 KB) and `libc++_shared.so` (1.2 MB).
+- **Model:** LFM2-VL-450M in Cactus's 4-bit `cq4` format, 383 MB zipped and about 480 MB on the device. It is pushed into the app's sandbox with `hdc file send -b` and never packed into the `.hap`.
+- **Slot-filling instead of free generation:** given the full schema, the 450M model copied prompt examples and printed placeholders. Only 3 of 10 capsules were correct, and gemma-4-E2B at 2-bit got 0/10. So the model now only picks an intent and fills grounded slots, and code builds the capsule.
+
+Measured on the HarmonyOS emulator. It runs on the host's Apple M4 Pro cores, so **a phone will be slower; we haven't measured one**.
+
+| Metric | Result |
+| --- | --- |
+| Model load (`cactus_init`) | 256 ms in the spike, 310.7 ms in the app |
+| Time to first token | 267–386 ms for a 29-token prompt. A 350–600-token prompt raised it to 1.2–1.6 s, which is one reason the slot-filling prompt is kept short. |
+| Decode / prefill | 92–114 tokens/s / 75–108 tokens/s |
+| Memory | 335–388 MB RSS reported by Cactus; 245 MB process PSS, because the weights are memory-mapped |
+| Capsule accuracy | 9/15 correct on the eval requests with the app's provider code; 11/15 with the rule parser in front |
+
+## AI evaluation
+
+`scripts/eval-providers.mjs` runs requests through each configured cloud provider, using the app's own prompt, validator and v1 interpreter. It checks both that the capsule is valid and that it does the right thing. The prompt was tuned on 15 requests and then locked. The 5 held-out requests were written afterwards and never used for tuning.
+
+| Set | Mistral `ministral-14b-latest` (EU) | Anthropic `claude-sonnet-5-5` |
+| --- | --- | --- |
+| Tuning set (15) | 15/15 on the final run (earlier runs ranged from 12 to 14) | 15/15 |
+| Held-out set (5) | 3/5 | 5/5 |
+| Hard logic requests (4): tennis scoreboard, darts for 3 players, quiz on capitals, reading streak | **2/4** | **4/4** |
+
+On the hard requests, Ministral built the tennis scoreboard and darts correctly. The quiz and the habit streak failed both attempts: the model used step types and functions the schema doesn't have. The validator rejected both, so no wrong capsule reached the user, but those requests fail. Claude was correct on all four, and faster on the tennis scoreboard (12 s against 22 s). We still default to Mistral because it is hosted in the EU. That is a deliberate privacy-over-accuracy trade-off. Claude is available only if you turn on **Allow non-EU providers**. These are small samples, and the numbers are indicative, not a benchmark.
+
 ## Setup, build, install, launch
 
 **You need:** DevEco Studio 6.1.1 or later (HarmonyOS SDK API 24, minimum API 20), [`devecocli`](hackathon-resources/devecocli.md), and a running HarmonyOS phone emulator reachable at `127.0.0.1:5555`.
@@ -90,7 +121,9 @@ $HDC -t 127.0.0.1:5555 install -r entry/build/default/outputs/default/entry-defa
 $HDC -t 127.0.0.1:5555 shell aa start -a EntryAbility -b com.hackyeah.capsules
 ```
 
-`build-profile.json5` has no `signingConfigs`, so the HAP is unsigned. The emulator accepts it, but a physical device needs signing (`devecocli auth login`, then `devecocli signature generate`).
+`build-profile.json5` has no `signingConfigs`, so the HAP is unsigned. The emulator accepts it, but a physical device needs a signed HAP.
+
+**Signing for a physical device:** in DevEco Studio, open **File → Project Structure → Signing Configs**, sign in with your Huawei ID, and tick **Automatically generate signature**. Then rebuild. `devecocli signature generate` is not an option here, because it only works for mainland-China accounts. DevEco writes the signing paths and encrypted passwords into `build-profile.json5`. Don't commit that change, and never commit the generated `.p12`, `.cer` or `.p7b` files (they are git-ignored).
 
 ### Optional: enable the cloud AI fallback
 
@@ -106,7 +139,7 @@ The providers are `anthropic`, `mistral` and `openai`. `openai` covers any OpenA
 { "default": "mistral", "providers": { "mistral": { "apiKey": "<key>", "model": "ministral-14b-latest" }, "anthropic": { "apiKey": "<key>" } } }
 ```
 
-Which Mistral models a key can call depends on its tier. To compare providers, `node scripts/eval-providers.mjs` runs the same 15 requests through every provider in the file, using the app's own prompt and validator, and prints valid/correct counts. It needs Node 18+ and network access, and downloads esbuild through `npx` on first run.
+Which Mistral models a key can call depends on its tier. To compare providers, `node scripts/eval-providers.mjs` runs the tuning and held-out requests through every provider in the file, using the app's own prompt and validator, and prints valid/correct counts per provider side by side. Add `--only mistral` to run one provider, `--match tennis,darts` to run only matching requests, or `--out results.json` to save the results. It needs Node 18+ and network access, and downloads esbuild through `npx` on first run.
 
 Push the file to the app's private files directory after installing:
 
@@ -178,7 +211,7 @@ No sensor or device data is currently simulated.
 
 More detail, including the patch contents and the model checksum, is in [`docs/THIRD_PARTY.md`](docs/THIRD_PARTY.md).
 
-Harmoniser's own licence has not been chosen yet.
+Harmoniser's own code is licensed under the [Apache License 2.0](LICENSE). That includes our Node-API wrapper in `cactus/src/main/cpp/`. The prebuilt Cactus engine (`cactus/libs/`) and our patch to it stay under the [Cactus Compute licence](cactus/CACTUS_LICENSE). The LFM2 model weights are not in this repository.
 
 AI-assisted development is recorded in [`AI_WORKFLOW.md`](AI_WORKFLOW.md).
 
