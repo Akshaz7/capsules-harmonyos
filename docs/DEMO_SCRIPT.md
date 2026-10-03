@@ -1,8 +1,10 @@
-# Demo script (90 seconds)
+# Demo script (about 90 seconds, edited from several takes)
 
-One take of about 90 seconds. Most of it is on the **emulator**, the default the judges expect, with one clearly labelled **real-phone** segment. Every step shows something that is built and has been seen working. **The marketplace is in (Ash, 2026-10-03):** the live API (`harmoniser-web.vercel.app`) answered with 5 example listings on 2026-10-03, and Ash reports browse, Install, the "From the marketplace" consent and Run working against it. The **template catalogue is live too**: `/api/capsules?tag=template` returned all 108 templates on 2026-10-03 (T1 note, re-checked). Beat 5 still installs Squat counter, the listing Ash checked.
+**Status of this script (2026-10-04, checked against the code at `547d27b` by reading; nothing was run):** it is a plan, not a record. The timings add up to about 90 seconds but were not rehearsed, and the result is cut together from separate emulator and phone recordings, not one take. Not every step has been seen working: steps 2, 3 and 5 have recorded checks (step 5 as reported by Ash); step 4 will not do what it says as written; step 6 is marked "not yet verified on the emulator" in the README; step 7 rests on one phone run recorded in a commit message; step 8's "offline" was never strictly tested. The notes under the table say what to change. A reviewed rewrite with two cuts (2:55 and 2:05) and a shot list is in [`research/DEMO_REVIEW.md`](research/DEMO_REVIEW.md); prefer it for the recording.
 
-Use English only: Harmoniser rejects other languages by design. Leave out anything that isn't built or hasn't been seen working: vibration in capsules (the app's own short vibration on save is fine to show), motion counting, calendar alerts with the app closed, and scanning a capsule QR code (no device check yet). The P1 fixes have landed (timer Pause/Stop, Share on the phone, non-English requests), so they can be shown if time allows, but the 90 seconds below don't need them.
+Most of the script is on the **emulator**, the default the judges expect, with one clearly labelled **real-phone** segment. **The marketplace (Ash, 2026-10-03):** the live API answered on 2026-10-03, and Ash reports browse, Install, the "From the marketplace" consent and Run working against it. It is at `https://harmoniser.keanuc.net` (also `https://harmoniser-web.vercel.app`) and on 2026-10-04 held over 100 listings: 108 example templates made by the team plus a few examples. Do not put an exact count in a caption. Beat 5 still installs Squat counter, the listing Ash checked.
+
+Use English only: Harmoniser rejects other languages by design. Leave out anything that isn't built or hasn't been seen working: vibration in capsules (the app's own short vibration on save is fine to show), counting steps or reps (the motion sensor counts shakes only, and no real shake is recorded yet), calendar alerts with the app closed, and scanning a capsule QR code (no device check yet). The P1 fixes have landed (timer Pause/Stop, Share on the phone, non-English requests), so they can be shown if time allows, but the 90 seconds below don't need them.
 
 ## Before recording
 
@@ -10,7 +12,7 @@ Use English only: Harmoniser rejects other languages by design. Leave out anythi
 - [ ] Clear old data on both: `hdc -t <device> shell bm clean -n com.hackyeah.capsules -d` (wipes saved capsules, grants and consents, so the one-time notices appear again).
 - [ ] Emulator: push a `config.local.json` with a **Mistral** key; Settings: AI mode **Smart**, **Allow non-EU providers** off. Never show the file on screen.
 - [ ] Phone: run `scripts/push-model.sh` (on-device model) and launch the app once; Settings: AI mode **On-device only**. Check that the status line reads "On-device AI ready".
-- [ ] Emulator `config.local.json` also sets `marketplace.baseUrl` to `https://harmoniser-web.vercel.app`. Check that `curl https://harmoniser-web.vercel.app/api/capsules` lists Squat counter just before recording.
+- [ ] Emulator `config.local.json` also sets `marketplace.baseUrl` to `https://harmoniser.keanuc.net` (without it the tab shows the bundled examples, not the live marketplace). Check that `curl 'https://harmoniser.keanuc.net/api/capsules?q=squat'` lists Squat counter just before recording.
 - [ ] Use a build that includes the widget tap fix (BUG-13, `acfbaef`) and check that + on the widget updates the count before recording.
 - [ ] Emulator home screen: add one blank **Harmoniser** widget (2x2) beforehand ("Tap to choose a capsule").
 - [ ] Record the emulator window and the phone (its own screen recorder) separately; cut them together in editing.
@@ -30,6 +32,14 @@ Use English only: Harmoniser rejects other languages by design. Leave out anythi
 | 8 | 1:14 | Real phone | Open the capsule and use it once (tap +) | "No network, no account. It works offline." |
 | 9 | 1:22 | End card | Repo URL. "Built at HackYeah 2026 from the Hackathon Template." | "Rules, on-device AI, an EU-first cloud, a marketplace, and a gatekeeper you control." |
 
+**Corrections to the table above (from reading the code at `547d27b`, not run):**
+
+- **Step 4:** `km to miles converter` matches the built-in `km-to-miles` template before any model is asked, so the consent sheet opens with "Built from a template" and the **Use Mistral AI (EU)?** notice does not appear. To show the cloud path, use **Make it smarter with Mistral** on a rules-made capsule (README, "Make it smarter"), or cut the beat. The line "Only the request text is sent" is true for a typed request; do not extend it to edits or photos.
+- **Step 6:** the refusal comes from the cloud model's planning step, not from a local rule, so it needs the Mistral key and the network; without cloud AI the request goes to the on-device model and is not refused. It is not verified on the emulator, and the card's "Capsules can only use: …" list names vibration, which capsules cannot use. Say "it refuses" only if the take shows it, and do not say "by design" as if it were a local guarantee.
+- **Step 7:** `track pages I read` is one of the examples inside the on-device model's own prompt, and a `reading-pages` template may take it first (badge "Made on your phone · no internet", not "Made on-device"). Use a request that no rule, template or prompt example covers, and check the badge. The only recorded phone run of the on-device model is in the message of commit `b1dd029`.
+- **Step 8:** say "runs on the device, no cloud call" unless the take visibly has airplane mode on on a real phone. Offline use has not been strictly tested.
+- **Step 3:** "real calendar events" is true in code, but the script never opens the Calendar app; show it or drop the words.
+
 **If step 7 is rejected on the phone** (the small model gets about 9/15 right), do a second take with another simple request. If it is rejected again, keep the take and caption it honestly: "Small model, rejected cleanly; rules and the cloud cover the rest."
 
 ## If the marketplace is down while recording
@@ -37,6 +47,8 @@ Use English only: Harmoniser rejects other languages by design. Leave out anythi
 If the live API fails, the screen falls back to the shipped examples with a note. Either re-record later, or keep the take and caption it: "Built-in examples; live marketplace offline". Don't present the fallback as the live marketplace.
 
 ## 60-second capability demo (real phone)
+
+Status: the battery and weather cards were seen on the emulator (2026-10-04). The shake steps (1 to 3) have not been recorded as checked on a phone; run them before filming and drop them if they do not work.
 
 1. Create `count my shakes` and allow **Motion sensor** — "The sensor only listens while the capsule is open. Nothing is recorded."
 2. Shake the phone: the count climbs. Stop shaking: it stops.
