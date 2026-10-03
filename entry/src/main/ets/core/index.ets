@@ -25,6 +25,7 @@ export { validateCapsule, validateCapsuleObject, parseAction, permissionForActio
   componentId } from './CapsuleValidator';
 export { parseRequest } from './RuleParser';
 export { AI_NOT_CONFIGURED, NO_RULE_MATCH } from './CapsuleGenerator';
+export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';
 
 const CONFIG_FILE: string = 'config.local.json';
 

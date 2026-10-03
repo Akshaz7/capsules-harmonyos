@@ -1,0 +1,55 @@
+import { describe, it, expect } from '@ohos/hypium';
+import { routeCapsule } from '../main/ets/core/CapsuleRouter';
+import { parseRequest } from '../main/ets/core/RuleParser';
+import { validateCapsule } from '../main/ets/core/CapsuleValidator';
+import { Capsule } from '../main/ets/core/CapsuleTypes';
+
+function fromRules(request: string): Capsule {
+  const c = parseRequest(request);
+  expect(c === null).assertFalse();
+  return c as Capsule;
+}
+
+function fromJson(ui: string): Capsule {
+  const r = validateCapsule(`{"schemaVersion":0,"id":"x","name":"X","permissions":["reminders"],"ui":${ui}}`);
+  expect(r.errors.join('\n')).assertEqual('');
+  return r.capsule as Capsule;
+}
+
+export default function capsuleRouterTest() {
+  describe('CapsuleRouter', () => {
+    it('routes all five rule-parser examples to widgets', 0, () => {
+      const requests = ['3 timers pasta 9 sauce 15 bread 6', 'count my squats', 'medication 8am and 8pm',
+        'water 8 glasses', 'split 84 between 4'];
+      requests.forEach((req: string) => {
+        const route = routeCapsule(fromRules(req));
+        expect(`${req}: ${route.widget}`).assertEqual(`${req}: true`);
+        expect(route.reason).assertContain('Widget-suitable');
+      });
+    });
+
+    it('sends capsules with more than 4 components to the app', 0, () => {
+      const route = routeCapsule(fromRules('4 timers a 1 b 2 c 3 d 4'));
+      expect(route.widget).assertFalse();
+      expect(route.reason).assertEqual('App only: 5 components (a widget fits at most 4).');
+    });
+
+    it('sends capsules with number inputs to the app', 0, () => {
+      const route = routeCapsule(fromJson('[{"type":"number","id":"n","label":"Guests"}]'));
+      expect(route.widget).assertFalse();
+      expect(route.reason).assertContain('number inputs');
+    });
+
+    it('allows checklists up to 6 items, not 7', 0, () => {
+      expect(routeCapsule(fromJson('[{"type":"checklist","id":"c","items":["1","2","3","4","5","6"]}]')).widget)
+        .assertTrue();
+      const seven = routeCapsule(fromJson('[{"type":"checklist","id":"c","items":["1","2","3","4","5","6","7"]}]'));
+      expect(seven.widget).assertFalse();
+      expect(seven.reason).assertContain('7 items');
+    });
+
+    it('sends an empty capsule to the app', 0, () => {
+      expect(routeCapsule(fromJson('[]')).widget).assertFalse();
+    });
+  });
+}
