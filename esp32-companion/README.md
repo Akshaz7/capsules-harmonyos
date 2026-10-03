@@ -33,7 +33,7 @@ As of 2026-10-03.
 | Wi-Fi on hardware | Joins the phone hotspot (WPA3) and the venue network `HackYeah2026`, which it sees on 2.4 GHz channel 1. Joining the venue network often takes several attempts. |
 | HTTP API on hardware | **Confirmed**: `./test_api.sh http://<board ip>` passes 72 of 72 against the board over the venue Wi-Fi. JSON nested 300 and 1024 levels deep gets a 400 and the board keeps running (it used to reboot). |
 | Screen, touch, beep | **Confirmed on hardware** by the owner: the screen shows the UI, a tap on + raises the count, the speaker beeps when a timer ends. `/screenshot` works on the board. |
-| Cloud relay client | **Confirmed on hardware against the fake** (`mock_relay.py` on a laptop, plain HTTP): registration, pairing QR code and phrase, capsules and actions from the relay, state reports, "cloud offline" and recovery. The real backend does not exist yet; HTTPS was only checked as a handshake. See [Cloud relay](#cloud-relay). |
+| Cloud relay client | **Confirmed on hardware against the fake** (`mock_relay.py` on a laptop, plain HTTP): registration, pairing QR code and phrase, capsules and actions from the relay, state reports, "cloud offline" and recovery. The real backend is not deployed yet; HTTPS was only checked as a handshake. See [Cloud relay](#cloud-relay). |
 | Rep counting | Experimental and **still untuned**. Off unless asked for. |
 
 Full list in [Tested and not tested](#tested-and-not-tested).
@@ -44,14 +44,20 @@ The app does **not** talk to the board directly. It talks to a small cloud relay
 board, or a browser tab open at `/device`) fetch their capsule from the relay and report back.
 That way the phone and the device need no shared Wi-Fi and no IP address.
 
-> **Status, 2026-10-03 21:00:** the relay is **not deployed yet**. The routes below are the agreed
-> contract. The firmware's relay client and a local fake relay (`mock_relay.py`) are being built
-> now and will land on a follow-up PR tonight; the real routes go into the marketplace project
-> (`harmoniser-web`) as soon as its scaffold is up. Target: working end to end by 01:00, otherwise
-> the feature is cut from the demo. Until then, develop against the fake.
+> **Status, 2026-10-03 22:00:** the relay is **built but not live**. The server routes are an open
+> pull request on `SimpsonLWH/harmoniser-web` and are not deployed; nothing here has run against
+> the real deployment yet. What does run today is the local fake below, which the board and the
+> server code are both tested against (`test_relay.sh`). Cut-off agreed with the team: live and
+> working end to end by 01:00, otherwise the demo sends capsules to the board over local Wi-Fi.
 
-**Base URL:** `https://harmoniser-web.vercel.app` (planned; a custom domain may replace it). Keep it
-in one constant. Local fake, once pushed: `python3 esp32-companion/mock_relay.py --port 8090`.
+**Base URL:** `https://harmoniser-web.vercel.app` (a custom domain may replace it). Keep it in one
+constant. Until it is live, run the fake and point the app at it:
+
+```sh
+python3 esp32-companion/mock_relay.py --port 8090 --host 0.0.0.0
+```
+
+The full contract, including the device side and the known gaps, is in [`RELAY.md`](RELAY.md).
 
 **Who you are:** every request from the app carries `X-Harmoniser-Token: <install token>`, the same
 header and the same token as the marketplace API. There are no accounts and nothing to register:
@@ -90,7 +96,8 @@ Keep the returned `id`. `GET /api/devices` lists the devices this install has pa
 ### Send a capsule
 
 Only timers and counters can be sent, with the same limits as the board's own API below: `label` at
-most 47 bytes of UTF-8, `seconds` 1 to 359999, `count` 0 to 999999.
+most 47 bytes of UTF-8, `seconds` 1 to 359999, `count` 0 to 999999. A longer label is cut to 47 bytes, not
+refused.
 
 ```sh
 curl -X PUT https://harmoniser-web.vercel.app/api/devices/$ID/capsule \
@@ -128,7 +135,12 @@ as a higher `count`; apply the difference to the app's counter. `version` tells 
 the device is showing: ignore a state whose `version` is older than the one your last send
 returned. `last_seen_ms_ago` above about 15000 means the device is offline.
 
-`DELETE /api/devices/$ID` unpairs.
+`DELETE /api/devices/$ID` unpairs. One install can pair at most 20 devices (`409 too_many_devices`).
+
+A device that is unknown, unpaired or paired to another install answers `404` on every route, so
+the app cannot tell those cases apart. Before the device's first report, `state` holds only
+`last_seen_ms_ago`. A running timer's `remaining_seconds` can be up to ten seconds old: count down
+locally from the value you sent and use the device's state for `running`, `done` and `count`.
 
 ### Rules for the app side
 

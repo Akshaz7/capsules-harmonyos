@@ -37,6 +37,9 @@ single log is preferred.
 | 2026-10-03 | Claude Code sub-agent (independent reviewer, read-only) | Review the firmware and mock source for real defects | none; a findings list | One critical finding (deeply nested JSON overflows the HTTP task stack and reboots the board), five medium, several low |
 | 2026-10-03 | Claude Code sub-agent | Fix the review findings and add host-side tests | `main/validate.c`, `main/http_api.c`, `main/net.c`, `main/capsule.c`, `mock_esp32.py`, `find_esp32.sh`, `test_api.sh`, `tests/`, `README.md` | Host tests: 1,108 C checks and 19 Python tests pass. `test_api.sh` 72/72 on the mock and on the board. 300-level nested JSON on the board: 400, no reboot. Main session read the diff and re-ran all three suites |
 | 2026-10-03 | Owner | Hands-on check of the board | none | Tapped + (count went up) and heard the timer-end beep |
+| 2026-10-03 | Claude Code sub-agent | Cloud relay client for the firmware, a fake relay and its test script | `main/relay.c`, `main/relay_sync.c`, `main/capsule_json.c`, `main/ui.c` (QR code and phrase), `mock_relay.py`, `test_relay.sh`, `RELAY.md`, `tests/` | On the real board against the fake: register, pair by phrase, capsule and action from the relay, state back, offline and recovery. QR decoded from a board screenshot. Host tests 1,646 C checks; `test_relay.sh` 106/106 |
+| 2026-10-03 | Claude Code sub-agent (independent reviewer, read-only) | Review the relay client | none; a findings list | No memory-safety or secret findings. One high (re-register loop without backoff), three medium, several low; all fixed and re-checked on the board |
+| 2026-10-03 | Claude Code sub-agent | Make the board's hardware id unguessable | `main/relay.c`, `main/relay_sync.c`, `RELAY.md` | Prompted by a security review of the server: the id was derived from the Wi-Fi MAC alone. Now mixes in a random secret kept on the board; verified across two reboots |
 
 ## Unsuccessful approaches
 
@@ -48,6 +51,10 @@ single log is preferred.
 - The BSP's default 100-line LVGL draw buffer: too large once Wi-Fi is running.
 
 ## Known limitations
+
+- The relay client has only talked to a local fake over plain HTTP. HTTPS was checked as a
+  handshake, not as sustained polling, and the real backend is not deployed yet.
+- No person has scanned the QR code off the board's screen with a phone yet.
 
 - Motion rep counting is untuned; its thresholds are guesses and it is off by default.
 - The motion counter has not been checked by a person.
