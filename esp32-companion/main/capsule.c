@@ -9,6 +9,7 @@
 
 static SemaphoreHandle_t s_lock;
 static StaticSemaphore_t s_lock_storage;
+static uint32_t s_generation;
 static capsule_state_t s_state;   // remaining_seconds is filled in by capsule_get()
 static int64_t s_remaining_ms;    // timer: time left while paused
 static int64_t s_deadline_ms;     // timer: uptime at which it ends while running
@@ -162,6 +163,7 @@ void capsule_set_timer(const char *label, int seconds, bool running)
 {
     lock();
     memset(&s_state, 0, sizeof(s_state));
+    s_generation++;
     s_state.type = CAPSULE_TIMER;
     copy_label(s_state.label, label);
     s_state.seconds = seconds;
@@ -176,11 +178,20 @@ void capsule_set_counter(const char *label, int count, bool motion)
 {
     lock();
     memset(&s_state, 0, sizeof(s_state));
+    s_generation++;
     s_state.type = CAPSULE_COUNTER;
     copy_label(s_state.label, label);
     s_state.count = count;
     s_state.motion = motion;
     unlock();
+}
+
+uint32_t capsule_generation(void)
+{
+    lock();
+    uint32_t generation = s_generation;
+    unlock();
+    return generation;
 }
 
 bool capsule_apply(capsule_action_t action)
