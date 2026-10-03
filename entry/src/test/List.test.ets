@@ -18,6 +18,7 @@ import marketplaceTest from './Marketplace.test';
 import templatesTest from './Templates.test';
 import editCapsuleTest from './EditCapsule.test';
 import motionDetectTest from './MotionDetect.test';
+import deviceComponentsTest from './DeviceComponents.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -40,4 +41,5 @@ export default function testsuite() {
   templatesTest();
   editCapsuleTest();
   motionDetectTest();
+  deviceComponentsTest();
 }
