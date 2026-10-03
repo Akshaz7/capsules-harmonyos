@@ -4,7 +4,7 @@
 
 A *capsule* is a small single-purpose app, such as a set of cooking timers, a squat counter or a medication checklist. It is described as JSON under the contract in [`SCHEMA.md`](SCHEMA.md). A capsule contains no code. The app reads it, rejects anything outside the schema, and draws it with native ArkUI components backed by real system services.
 
-> **Status (2026-10-03):** the main screen is wired end to end. You type a request and tap **Create**, `generateCapsule` builds the capsule, the gatekeeper asks you to allow or deny each permission, and the renderer draws it. A Log screen and Undo are included. Vibration and the notification "Done" action have not been built. See [What's real and what's simulated](#whats-real-and-whats-simulated).
+> **Status (2026-10-03, commit `3c9583e`):** the main screen is wired end to end. You type a request and tap **Create**, `generateCapsule` builds the capsule, the gatekeeper asks you to allow or deny each permission, and the renderer draws it. A Log screen and Undo are included. Vibration, the `motion` counter source, the `notify:<text>` action and the notification "Done" action have not been built. See [What's real and what's simulated](#whats-real-and-whats-simulated).
 
 ## Challenge themes
 
@@ -27,16 +27,16 @@ flowchart LR
     V -- "valid capsule" --> G["Gatekeeper<br/>per-permission allow/deny,<br/>block log"]
     G --> RN["Renderer<br/>ArkUI components"]
     RN --> CAL["Calendar Kit<br/>timer reminders"]
-    RN --> N["Notifications"]
+    RN --> N["Notifications<br/>timer finished"]
     RN --> VB["Vibration"]
 
     classDef built fill:#d8f5d0,stroke:#2e7d32,color:#1b1b1b
     classDef planned fill:#f2f2f2,stroke:#9e9e9e,stroke-dasharray:5 4,color:#555
-    class P,AI,V,RN,CAL built
-    class G,N,VB planned
+    class P,AI,V,G,RN,CAL,N built
+    class VB planned
 ```
 
-Green boxes are built. Dashed grey boxes are planned and not yet in the code. Today the validator rejects a capsule that is missing a permission it needs. The gatekeeper will add per-permission user control and a visible block log on top of that.
+Green boxes are built. The dashed grey box is planned and not yet in the code. Permissions are checked twice. The validator rejects a capsule that uses a permission it doesn't declare. Then the gatekeeper's consent screen lets the user allow or deny each declared permission. Any component or action that needs a denied permission is drawn as blocked, refused when tapped, and logged.
 
 | Stage | Source | Notes |
 | --- | --- | --- |
@@ -46,7 +46,10 @@ Green boxes are built. Dashed grey boxes are planned and not yet in the code. To
 | Validator | `core/CapsuleValidator.ets` | Rejects unknown fields, component types, actions and permissions, dangling ids, and missing permissions |
 | Pipeline | `core/CapsuleGenerator.ets`, `core/index.ets` | `generateCapsule(request)` tries the rules first, then the model |
 | Renderer | `renderer/CapsuleRuntime.ets`, `renderer/CapsuleView.ets` | Draws all six component types and runs actions |
+| Gatekeeper | `gatekeeper/Gatekeeper.ets`, `pages/ConsentView.ets`, `pages/LogView.ets` | Per-permission allow/deny, a block log (last 200 entries) and Undo. Grants and the log persist in Preferences. |
+| Main screen | `pages/Index.ets`, `pages/CapsuleStore.ets` | Request box, then **Create**, consent, and run. The active capsule is saved, so a relaunch resumes it. |
 | Timer adapter | `adapters/TimerAdapter.ets` | Adds each timer to the app's own local calendar as an event with a reminder |
+| Notification adapter | `adapters/NotificationAdapter.ets` | Posts "<label> is done" when a timer reaches zero (`notificationManager`). It is only active when `reminders` is allowed. |
 
 The timer adapter uses Calendar Kit rather than `reminderAgentManager`. On phones, agent reminders need an AppGallery Connect capability grant, and without it `publishReminder` fails with error `1700002`.
 
@@ -109,13 +112,13 @@ tail -1 entry/.test/default/intermediates/test/coverage_data/test_result.txt
 | AI fallback (model call, validate, one corrective retry) | **Implemented and unit-tested against a fake HTTP transport.** The config is loaded at startup and `ohos.permission.INTERNET` is declared, but the fallback has not been run against a real provider on the device. |
 | Typing a request in the app | **Real.** Text box, then **Create**, then `generateCapsule`, then consent, then render |
 | Renderer (text, timer, counter, checklist, number, button) | **Real.** Draws the generated capsule |
-| Gatekeeper (allow/deny per permission, block log, Undo) | **Real.** Grants and the log persist in Preferences. Undo deletes the capsule and its calendar events. |
+| Gatekeeper (allow/deny per permission, block log, Undo) | **Real.** Grants and the log persist in Preferences. Undo deletes the capsule and its calendar events, and forgets its grants. |
 | In-app timer countdown | **Real** |
 | Timers saved as system Calendar events | **Real** (Calendar Kit). They appear in the system Calendar app, labelled "Capsules". |
 | Calendar alert with the app closed | **Not working on the emulator.** It will be tested on a Pura 70. |
-| Notification when a timer ends | **Real** (`notificationManager`), only while the app is running |
+| Notification when a timer ends | **Real** (`notificationManager`), only while the app is running and only if `reminders` is allowed |
 | `motion` counter source | **Not built.** The counter only counts manual taps for now. |
-| `notify:<text>` action and notifications | **Planned.** The action is accepted but does nothing yet. |
+| `notify:<text>` button action | **Planned.** The validator accepts it and the gatekeeper checks it, but the runtime does nothing yet. |
 | Vibration | **Planned** |
 | Time-of-day reminders, computed values | **Not in schema v0.** "Medication 8am and 8pm" becomes a dose checklist, and bill splits are worked out once as static text. |
 
@@ -149,5 +152,5 @@ AI-assisted development is recorded in [`AI_WORKFLOW.md`](AI_WORKFLOW.md).
 | Calendar permission | First launch | The system asks for calendar access with the reason "Capsule timers are saved as calendar reminders…" |
 | Timers in the system calendar | Start a capsule's timers, then open the system Calendar app | Today's events include "<label> is done" in the "Capsules" calendar |
 | Timer-end notification | Create a capsule with a 1-minute timer, start it, and keep the app open | A "<label> is done" notification appears |
-| Rules-only without a key | Launch without pushing `config.local.json`, then run `$HDC -t 127.0.0.1:5555 shell hilog \| grep initCapsuleModel` | No crash, and the log shows `initCapsuleModel ready=false`. Rule requests still work (covered by unit tests until the request field exists). |
+| Rules-only without a key | Launch without pushing `config.local.json`, then run `$HDC -t 127.0.0.1:5555 shell hilog \| grep initCapsuleModel` | No crash, and the log shows `initCapsuleModel ready=false`. `pasta 9 min, sauce 15 min, bread 6 min` still creates a capsule. A request no rule understands, e.g. `plan my week`, shows "No built-in rule understands this request. AI fallback not configured." |
 | AI config loaded | Push `config.local.json` (see above), relaunch, run the same `grep initCapsuleModel` | The log shows `initCapsuleModel ready=true` |
