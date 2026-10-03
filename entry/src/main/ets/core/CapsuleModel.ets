@@ -101,7 +101,8 @@ Rules:
 - v1 names (state and computed keys): letters, digits and underscore only, starting with a letter, e.g. "score_p1".
   No hyphens, spaces or dots. Ids of timers, counters and checklists stay kebab-case; v1 names never do.
 - v1 expressions: only names, numbers, 'text', true, false, + - * / %, == != < <= > >=, and, or, not, parentheses,
-  and the functions if, min, max, round, abs, len. Nothing else: no [ ] indexing, no ?: or &&, no other functions.
+  and the functions if, min, max, round, abs, len. Nothing else: no [ ] indexing, no ?: or &&, and no str(),
+  concat(), now() or any other function. Text + number is already text ('Score: ' + n).
   Use if(cond, a, b) for choices, e.g. if(p == 0, '0', if(p == 1, '15', '30')).
 - "do" and "enabledIf" exist only with "schemaVersion": 1. In "do", "to" and "value" are always expression strings
   ("to": "0", not 0), and v0 actions are plain strings ("startTimer:focus"), never objects.

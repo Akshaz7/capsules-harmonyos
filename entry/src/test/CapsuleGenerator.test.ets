@@ -425,6 +425,9 @@ export default function capsuleGeneratorTest() {
       expect(isNonEnglish(POLISH)).assertTrue();
       expect(isNonEnglish('przypomnij mi o lekach')).assertTrue();
       expect(isNonEnglish('Zażółć gęślą jaźń')).assertTrue();
+      expect(isNonEnglish('licznik pompek na dziś, żółw')).assertTrue();
+      expect(parseRequest('licznik pompek na dziś, żółw')).assertNull();
+      expect(cloudFirst('licznik pompek na dziś, żółw')).assertTrue();
       expect(isNonEnglish('pasta 9 min, sauce 15 min')).assertFalse();
       expect(isNonEnglish('count my squats')).assertFalse();
       expect(cloudFirst(CHINESE)).assertTrue();
