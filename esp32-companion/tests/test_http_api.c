@@ -276,10 +276,12 @@ static void test_nesting_limit(void)
 }
 
 // Finding 4: where the body was not read to its end, the handler must return ESP_FAIL so
-// that the server closes the socket instead of draining it.
+// that the server closes the socket instead of draining it. A body that is a little too
+// large is read and thrown away (at most 8192 bytes of it): on the board, closing with
+// unread data reset the connection and the client lost the 413.
 static void test_body_limits(void)
 {
-    char body[2000];
+    static char body[20000];
     memset(body, ' ', sizeof(body));
     memcpy(body, TEA, strlen(TEA));
 
@@ -289,13 +291,29 @@ static void test_body_limits(void)
     CHECK_INT(s_last.result, ESP_OK);
     CHECK_INT(s_last.req.body_read, 1024);
 
-    // One more is refused without reading any of it.
+    // One more is refused. The body is read and dropped, and the connection can stay.
     post("/capsule", "{\"type\":\"counter\",\"label\":\"before\"}");
     s_last = fake_request(HTTP_POST, "/capsule", body, 1025, 1025);
     CHECK_ERROR(413, "body too large");
+    CHECK_INT(s_last.result, ESP_OK);
+    CHECK_INT(s_last.req.body_read, 1025);
+    s_last = fake_request(HTTP_POST, "/action", body, 8192, 8192);
+    CHECK_ERROR(413, "body too large");
+    CHECK_INT(s_last.result, ESP_OK);
+    CHECK_INT(s_last.req.body_read, 8192);
+    // Larger than that: answered, 8192 bytes dropped, then the socket is closed.
+    s_last = fake_request(HTTP_POST, "/capsule", body, 20000, 20000);
+    CHECK_ERROR(413, "body too large");
     CHECK_INT(s_last.result, ESP_FAIL);
-    CHECK_INT(s_last.req.body_read, 0);
-    s_last = fake_request(HTTP_POST, "/action", body, 2000, (size_t)-1);  // an absurd Content-Length
+    CHECK_INT(s_last.req.body_read, 8192);
+    s_last = fake_request(HTTP_POST, "/action", body, 8193, 8193);
+    CHECK_INT(s_last.result, ESP_FAIL);
+    // An absurd Content-Length with little behind it, or nothing: closed as soon as it stalls.
+    s_last = fake_request(HTTP_POST, "/action", body, 2000, (size_t)-1);
+    CHECK_ERROR(413, "body too large");
+    CHECK_INT(s_last.result, ESP_FAIL);
+    CHECK_INT(s_last.req.body_read, 2000);
+    s_last = fake_request(HTTP_POST, "/capsule", body, 0, 5000);
     CHECK_ERROR(413, "body too large");
     CHECK_INT(s_last.result, ESP_FAIL);
 

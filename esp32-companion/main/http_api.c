@@ -15,6 +15,7 @@
 static const char *TAG = "http";
 
 #define MAX_BODY_BYTES 1024
+#define MAX_DISCARD_BYTES 8192  // of a body that is too large, before giving up on the connection
 #define MAX_JSON_DEPTH 8  // cJSON recurses once per level, on this task's stack
 
 #define ERR_BAD_JSON "body must be a JSON object"
@@ -81,17 +82,37 @@ static esp_err_t send_state(httpd_req_t *req)
 
 // ---- request parsing ----
 
+// Throws away the body of a request that has already been answered. ESP_OK if all of it was
+// read. ESP_FAIL makes the server close the socket: the body is far too long, or it stopped
+// coming. A little is read rather than none because closing a socket with unread data
+// resets the connection, and the client then never sees the answer it was just sent.
+static esp_err_t discard_body(httpd_req_t *req, char *scratch, size_t scratch_size)
+{
+    size_t left = req->content_len;
+    size_t budget = MAX_DISCARD_BYTES;
+    while (left > 0 && budget > 0) {
+        size_t want = left < scratch_size ? left : scratch_size;
+        int n = httpd_req_recv(req, scratch, want < budget ? want : budget);
+        if (n <= 0) {
+            return ESP_FAIL;
+        }
+        left -= n;
+        budget -= n;
+    }
+    return left == 0 ? ESP_OK : ESP_FAIL;
+}
+
 // Reads the body into *json. When *json comes back NULL the request has been answered with
 // an error and the handler returns this function's result: ESP_FAIL where part of the body
 // was never read, so that the server closes the socket instead of waiting for the rest.
 static esp_err_t read_json_body(httpd_req_t *req, cJSON **json)
 {
     *json = NULL;
+    char body[MAX_BODY_BYTES + 1];
     if (req->content_len > MAX_BODY_BYTES) {
         send_error(req, "413 Content Too Large", "body too large");
-        return ESP_FAIL;
+        return discard_body(req, body, sizeof(body));
     }
-    char body[MAX_BODY_BYTES + 1];
     size_t received = 0;
     while (received < req->content_len) {
         int n = httpd_req_recv(req, body + received, req->content_len - received);
