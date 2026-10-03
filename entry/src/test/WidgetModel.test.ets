@@ -3,7 +3,7 @@ import {
   applyWidgetMessage, buildWidgetView, CapsuleState, declaredAction, GateFacts, initialState, parseState,
   parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow,
   BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact,
-  accentFor, displayFor, pickColorTag, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
+  accentFor, displayFor, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
 } from '../main/ets/core/WidgetModel';
 import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
 import { StateValues } from '../main/ets/core/CapsuleProgram';
@@ -37,6 +37,18 @@ function blank(formId: string, addedAt?: number): WidgetBindingFact {
 
 function shown(bindings: WidgetBindingFact[]): string {
   return bindings.map((b: WidgetBindingFact) => `${b.formId}=${b.capsuleId.length > 0 ? b.capsuleId : '-'}`).join(' ');
+}
+
+function allowAll(action: string): boolean {
+  return true;
+}
+
+function denyTimers(action: string): boolean {
+  return !action.startsWith('startTimer') && !action.startsWith('stopTimer');
+}
+
+function runningIds(state: CapsuleState, now: number): string {
+  return state.timers.filter((t: TimerRun) => t.endAt > now).map((t: TimerRun) => t.id).join(',');
 }
 
 function noneRemoved(id: string): boolean {
@@ -291,6 +303,65 @@ export default function widgetModelTest() {
       expect(`${v.colorTag} ${v.accent}`).assertEqual(`3 ${WIDGET_PALETTE[3]}`);
       const kept = planWidgetAssignments([{ formId: '1', capsuleId: '', wide: false, colorTag: 4 }], [], [], noneRemoved);
       expect(kept.bindings[0].colorTag).assertEqual(4);
+    });
+
+    it('pomodoro buttons run on the widget: Start break stops focus, Start focus stops break (T4-14)', 0, () => {
+      const pomodoro = rules('pomodoro 50/10');
+      const s0 = initialState(pomodoro);
+      expect(declaredAction(pomodoro, msg('press', '', 0))).assertEqual('');
+      const focus = pressWidgetButton(pomodoro, s0, 0, 1000, allowAll);
+      expect(focus.ok).assertTrue();
+      expect(runningIds(focus.state, 1000)).assertEqual('focus');
+      expect(focus.state.timers[0].endAt).assertEqual(1000 + 50 * 60000);
+      const brk = pressWidgetButton(pomodoro, focus.state, 1, 5000, allowAll);
+      expect(brk.actions.join(', ')).assertEqual('stopTimer:focus, startTimer:break');
+      expect(runningIds(brk.state, 5000)).assertEqual('break');
+      const back = pressWidgetButton(pomodoro, brk.state, 0, 9000, allowAll);
+      expect(runningIds(back.state, 9000)).assertEqual('focus');
+      const view = buildWidgetView(pomodoro, back.state, gate(['reminders'], true, false), 9000, false);
+      expect(`${view.layout} ${view.icon} ${view.rows.length} ${view.buttons.length}`).assertEqual('logic timer 2 2');
+    });
+
+    it('a blocked action or a disabled button changes nothing (T4-14)', 0, () => {
+      const pomodoro = rules('pomodoro');
+      const s0 = initialState(pomodoro);
+      const blocked = pressWidgetButton(pomodoro, s0, 0, 1000, denyTimers);
+      expect(blocked.ok).assertFalse();
+      expect(blocked.blocked).assertContain('stopTimer:break');
+      expect(runningIds(blocked.state, 1000)).assertEqual('');
+      const tennis = capsuleOf(TENNIS_CAPSULE);
+      const reset = pressWidgetButton(tennis, initialState(tennis), 2, 0, allowAll); // Reset match: enabledIf false
+      expect(reset.ok).assertFalse();
+      expect(pressWidgetButton(tennis, initialState(tennis), 9, 0, allowAll).error).assertEqual('no button 9');
+    });
+
+    it('tennis point and goal +1 update v1 values that survive a save and load (T4-14)', 0, () => {
+      const tennis = capsuleOf(TENNIS_CAPSULE);
+      let s = initialState(tennis);
+      for (let i = 0; i < 4; i++) {
+        s = pressWidgetButton(tennis, s, 0, 0, allowAll).state; // four points to P1: one game
+      }
+      const loaded = parseState(tennis, JSON.stringify(s));
+      expect(`${loaded.values?.['g1']} ${loaded.values?.['p1']}`).assertEqual('1 0');
+      const v = buildWidgetView(tennis, loaded, gate([], true, false), 0, true);
+      expect(v.displays.map(displaySummary).join(' | ')).assertEqual('Games[1|0] | [0|0] | P1 leads');
+      const water = rules('water 8 glasses');
+      const plus = pressWidgetButton(water, initialState(water), 0, 0, allowAll);
+      const wv = buildWidgetView(water, plus.state, gate([], true, false), 0, false);
+      expect(`${wv.value}/${wv.goal}`).assertEqual('1/8');
+    });
+
+    it('pause keeps the time left and start resumes from it', 0, () => {
+      const timer = rules('tea 4 min');
+      const s = initialState(timer);
+      applyV0Action(timer, s, 'startTimer:tea', 0);
+      applyV0Action(timer, s, 'pauseTimer:tea', 60000);
+      expect(`${s.timers[0].endAt} ${s.timers[0].pausedLeft}`).assertEqual('0 180000');
+      const reloaded = parseState(timer, JSON.stringify(s));
+      applyV0Action(timer, reloaded, 'startTimer:tea', 100000);
+      expect(reloaded.timers[0].endAt).assertEqual(280000);
+      applyV0Action(timer, reloaded, 'stopTimer:tea', 110000);
+      expect(reloaded.timers[0].endAt).assertEqual(0);
     });
   });
 }

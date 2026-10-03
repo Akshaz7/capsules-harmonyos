@@ -17,7 +17,9 @@ import {
 } from './CapsuleTypes';
 import { parseAction, permissionForAction, permissionForComponent } from './CapsuleValidator';
 import { routeCapsule } from './CapsuleRouter';
-import { allComponents, isEnabled, isShown, renderTemplate, restoreState, StateValues } from './CapsuleProgram';
+import {
+  allComponents, applyActions, initialState as initialValues, isEnabled, isShown, renderTemplate, restoreState, StateValues
+} from './CapsuleProgram';
 
 type JsonValue = Object | null | undefined;
 type JsonRecord = Record<string, Object | null>;
@@ -28,6 +30,8 @@ type JsonRecord = Record<string, Object | null>;
 export interface TimerRun {
   id: string;
   endAt: number;
+  /** ms left when a widget tap paused it (pauseTimer); startTimer resumes from here. Absent otherwise. */
+  pausedLeft?: number;
 }
 
 export interface CounterValue {
@@ -45,11 +49,18 @@ export interface CapsuleState {
   timers: TimerRun[];
   counters: CounterValue[];
   checklists: ChecklistTicks[];
+  /** Schema v1 state values, shared by the app and the widget. Absent for v0 capsules. */
+  values?: StateValues;
+}
+
+function isV1(capsule: Capsule): boolean {
+  return capsule.schemaVersion === 1 || capsule.state !== undefined || capsule.computed !== undefined;
 }
 
 export function initialState(capsule: Capsule): CapsuleState {
+  // No v1 values here: until the app or a widget tap saves them, the app's own store has the latest ones.
   const state: CapsuleState = { capsuleId: capsule.id, timers: [], counters: [], checklists: [] };
-  capsule.ui.forEach((c: CapsuleComponent) => {
+  allComponents(capsule.ui).forEach((c: CapsuleComponent) => {
     if (c.type === 'timer') {
       state.timers.push({ id: (c as TimerComponent).id, endAt: 0 });
     } else if (c.type === 'counter') {
@@ -102,6 +113,10 @@ export function parseState(capsule: Capsule, json: string): CapsuleState {
     if (typeof endAt === 'number' && Number.isFinite(endAt as number) && (endAt as number) >= 0) {
       t.endAt = endAt as number;
     }
+    const left: JsonValue = saved === null ? null : saved['pausedLeft'];
+    if (t.endAt === 0 && typeof left === 'number' && Number.isFinite(left as number) && (left as number) > 0) {
+      t.pausedLeft = left as number;
+    }
   });
   const counters = asArray(root['counters']);
   state.counters.forEach((c: CounterValue) => {
@@ -111,6 +126,10 @@ export function parseState(capsule: Capsule, json: string): CapsuleState {
       c.value = value as number;
     }
   });
+  const values = asRecord(root['values']);
+  if (values !== null && isV1(capsule)) {
+    state.values = restoreState(capsule, values as StateValues);
+  }
   const lists = asArray(root['checklists']);
   state.checklists.forEach((l: ChecklistTicks) => {
     const saved = findById(lists, l.id);
@@ -122,7 +141,8 @@ export function parseState(capsule: Capsule, json: string): CapsuleState {
 
 // ---- Widget messages (sent by the card through postCardAction) ----
 
-export type WidgetOp = 'start' | 'increment' | 'toggle' | 'refresh';
+/** 'press': a v1 button (index among all the capsule's buttons) whose "do" steps run on the widget. */
+export type WidgetOp = 'start' | 'increment' | 'toggle' | 'refresh' | 'press';
 
 export interface WidgetMessage {
   op: WidgetOp;
@@ -144,7 +164,7 @@ export function parseWidgetMessage(json: string): WidgetMessage | null {
   const op: JsonValue = r['op'];
   const id: JsonValue = r['id'];
   const index: JsonValue = r['index'];
-  if (op !== 'start' && op !== 'increment' && op !== 'toggle' && op !== 'refresh') {
+  if (op !== 'start' && op !== 'increment' && op !== 'toggle' && op !== 'refresh' && op !== 'press') {
     return null;
   }
   return {
@@ -177,6 +197,10 @@ export function declaredAction(capsule: Capsule, msg: WidgetMessage): string | n
     case 'increment':
       return component(capsule, 'counter', msg.id) !== undefined && hasButton(capsule, `increment:${msg.id}`) ?
         `increment:${msg.id}` : null;
+    case 'press': {
+      const b = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'button')[msg.index];
+      return b !== undefined ? '' : null; // its actions are checked one by one in pressWidgetButton
+    }
     case 'toggle': {
       const list = component(capsule, 'checklist', msg.id);
       return list !== undefined && msg.index >= 0 && msg.index < (list as ChecklistComponent).items.length ? '' : null;
@@ -208,6 +232,97 @@ export function applyWidgetMessage(capsule: Capsule, state: CapsuleState, msg: W
     }
   }
   return next;
+}
+
+// ---- v1 buttons on the widget ----
+
+export class PressResult {
+  /** True when the steps ran; `state` is then the new state to save. */
+  ok: boolean = false;
+  state: CapsuleState = { capsuleId: '', timers: [], counters: [], checklists: [] };
+  /** The v0 actions the steps produced (already allowed and applied to timers/counters). */
+  actions: string[] = [];
+  /** Why the gatekeeper blocked it, or why it could not run ('' when ok). Nothing changed. */
+  blocked: string = '';
+  error: string = '';
+}
+
+/** Applies one allowed v0 action to the widget state (timers, counters). Other actions need the app. */
+export function applyV0Action(capsule: Capsule, state: CapsuleState, action: string, now: number): void {
+  const a = parseAction(action);
+  if (a === null) {
+    return;
+  }
+  const lengthMs = (id: string): number => {
+    const t = allComponents(capsule.ui).find((c: CapsuleComponent) => c.type === 'timer' &&
+      (c as TimerComponent).id === id);
+    return t === undefined ? 0 : Math.round((t as TimerComponent).minutes * 60) * 1000;
+  };
+  const start = (run: TimerRun): void => {
+    if (run.endAt > now) {
+      return; // already running
+    }
+    run.endAt = now + (run.pausedLeft !== undefined && run.pausedLeft > 0 ? run.pausedLeft : lengthMs(run.id));
+    run.pausedLeft = undefined;
+  };
+  const run = state.timers.find((t: TimerRun) => t.id === a.arg);
+  if (a.kind === 'startAllTimers') {
+    state.timers.forEach(start);
+  } else if (a.kind === 'startTimer' && run !== undefined) {
+    start(run);
+  } else if (a.kind === 'pauseTimer' && run !== undefined && run.endAt > now) {
+    run.pausedLeft = run.endAt - now;
+    run.endAt = 0;
+  } else if (a.kind === 'stopTimer' && run !== undefined) {
+    run.endAt = 0;
+    run.pausedLeft = undefined;
+  } else if (a.kind === 'resetTimer' && run !== undefined) {
+    const wasRunning = run.endAt > now;
+    run.pausedLeft = undefined;
+    run.endAt = wasRunning ? now + lengthMs(run.id) : 0;
+  } else if (a.kind === 'increment' || a.kind === 'reset') {
+    const counter = state.counters.find((v: CounterValue) => v.id === a.arg);
+    if (counter !== undefined) {
+      counter.value = a.kind === 'increment' ? counter.value + 1 : 0;
+    }
+  }
+}
+
+/**
+ * A v1 button tapped on the widget: runs its "do" steps (all-or-nothing, like in the app), asks `allow`
+ * (the gatekeeper) about every v0 action the steps produce, then applies them. A disabled button, a removed
+ * capsule or a blocked action changes nothing.
+ */
+export function pressWidgetButton(capsule: Capsule, state: CapsuleState, index: number, now: number,
+  allow: (action: string) => boolean): PressResult {
+  const r = new PressResult();
+  r.state = state;
+  const button = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'button')[index];
+  if (button === undefined) {
+    r.error = `no button ${index}`;
+    return r;
+  }
+  const values = state.values ?? initialValues(capsule);
+  const applied = applyActions(capsule, values, button as ButtonComponent);
+  if (!applied.ok) {
+    r.error = applied.error ?? 'the button failed';
+    return r;
+  }
+  for (const action of applied.actions) {
+    if (!allow(action)) {
+      r.blocked = `action "${action}" is not allowed`;
+      return r;
+    }
+  }
+  const next: CapsuleState = JSON.parse(JSON.stringify(state)) as CapsuleState;
+  if (isV1(capsule)) {
+    next.values = applied.state;
+  }
+  applied.actions.forEach((a: string) => applyV0Action(capsule, next, a, now));
+  r.ok = true;
+  r.state = next;
+  r.actions = applied.actions;
+  return r;
 }
 
 // ---- What the card draws ----
@@ -519,8 +634,9 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
     return v;
   }
   let view: WidgetView;
-  if (capsule.schemaVersion === 1 || capsule.state !== undefined || capsule.computed !== undefined) {
-    view = buildLogicView(capsule, state, restoreState(capsule, values ?? {}), gate, wide);
+  if (isV1(capsule)) {
+    // The shared widget state has the latest values; the app's own store is the fallback for older capsules.
+    view = buildLogicView(capsule, state, state.values ?? restoreState(capsule, values ?? {}), gate, wide);
   } else {
     view = baseView('ok', capsule.id, capsule.name, '', wide);
     capsule.ui.forEach((c: CapsuleComponent, i: number) => {

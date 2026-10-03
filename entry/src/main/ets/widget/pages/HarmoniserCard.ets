@@ -139,10 +139,10 @@ struct HarmoniserCard {
     postCardAction(this, { action: 'message', params: { op: op, id: id, index: index } });
   }
 
-  /** A v1 button. Until T4-14 runs "do" steps on the widget, a tap opens the capsule in the app. */
+  /** A v1 button: the form extension runs its "do" steps (disabled buttons do nothing). */
   private press(v: CardView, b: CardButton): void {
     if (b.enabled) {
-      this.openApp(v.capsuleId);
+      this.send('press', '', b.index);
     }
   }
 

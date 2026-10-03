@@ -18,9 +18,10 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule, Permission } from '../core/CapsuleTypes';
 import { routeCapsule } from '../core/CapsuleRouter';
+import { restoreState } from '../core/CapsuleProgram';
 import {
   applyWidgetMessage, buildWidgetView, declaredAction, emptyView, firstBlank, GateFacts, parseWidgetMessage,
-  pickCapsuleForNewWidget, pickColorTag, planWidgetAssignments, SavedCapsule, stableColorTag, WidgetView, withColor
+  pickCapsuleForNewWidget, pickColorTag, pressWidgetButton, planWidgetAssignments, SavedCapsule, stableColorTag, WidgetView, withColor
 } from '../core/WidgetModel';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
 import {
@@ -262,6 +263,22 @@ export async function handleWidgetMessage(ctx: common.Context, formId: string, m
     const gate = freshGate(ctx);
     if (action === null || gate.isRemoved(capsule.id)) {
       hilog.warn(DOMAIN, TAG, 'tap %{public}s on %{public}s is not declared by the capsule', msg.op, capsule.id);
+    } else if (msg.op === 'press') {
+      // A v1 button: its "do" steps run here with core's interpreter; every v0 action passes the gatekeeper.
+      const state = loadState(ctx, capsule);
+      if (state.values === undefined && capsule.state !== undefined) {
+        state.values = restoreState(capsule, savedValues(ctx, capsule.id)); // not shared yet: start from the app's
+      }
+      const r = pressWidgetButton(capsule, state, msg.index, Date.now(),
+        (a: string) => gate.allowAction(capsule, a));
+      if (r.ok) {
+        saveState(ctx, r.state);
+        hilog.info(DOMAIN, TAG, 'button %{public}d on %{public}s ran: %{public}s', msg.index, capsule.id,
+          r.actions.length > 0 ? r.actions.join(', ') : 'state only');
+      } else {
+        hilog.warn(DOMAIN, TAG, 'button %{public}d on %{public}s did nothing: %{public}s', msg.index, capsule.id,
+          r.blocked.length > 0 ? r.blocked : r.error);
+      }
     } else if (action.length > 0 && !gate.allowAction(capsule, action)) {
       // Blocked and logged by the gatekeeper.
     } else {

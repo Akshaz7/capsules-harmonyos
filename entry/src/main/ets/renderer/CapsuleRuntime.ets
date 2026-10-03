@@ -411,6 +411,9 @@ export class CapsuleRuntime {
     const state: CapsuleState = {
       capsuleId: this.capsule.id, timers: timers, counters: counters, checklists: checklists
     };
+    if (this.capsule.schemaVersion === 1 || this.capsule.state !== undefined) {
+      state.values = this.values; // shared with the widget, whose buttons run the same "do" steps
+    }
     return state;
   }
 
@@ -452,6 +455,9 @@ export class CapsuleRuntime {
         l.checked = ticks.checked.slice();
       }
     });
+    if (state.values !== undefined) {
+      this.values = restoreState(this.capsule, state.values); // e.g. a widget button changed the score
+    }
     if (this.timers.some((t: TimerState) => t.running)) {
       this.ensureTicking();
     }
