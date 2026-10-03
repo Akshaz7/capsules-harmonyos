@@ -14,6 +14,7 @@ It is a stretch goal. Nothing in the app should depend on it being there.
 | `find_esp32.sh` | Finds the board's IP on the local network (mDNS, then MAC lookup). |
 | `main/` | The firmware (ESP-IDF, C). |
 | `main/secrets.h.example` | Template for the Wi-Fi credentials (`main/secrets.h` is git-ignored). |
+| `tests/` | Unit tests that run on the laptop, without ESP-IDF: `make -C tests test`. |
 | `tools/gen_fonts.sh` | Regenerates the fonts in `main/fonts/`. Not needed for a normal build. |
 
 ## Status
@@ -22,13 +23,28 @@ As of 2026-10-03.
 
 | | State |
 | --- | --- |
-| Mock server | Passes `test_api.sh` (50 checks). |
-| Firmware build | Builds without warnings on ESP-IDF v5.5. 1,532,720 bytes, 82% of the app partition free. |
-| Boot on hardware | Checked on the serial log of one board (revision V2): boots, display and touch drivers start, accelerometer and audio codec answer, HTTP server starts. |
-| Wi-Fi on hardware | Joins the phone hotspot (WPA3) and gets an address. The venue network `HackYeah2026` is 5 GHz only and the board cannot see it. |
-| **HTTP API on hardware** | **Not tested.** The laptop was on a different network from the board. Run `./test_api.sh http://<board ip>` from a machine on the same network. |
-| **Screen, touch, beep** | **Not looked at by anyone yet.** See [Two-minute check](#two-minute-check-with-the-board-in-your-hand). |
-| Rep counting | Experimental and untuned. Off unless asked for. |
+| Mock server | Passes `test_api.sh` (72 checks) and its unit tests. |
+| Host unit tests | `make -C tests test`: 1,092 checks in C on the firmware's own source files, 19 Python tests on the mock. All pass. |
+| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,533,552 bytes, 82% of the app partition free. |
+| Boot on hardware | One board (revision V2): boots, display and touch drivers start, accelerometer and audio codec answer, HTTP server starts. |
+| Wi-Fi on hardware | Joins the phone hotspot (WPA3) and the venue network `HackYeah2026`, which it sees on 2.4 GHz channel 1. Joining the venue network often takes several attempts. |
+| HTTP API on hardware | **Confirmed with the previous build**: `test_api.sh` passed 50 of 50 against the board. **The current build has not been tested over HTTP on the board**, see below. |
+| Screen, touch, beep | **Confirmed on hardware** by the owner: the screen shows the UI, a tap on + raises the count, the speaker beeps when a timer ends. `/screenshot` works on the board. |
+| Rep counting | Experimental and **still untuned**. Off unless asked for. |
+
+**Open point.** The current build fixes a crash: JSON nested about 100 levels deep overflowed
+the HTTP task's stack and rebooted the board. The fix and the 22 new checks in `test_api.sh`
+pass on the host and against the mock. They could not be run against the board: after the
+last flash the board joined the venue network while the laptop was on the phone hotspot,
+which had moved to 6 GHz where the board cannot follow. On the board the new build has only
+been seen to boot, join Wi-Fi and keep announcing its address. With both on one network:
+
+```sh
+./test_api.sh http://<board ip>                      # wants: 72 passed, 0 failed
+curl -s -m 5 -X POST http://<board ip>/capsule -d "$(printf '[%.0s' $(seq 300))"
+                                                     # wants: {"error":"JSON nested too deeply"}
+curl -s http://<board ip>/state                      # still answers: the board did not reboot
+```
 
 Full list in [Tested and not tested](#tested-and-not-tested).
 
@@ -58,13 +74,17 @@ curl -s -X POST http://localhost:8080/capsule -d '{"type":"counter","label":"Squ
 | Field | Applies to | Rules |
 | --- | --- | --- |
 | `type` | both | Required. `"timer"` or `"counter"`. |
-| `label` | both | String. Optional, default empty. Cut to 47 bytes of UTF-8. |
+| `label` | both | String. Optional, default empty. Must be valid UTF-8. Cut to 47 bytes, never inside a character. |
 | `seconds` | timer | Required. Number from 1 to 359999. |
 | `count` | counter | Number from 0 to 999999. Optional, default 0. |
 | `running` | timer | *Extra.* `false` loads the timer paused. Default `true`: **the countdown starts as soon as the capsule arrives.** |
 | `motion` | counter | *Extra.* `true` counts reps with the motion sensor. Default `false`. Ignored if the sensor did not start: check `motion` in the response. |
 
 Unknown fields are ignored. The response is the new state, the same object as `GET /state`.
+
+Limits on any request body: 1024 bytes; arrays and objects nested at most 8 deep (the
+board's JSON parser recurses and its stack is small); no NUL character, neither as a raw
+byte nor as the escape `\u0000`.
 
 ### `GET /state`
 
@@ -103,7 +123,7 @@ curl -s -X POST http://localhost:8080/action -d '{"action":"pause"}'
 | `toggle` | Pause/run; after the end, reset. Same as a tap on the screen. | 409 |
 | `reset` | Back to the full time, paused | Count to 0 |
 | `increment` | 409 | Count + 1. Same as the + button. |
-| `motion_on`, `motion_off` | 409 | Switch rep counting on or off |
+| `motion_on`, `motion_off` | 409 | Switch rep counting on or off (`motion_on`: 503 without a working sensor) |
 
 The response is the new state.
 
@@ -119,12 +139,17 @@ Errors are `{"error":"<what was wrong>"}`.
 
 | Status | When |
 | --- | --- |
-| 400 | Body is not a JSON object, or a field is missing, of the wrong type or out of range |
-| 404 | Unknown path |
-| 405 | Known path, wrong method |
-| 409 | The action does not fit the current capsule (for example `pause` on a counter, or anything while idle) |
+| 400 | Body is not a JSON object, is nested deeper than 8 levels or contains a NUL; a field is missing, of the wrong type or out of range; the label is not valid UTF-8; the `Content-Length` is not a number from 0 up |
+| 404 | Unknown path, whatever the method |
+| 405 | Known path, wrong method (`HEAD` and `OPTIONS` included) |
+| 408 | The body did not arrive within 2 seconds (board only) |
+| 409 | The action does not fit the current capsule (for example `pause` on a counter, `motion_on` on a timer, or anything while idle) |
 | 413 | Body larger than 1024 bytes |
-| 503 | `motion_on` on a board whose motion sensor did not start; `/screenshot` without a display |
+| 500 | Out of memory on the board; a bug in the mock |
+| 503 | `motion_on` for a counter on a board whose motion sensor did not start; `/screenshot` without a display |
+
+After a 408 or a 413 the connection is closed. Half a surrogate pair (`"\ud83d"`) is not a
+character: such a body is not JSON and gets the first 400.
 
 A rejected request leaves the current capsule untouched.
 
@@ -147,10 +172,24 @@ python3 mock_esp32.py --port 9000
 ./test_api.sh http://localhost:9000
 ```
 
-It prints its LAN address at start-up and one line per request. Differences from the board:
-port 8080 instead of 80; no screen; `motion_on` always works, and while a counter is in
-motion mode it adds one rep every 2 seconds so that polling has something to see
-(`--motion-interval 0` turns that off).
+It prints its LAN address at start-up and one line per request.
+
+The mock answers every request in `test_api.sh` and in `tests/` with the status code the
+firmware gives, and it cuts and refuses labels by the same rules (`tests/vectors/` is run
+against both). It is not the same in every corner. Known differences:
+
+- Port 8080 instead of 80; no screen, so `/screenshot` is always 503.
+- `motion_on` always works (never 503), and while a counter is in motion mode it adds one
+  rep every 2 seconds so that polling has something to see (`--motion-interval 0` turns
+  that off).
+- **Duplicate keys**: for `{"count":1,"count":2}` the board uses the first value and the
+  mock the last. Left as it is; do not send duplicate keys.
+- A negative or non-numeric `Content-Length` is a 400 on both, but the board's HTTP server
+  answers it itself, in plain text instead of JSON.
+- The mock never answers 408: a body that does not arrive blocks that one connection.
+- JSON is parsed by Python on one side and cJSON on the other. They agree on everything
+  the tests send; they may not agree on text that is not quite JSON (odd number formats,
+  for instance), and the wording of an error can differ where a body is wrong in two ways.
 
 ## Firmware
 
@@ -174,7 +213,23 @@ tested; keep it. `sdkconfig` is generated from `sdkconfig.defaults`; after editi
 defaults, delete `sdkconfig` and build again.
 
 To build with fewer parallel jobs (the laptop ran out of memory once with several builds
-going): `idf.py reconfigure && ninja -C build -j4`.
+going): `idf.py reconfigure && ninja -C build -j2`. When CMake re-runs it prints two
+warnings of its own ("Missing kconfig option. Re-run the build process"); they come from
+the component manager's second pass, not from the code.
+
+### Unit tests on the laptop
+
+```sh
+make -C tests test      # needs a C compiler and Python 3, not ESP-IDF
+```
+
+`tests/` compiles `main/capsule.c`, `main/http_api.c` and `main/validate.c` unchanged,
+against small stand-ins for ESP-IDF in `tests/stubs/` (a clock the test sets, a lock that
+checks it is taken and given in pairs, an HTTP server without sockets) and a copy of the
+cJSON version the firmware uses (`tests/vendor/`). They cover the timer state machine, label
+cutting, the nesting check and request validation. `tests/test_mock.py` runs the mock
+against the same vectors. What they cannot show is anything about stack use, Wi-Fi, the
+display or the real HTTP server; that is what `test_api.sh` against the board is for.
 
 ### Wi-Fi
 
@@ -188,8 +243,12 @@ going): `idf.py reconfigure && ninja -C build -j4`.
 
 At boot the board scans, logs every network it can see, and joins the first listed network
 that is in range. If that fails for 15 seconds it tries the next, and it keeps cycling until
-one works. It reconnects by itself when the network drops. WPA2, WPA3 and mixed networks
-work. The radio is **2.4 GHz only**: a 5 GHz-only network never shows up in its scan.
+one works. It reconnects by itself when the network drops, and every 10 seconds it checks
+that the link is really still there. WPA2, WPA3 and mixed networks
+work. The radio is **2.4 GHz only**: a network that is only on 5 or 6 GHz never shows up in
+its scan. A phone hotspot set to 6 GHz is such a network. The app's machine and the board
+must be on the same network; a board that prefers the venue network is out of reach of a
+laptop on the hotspot.
 
 ### Flash
 
@@ -201,8 +260,8 @@ idf.py -p /dev/ttyACM0 flash monitor       # Ctrl+] leaves the monitor
 Check which `ttyACM` number is the board first. On this laptop a phone was also plugged in
 as a `ttyACM` device and the numbers swapped after a re-plug; the `/dev/serial/by-id/...`
 path does not change. If the port is not writable, add yourself to the `dialout` group
-(`sudo usermod -aG dialout $USER`, then log in again). Opening the serial port usually
-resets the board.
+(`sudo usermod -aG dialout $USER`, then log in again). Opening the serial port resets the
+board, and after a reset it may come back on another of its networks with another address.
 
 ### Hardware revisions
 
@@ -259,7 +318,7 @@ The serial log cannot show what is on the glass. With the board powered and the 
 1. The screen is lit: "harmoniser" in teal, an IP address in white, the network name below.
    If it is black, look at the serial log for `color failed` or a reboot loop.
 2. From a machine on the same network: `./test_api.sh http://<that ip>`. It should end with
-   `50 passed, 0 failed`. During the run the screen shows a counter, then a timer.
+   `72 passed, 0 failed`. During the run the screen shows a counter, then a timer.
 3. The run ends with a 2 second timer. The screen should flash red and the speaker should
    beep three times. Tap the screen: the flashing stops and the timer shows `00:02` in amber.
 4. `curl -X POST http://<ip>/capsule -d '{"type":"timer","label":"Pasta","seconds":540}'`
@@ -277,29 +336,35 @@ the toolchain, flash and PSRAM settings, then their `00_bsp_quickstart` for disp
 
 Tested:
 
-- `mock_esp32.py` against `test_api.sh`: 50 of 50 checks, plus manual checks of UTF-8
-  labels, oversized bodies and simulated motion reps.
-- Firmware build: no warnings, ESP-IDF v5.5, Waveshare BSP 2.0.3, LVGL 9.6.0.
-- On one V2 board, from the serial log only: five complete boot logs with no crash and no
-  display transfer errors, both the display and the touch controller initialise,
-  accelerometer reads 0.99 g at rest, audio codec initialises, HTTP server starts, Wi-Fi
-  scan and join of a WPA3 hotspot, the `HARMONISER_IP=` line every 10 seconds.
-- `find_esp32.sh`: the not-found path, and the MAC lookup using another device's MAC.
+- Host unit tests (`make -C tests test`): timer rounding and expiry, pause at the deadline,
+  actions after the end, the longest timer, label cutting for 1- to 4-byte characters at
+  the 47-byte limit, invalid UTF-8, the nesting and NUL scan, every validation error of
+  `/capsule` and `/action`, 408/413 closing the socket, the `/screenshot` BMP layout.
+- `mock_esp32.py` against `test_api.sh`: 72 of 72 checks, and `tests/test_mock.py`.
+- Firmware build: no compiler warnings, ESP-IDF v5.5, Waveshare BSP 2.0.3, LVGL 9.6.0.
+- On one V2 board, with the build before the review fixes: `test_api.sh` 50 of 50 over
+  Wi-Fi; the screen shows the UI; a tap on + raises the count; the speaker beeps at the end
+  of a timer; `GET /screenshot` returns the picture.
+- On the same board, with the current build, from the serial log: boots without a crash,
+  display, touch, accelerometer and codec initialise, HTTP server starts, joins the hotspot
+  and the venue network, prints the `HARMONISER_IP=` line every 10 seconds.
+- `find_esp32.sh`: the not-found path, and the MAC lookup using another device's MAC
+  (before the change that makes it check the API; not re-run since).
 
 Not tested:
 
-- The HTTP API on the board. No request has reached it yet.
-- Anything visible or audible: that the panel shows the UI, colours, font sizes, text
-  position, the flash at timer end, the beep and its volume.
-- Touch: taps on the timer and on the + button.
-- `GET /screenshot` on the board.
+- **The current build's HTTP API on the board**, including the fix for the nested-JSON
+  crash, the label checks and the closed socket after a 413. See [Status](#status).
+- The link check that rejoins after a lost disconnect event: it needs a network that
+  drops the board without telling it.
 - Rep counting with a moving board. Thresholds are guesses.
 - The original hardware revision (SH8601 + FT3168).
-- The fallback from one network to the next when the first one is in range but refuses
-  the board, and reconnection after a drop. On about half of the boots the first join
-  attempt to the hotspot failed (reason 4, then 205) and the retry got through about
-  6 seconds later; the other boots joined in 2 seconds.
+- Reconnection after a drop. The fallback from one network to the next has been seen on
+  the serial log: the venue network refused the board (reason 201, 2 or 205) for 15
+  seconds and the board went on to the hotspot. On about half of the boots the first join
+  attempt to the hotspot failed (reason 4, then 205) and the retry got through.
 - `harmoniser.local` from another device, and `find_esp32.sh` finding the real board.
+- Networks with a 32-character name or a 64-character key.
 - Long runs, battery operation, and the mock on macOS (it uses nothing platform-specific).
 
 ## Third-party
@@ -308,4 +373,5 @@ Not tested:
 | --- | --- |
 | [Waveshare BSP](https://components.espressif.com/components/waveshare/esp32_s3_touch_amoled_1_8) and QMI8658 driver | Apache-2.0 |
 | LVGL 9.6, Espressif LVGL port, LCD/touch/codec drivers, mDNS | See each folder in `managed_components/` |
+| cJSON 1.7.18 (`tests/vendor/cJSON`, for the host tests; the firmware uses ESP-IDF's copy) | MIT |
 | Roboto (the bitmaps in `main/fonts/`, generated with `lv_font_conv`) | Apache-2.0 |
