@@ -24,7 +24,7 @@ $HDC -t 127.0.0.1:5555 install -r entry/build/default/outputs/default/entry-defa
 $HDC -t 127.0.0.1:5555 shell aa start -a EntryAbility -b com.hackyeah.capsules
 ```
 
-Before building the submission .hap, delete entry/src/main/resources/rawfile/config.local.json and rebuild. Never ship a .hap with the key.
+Never put config.local.json in entry/src/main/resources/rawfile/: everything there is packed into the .hap. Keys live only in the git-ignored root config.local.json and are pushed to the app's files dir (below). Never ship a .hap with a key.
 
 To use the AI fallback without the key inside the .hap, keep it in `config.local.json` at the project root (git-ignored, not packed) and push it to the app's files dir after installing. This works on debug builds only, and the core reads this location before `rawfile/`:
 
