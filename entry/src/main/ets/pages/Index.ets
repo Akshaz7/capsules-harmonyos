@@ -68,6 +68,9 @@ import { getInstallToken, getMarketplaceToken } from '../adapters/InstallToken';
 import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
+import { HomeHero } from './HomeHero';
+import { MiniPreview } from './MiniPreview';
+import { reduceMotion, springCurve, successTick } from './Motion';
 import { BUILT_FROM_TEMPLATE } from './CapsuleEntry';
 import { copyToCache, pickPhoto, removeSnap, SNAP_HINT, SNAP_NEEDS_CLOUD, takePhoto } from './SnapPhoto';
 import { CapsuleState, TimerRun } from '../core/WidgetModel';
@@ -82,6 +85,10 @@ const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
 const CHOOSE_PAGE = 'chooseCapsule';
 const MARKET_PAGE = 'marketplace';
+const TAB_CREATE = 0;
+const TAB_CAPSULES = 1;
+const TAB_MARKET = 2;
+const TAB_SETTINGS = 3;
 const MARKETPLACE_ORIGIN = 'marketplace';
 // Stored as a capsule origin so the sheet and the card badge say where it came from.
 const IMPORTED_ORIGIN = 'imported';
@@ -103,6 +110,8 @@ const PLACEHOLDERS: string[] = [
   'Try: pasta 9 min, sauce 15 min'
 ];
 const PLACEHOLDER_MS = 3000;
+const TYPE_MS = 55; // one character per tick while typing the placeholder
+const HOLD_TICKS = 30; // ~1.6 s with a whole example shown
 
 // Shown after a failed create. Each request is one the offline rules can build.
 const RETRY_SUGGESTIONS: ExampleChip[] = [
@@ -243,6 +252,19 @@ struct Index {
   /** Time of the last trigger check; the trigger cards re-read "Next: ..." from it. */
   @Local triggerNow: number = Date.now();
   @Local placeholderIndex: number = 0;
+  /** UI-2: the selected home tab, and a tap counter per tab for the symbol bounce. */
+  @Local tab: number = TAB_CREATE;
+  @Local tabTaps: number[] = [0, 0, 0, 0];
+  private tabsController: TabsController = new TabsController();
+  /** UI-1: the placeholder as typed so far (types and erases the examples). */
+  @Local placeholderText: string = PLACEHOLDERS[0];
+  @Local inputFocused: boolean = false;
+  /** Bumped on tap: drives the camera symbol's bounce effect. */
+  @Local cameraBounce: number = 0;
+  @Local shimmerOn: boolean = false;
+  private typed: number = 0;
+  private erasing: boolean = false;
+  private holdTicks: number = 0;
   @Local entries: CapsuleEntry[] = [];
   @Local openId: string = '';
   @Local pending: Capsule | undefined = undefined;
@@ -292,9 +314,15 @@ struct Index {
     this.store = new CapsuleStore(ctx);
     this.settings.load(ctx);
     this.watchModelStatus();
-    this.placeholderTimer = setInterval(() => {
-      this.placeholderIndex = (this.placeholderIndex + 1) % PLACEHOLDERS.length;
-    }, PLACEHOLDER_MS);
+    if (reduceMotion()) {
+      this.placeholderTimer = setInterval(() => {
+        this.placeholderIndex = (this.placeholderIndex + 1) % PLACEHOLDERS.length;
+        this.placeholderText = PLACEHOLDERS[this.placeholderIndex];
+      }, PLACEHOLDER_MS);
+    } else {
+      this.placeholderText = '';
+      this.placeholderTimer = setInterval(() => this.typePlaceholder(), TYPE_MS);
+    }
     // Saved capsules were approved before; ones whose consent was lost get dropped.
     const gate = this.gate;
     this.entries = this.store.all()
@@ -987,7 +1015,10 @@ struct Index {
     this.pendingMarketItem = undefined;
     this.store?.add(capsule);
     const entry = this.makeEntry(capsule);
-    this.entries = [entry].concat(this.entries);
+    successTick();
+    this.getUIContext().animateTo({ curve: springCurve() }, () => {
+      this.entries = [entry].concat(this.entries); // the card springs into "Your capsules"
+    });
     if (this.gate.isAllowed(capsule, 'reminders')) {
       this.timers?.prepare().then(() => this.notifications?.ensureEnabled());
     }
@@ -1001,7 +1032,7 @@ struct Index {
     if (this.ctx) {
       refreshCapsuleWidgets(this.ctx);
     }
-    setTimeout(() => this.open(capsule.id), 300);
+    setTimeout(() => this.open(capsule.id), reduceMotion() ? 300 : 700); // let the card land first
   }
 
   private cancelPending(): void {
@@ -1203,7 +1234,7 @@ struct Index {
             .fontSize($r('sys.float.Body_M'))
             .fontColor($r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)
-            .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
+            .onClick(() => this.selectTab(TAB_SETTINGS))
         }
       }
       .layoutWeight(1)
@@ -1513,8 +1544,14 @@ struct Index {
     Column({ space: 12 }) {
       // No inner padding here: the card's 16vp is the only inset, so the text lines up with the
       // Create button. Even a few vp of TextArea padding clipped the first glyph ("k", "W", "M").
-      TextArea({ placeholder: PLACEHOLDERS[this.placeholderIndex], text: this.request })
+      TextArea({ placeholder: this.placeholderText, text: this.request })
         .height(96)
+        .onFocus(() => {
+          this.inputFocused = true;
+        })
+        .onBlur(() => {
+          this.inputFocused = false;
+        })
         .width('100%')
         .fontSize($r('sys.float.Body_L'))
         .backgroundColor(Color.Transparent)
@@ -1528,13 +1565,17 @@ struct Index {
           SymbolGlyph($r('sys.symbol.camera'))
             .fontSize(20)
             .fontColor([$r('sys.color.icon_primary')])
+            .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.cameraBounce)
         }
         .width(40)
         .height(40)
         .enabled(!this.busy)
         .accessibilityText('Snap')
         .accessibilityDescription(SNAP_HINT)
-        .onClick(() => this.snap())
+        .onClick(() => {
+          this.cameraBounce++;
+          this.snap();
+        })
         Blank()
         Button() {
           Row({ space: 6 }) {
@@ -1550,11 +1591,15 @@ struct Index {
               .fontColor($r('sys.color.font_on_primary'))
           }
           .padding({ left: 18, right: 18 })
+          .height(40)
+          .overlay(this.shimmer(), { align: Alignment.Start })
         }
         .height(40)
+        .clip(true)
         .backgroundColor($r('sys.color.brand'))
+        .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: 0.92 })
         .enabled(!this.busy && this.request.trim().length > 0)
-        .opacity(!this.busy && this.request.trim().length > 0 ? 1 : 0.4)
+        .opacity(this.busy || this.request.trim().length > 0 ? 1 : 0.4)
         .onClick(() => {
           this.create();
         })
@@ -1564,7 +1609,56 @@ struct Index {
     .width('100%')
     .padding(16)
     .borderRadius(24)
-    .backgroundColor($r('sys.color.comp_background_primary'))
+    // Frosted material over the hero gradient, with a soft shadow; a brand glow while typing.
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THIN)
+    .border({ width: this.inputFocused ? 1.5 : 0.5,
+      color: this.inputFocused ? $r('sys.color.brand') : $r('sys.color.comp_divider') })
+    .shadow(this.inputFocused ? { radius: 28, color: '#335B8CFF', offsetY: 6 } :
+      { radius: 16, color: '#14000000', offsetY: 4 })
+    .animation({ duration: 220, curve: Curve.EaseOut })
+  }
+
+  /** A light band sweeping across Create while it builds (not with reduce motion). */
+  @Builder
+  shimmer() {
+    if (this.busy && !reduceMotion()) {
+      Column()
+        .width(56)
+        .height(40)
+        .linearGradient({ angle: 90, colors: [['#00FFFFFF', 0], ['#55FFFFFF', 0.5], ['#00FFFFFF', 1]] })
+        .translate({ x: this.shimmerOn ? 160 : -60 })
+        .onAppear(() => {
+          this.shimmerOn = false;
+          this.getUIContext().animateTo({ duration: 1100, curve: Curve.Linear, iterations: -1 }, () => {
+            this.shimmerOn = true;
+          });
+        })
+    }
+  }
+
+  /** UI-1: type an example, hold it, erase it, move to the next. */
+  private typePlaceholder(): void {
+    const target = PLACEHOLDERS[this.placeholderIndex];
+    if (this.holdTicks > 0) {
+      this.holdTicks--;
+      return;
+    }
+    if (!this.erasing) {
+      this.typed = Math.min(this.typed + 1, target.length);
+      this.placeholderText = target.substring(0, this.typed);
+      if (this.typed === target.length) {
+        this.erasing = true;
+        this.holdTicks = HOLD_TICKS;
+      }
+      return;
+    }
+    this.typed = Math.max(this.typed - 2, 0);
+    this.placeholderText = target.substring(0, this.typed);
+    if (this.typed === 0) {
+      this.erasing = false;
+      this.holdTicks = 4;
+      this.placeholderIndex = (this.placeholderIndex + 1) % PLACEHOLDERS.length;
+    }
   }
 
   /** AI status on its own line under the input card: one line, ellipsis when long. */
@@ -1675,7 +1769,7 @@ struct Index {
         .fontSize($r('sys.float.Body_S'))
         .fontColor($r('sys.color.font_secondary'))
         .width('100%')
-        .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
+        .onClick(() => this.selectTab(TAB_SETTINGS))
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach(RETRY_SUGGESTIONS, (chip: ExampleChip) => {
           Row({ space: 6 }) {
@@ -1707,7 +1801,7 @@ struct Index {
             .fontSize($r('sys.float.Body_M'))
             .fontColor($r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)
-            .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
+            .onClick(() => this.selectTab(TAB_SETTINGS))
         }
       }
     }
@@ -1765,6 +1859,8 @@ struct Index {
     .borderRadius(24)
     .backgroundColor($r('sys.color.comp_background_primary'))
     .geometryTransition(entry.capsule.id)
+    // A new capsule lands with a spring (the insert runs inside animateTo in decide()).
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.7, y: 0.7 })))
     .onClick(() => this.open(entry.capsule.id))
   }
 
@@ -1772,38 +1868,26 @@ struct Index {
   home() {
     Scroll() {
       Column({ space: 16 }) {
-        Row() {
+        Row({ space: 8 }) {
+          Image($r('app.media.harmoniser_mark'))
+            .width(28)
+            .height(28)
           Text('Harmoniser')
-            .fontSize($r('sys.float.Subtitle_L'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_secondary'))
-            .layoutWeight(1)
-          Row({ space: 8 }) {
-            // Import is a secondary action: a small icon next to Settings and Log, not a big button.
-            SharingBar({
-              showShare: false,
-              compact: true,
-              onPairCode: (code: string) => this.claimDevice(code), // a scanned device pairing QR
-              onImported: (prepared: PreparedImport) => this.handleImported(prepared)
-            })
-            this.iconButton($r('sys.symbol.bag'), () => this.nav.pushPath({ name: MARKET_PAGE }))
-            this.iconButton($r('sys.symbol.gearshape'), () => this.nav.pushPath({ name: SETTINGS_PAGE }))
-            this.iconButton($r('sys.symbol.doc_text'), () => this.nav.pushPath({ name: LOG_PAGE }))
-          }
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('sys.color.font_primary'))
         }
         .width('100%')
-        Text('What do you need?')
-          .fontSize(32)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary'))
-          .width('100%')
+        .height(44)
+        Column({ space: 4 }) {
+          HomeHero()
+          Text('Tiny apps, made by asking.')
+            .fontSize($r('sys.float.Body_L'))
+            .fontColor($r('sys.color.font_secondary'))
+            .width('100%')
+        }
         this.inputCard()
         this.statusRow()
-        Text('Tiny apps, made by asking.')
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
-          .padding({ left: 4 })
         if (this.snapNeedsCloud) {
           this.snapCloudNote()
         } else if (this.languageFailed) {
@@ -1818,21 +1902,102 @@ struct Index {
             .fontColor($r('sys.color.font_secondary'))
             .width('100%')
         }
-        // Import from another phone. Nothing is saved until the sheet's Run.
-        Row() {
-          Text('Your capsules')
-            .fontSize($r('sys.float.Subtitle_L'))
+        this.recentSection()
+      }
+      .padding({ left: 16, right: 16, top: 8, bottom: 120 }) // room for the floating tab bar
+      .width('100%')
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.Top)
+    .edgeEffect(EdgeEffect.Spring)
+    .scrollBar(BarState.Off)
+    // One soft, static pale-blue wash at the top that fades into the system background.
+    .linearGradient({ direction: GradientDirection.Bottom,
+      colors: [[$r('app.color.hero_top'), 0], [$r('sys.color.background_secondary'), 0.35]] })
+    .transition(TransitionEffect.OPACITY)
+  }
+
+  /** Home "Recent": the four newest capsules as live mini widgets; "See all" opens the Capsules tab. */
+  @Builder
+  recentSection() {
+    Column({ space: 12 }) {
+      Row() {
+        Text('Recent')
+          .fontSize($r('sys.float.Subtitle_L'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+        if (this.entries.length > 0) {
+          Text('See all')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.brand'))
+            .fontWeight(FontWeight.Medium)
+            .onClick(() => this.selectTab(TAB_CAPSULES))
+        }
+      }
+      .width('100%')
+      if (this.entries.length === 0) {
+        Text('Your capsules will appear here')
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+      } else {
+        Grid() {
+          ForEach(this.entries.slice(0, 4), (entry: CapsuleEntry) => {
+            GridItem() {
+              Column({ space: 8 }) {
+                MiniPreview({ runtime: entry.runtime })
+                Text(entry.capsule.name)
+                  .fontSize($r('sys.float.Body_M'))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('sys.color.font_primary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }
+              .onClick(() => this.open(entry.capsule.id))
+            }
+          }, (entry: CapsuleEntry) => `${entry.capsule.id}-${entry.runtime.serial}`)
+        }
+        .columnsTemplate('1fr 1fr')
+        .columnsGap(12)
+        .rowsGap(16)
+        .width('100%')
+        .maxCount(2)
+        .layoutDirection(GridDirection.Row)
+      }
+    }
+    .width('100%')
+    .margin({ top: 8 })
+  }
+
+  /** UI-2: the Capsules tab (live previews come with UI-3). */
+  @Builder
+  capsulesTab() {
+    Scroll() {
+      Column({ space: 16 }) {
+        Row({ space: 8 }) {
+          Text('Capsules')
+            .fontSize(30)
             .fontWeight(FontWeight.Bold)
             .fontColor($r('sys.color.font_primary'))
-            .layoutWeight(1)
           if (this.entries.length > 0) {
             Text(`${this.entries.length}`)
-              .fontSize($r('sys.float.Body_M'))
+              .fontSize($r('sys.float.Body_L'))
               .fontColor($r('sys.color.font_tertiary'))
           }
+          Blank()
+          // Import from another phone (moved here from the home header). Nothing is saved until the sheet's Run.
+          SharingBar({
+            showShare: false,
+            compact: true,
+            onPairCode: (code: string) => this.claimDevice(code), // a scanned device pairing QR
+            onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+          })
         }
         .width('100%')
-        .margin({ top: 8 })
+        .margin({ top: 4 })
         if (this.entries.length === 0) {
           Text('Capsules you create appear here.')
             .fontSize($r('sys.float.Body_M'))
@@ -1856,7 +2021,7 @@ struct Index {
           .layoutDirection(GridDirection.Row)
         }
       }
-      .padding({ left: 16, right: 16, top: 8, bottom: 32 })
+      .padding({ left: 16, right: 16, top: 12, bottom: 120 })
       .width('100%')
     }
     .width('100%')
@@ -1864,7 +2029,93 @@ struct Index {
     .align(Alignment.Top)
     .edgeEffect(EdgeEffect.Spring)
     .scrollBar(BarState.Off)
-    .transition(TransitionEffect.OPACITY)
+  }
+
+  private selectTab(index: number): void {
+    this.tabTaps = this.tabTaps.map((n: number, i: number) => i === index ? n + 1 : n);
+    this.tab = index;
+    this.tabsController.changeIndex(index);
+  }
+
+  /** UI-2: one item of the floating tab bar: an HM Symbol that bounces when tapped, and a short label. */
+  @Builder
+  tabItem(index: number, icon: Resource, label: string) {
+    Column({ space: 2 }) {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([this.tab === index ? $r('sys.color.brand') : $r('sys.color.icon_secondary')])
+        .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.DOWN), this.tabTaps[index])
+      Text(label)
+        .fontSize(10)
+        .fontWeight(this.tab === index ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.tab === index ? $r('sys.color.brand') : $r('sys.color.font_secondary'))
+        .maxLines(1)
+    }
+    .layoutWeight(1)
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .accessibilityText(label)
+    .onClick(() => this.selectTab(index))
+  }
+
+  /** UI-2: a floating, frosted pill above the home indicator. */
+  @Builder
+  tabBar() {
+    Row() {
+      this.tabItem(TAB_CREATE, $r('sys.symbol.plus_circle'), 'Create')
+      this.tabItem(TAB_CAPSULES, $r('sys.symbol.square_grid_2x2'), 'Capsules')
+      this.tabItem(TAB_MARKET, $r('sys.symbol.bag'), 'Marketplace')
+      this.tabItem(TAB_SETTINGS, $r('sys.symbol.gearshape'), 'Settings')
+    }
+    .width('92%')
+    .height(64)
+    .padding({ left: 6, right: 6 })
+    .borderRadius(32)
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+    .border({ width: 0.5, color: $r('sys.color.comp_divider') })
+    .shadow({ radius: 24, color: '#1F000000', offsetY: 6 })
+    .margin({ bottom: 12 })
+  }
+
+  @Builder
+  mainTabs() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      // Native Tabs hold the pages; their own bar is hidden in favour of the floating pill below.
+      Tabs({ barPosition: BarPosition.End, controller: this.tabsController, index: this.tab }) {
+        TabContent() {
+          this.home()
+        }
+        TabContent() {
+          this.capsulesTab()
+        }
+        TabContent() {
+          MarketplaceView({
+            client: this.market,
+            embedded: true,
+            onInstall: (item: MarketItem) => this.installFromMarket(item)
+          })
+        }
+        TabContent() {
+          SettingsView({
+            settings: this.settings,
+            embedded: true,
+            cloudStatus: this.cloudConfigured ? '' : this.modelStatus,
+            smartDetail: this.smartModeDetail()
+          })
+        }
+      }
+      .barHeight(0)
+      .scrollable(false)
+      .animationDuration(reduceMotion() ? 0 : 250)
+      .onChange((index: number) => {
+        this.tab = index;
+      })
+      .width('100%')
+      .height('100%')
+      this.tabBar()
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -2040,7 +2291,7 @@ struct Index {
         if (this.openEntry()) {
           this.detail(this.openEntry() as CapsuleEntry)
         } else {
-          this.home()
+          this.mainTabs()
         }
       }
       .width('100%')

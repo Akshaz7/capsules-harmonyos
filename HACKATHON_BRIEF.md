@@ -47,7 +47,7 @@ The commit history shows the progression. AI coding agents were used throughout,
 | Gatekeeper, log, widgets (incl. picker), timer pause/stop | Calendar alerts with the app closed: not seen working |
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
 | Marketplace: browse, install with consent, run (live API, 108 templates listed) | Marketplace publishing: not tested |
-| | Vibration and motion counting: not built |
+| | Capsules that vibrate, motion counting: not built; voice input: core only |
 | Editing a capsule ("Change it…", with undo) | Photo → capsule: on-phone OCR path checked on a real phone (10/10 valid, 6/10 correct, offline); Snap button in the app not yet checked |
 | | Wrist companion works on its own hardware; not connected to the app |
 

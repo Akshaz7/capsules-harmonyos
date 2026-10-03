@@ -2,7 +2,7 @@
 
 One take of about 90 seconds. Most of it is on the **emulator**, the default the judges expect, with one clearly labelled **real-phone** segment. Every step shows something that is built and has been seen working. **The marketplace is in (Ash, 2026-10-03):** the live API (`harmoniser-web.vercel.app`) answered with 5 example listings on 2026-10-03, and Ash reports browse, Install, the "From the marketplace" consent and Run working against it. The **template catalogue is live too**: `/api/capsules?tag=template` returned all 108 templates on 2026-10-03 (T1 note, re-checked). Beat 5 still installs Squat counter, the listing Ash checked.
 
-Use English only: Harmoniser rejects other languages by design. Leave out anything that isn't built or hasn't been seen working: vibration, motion counting, calendar alerts with the app closed, and scanning a capsule QR code (no device check yet). The P1 fixes have landed (timer Pause/Stop, Share on the phone, non-English requests), so they can be shown if time allows, but the 90 seconds below don't need them.
+Use English only: Harmoniser rejects other languages by design. Leave out anything that isn't built or hasn't been seen working: vibration in capsules (the app's own short vibration on save is fine to show), motion counting, calendar alerts with the app closed, and scanning a capsule QR code (no device check yet). The P1 fixes have landed (timer Pause/Stop, Share on the phone, non-English requests), so they can be shown if time allows, but the 90 seconds below don't need them.
 
 ## Before recording
 
@@ -24,7 +24,7 @@ Use English only: Harmoniser rejects other languages by design. Leave out anythi
 | 2 | 0:06 | Emulator | Type `pasta 9 min, sauce 15 min, bread 6 min`, then **Create**. On the consent sheet, keep **Reminders** allowed and tap **Run capsule**. | "Common requests are built instantly by on-device rules. You decide what each capsule may use." |
 | 3 | 0:16 | Emulator | Open the card (**Made by rules**), tap start, then press Home: the blank widget now shows the timers counting down | "It's a native ArkUI app, with real calendar events and a home-screen widget that stays in sync." |
 | 4 | 0:26 | Emulator | Back in the app, type `km to miles converter`, then **Create**. The **Use Mistral AI (EU)?** notice appears; tap **OK**. (Trim the wait.) Then **Run capsule**, and type `10`. | "Logic goes to a cloud model, but EU-only by default and only after you agree. Only the request text is sent. Our own interpreter runs the result; nothing from the model executes." |
-| 5 | 0:44 | Emulator | Tap the bag icon, search `squat`, tap **Install** on **Squat counter**; the consent sheet shows "From the marketplace", then **Run** | "Or start from a capsule someone else published, still checked by the validator and behind your consent." |
+| 5 | 0:44 | Emulator | Tap the **Marketplace** tab, search `squat`, tap **Install** on **Squat counter**; the consent sheet shows "From the marketplace", then **Run** | "Or start from a capsule someone else published, still checked by the validator and behind your consent." |
 | 6 | 0:56 | Emulator | Type `read my contacts and text them happy birthday`, then **Create** | "And it refuses by design: no contacts, no SMS." Show the "can't do … by design" card. |
 | 7 | 1:02 | **Real phone** (caption: "Real device, On-device only mode") | Type a simple request no rule covers, e.g. `track pages I read`, then **Create** | "On a real phone, a 450M-parameter model runs fully on-device, through our HarmonyOS port of the Cactus engine." Show **Made on-device**. |
 | 8 | 1:14 | Real phone | Open the capsule and use it once (tap +) | "No network, no account. It works offline." |
@@ -38,7 +38,7 @@ If the live API fails, the screen falls back to the shipped examples with a note
 
 ## What not to claim
 
-- Vibration and automatic motion/step counting: not built.
+- Capsules that vibrate, and automatic motion/step counting: not built. Voice input: not in the app yet.
 - Calendar alerts firing with the app closed: not seen working.
 - On-device accuracy beyond the eval (9/15 correct).
 - Publishing to the marketplace (not tested).

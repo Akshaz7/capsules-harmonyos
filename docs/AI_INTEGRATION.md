@@ -94,5 +94,5 @@ Known limitations:
 - **EU default trades accuracy for privacy:** Mistral is weaker than Claude on hard logic requests.
 - **The on-device model** handles only simple requests, and got 9 of 15 right in the eval. Phone performance hasn't been measured, and offline use wasn't strictly tested, because emulator airplane mode doesn't cut its network.
 - **Requests are capped at 500 characters**; shared text at 2,000.
-- **Not built:** vibration and motion counting. Daily time triggers fire only while the app is open, and motion triggers don't fire at all.
+- **Not built:** vibration in capsules and motion counting. Voice input exists only in core (offline Core Speech Kit; 9/10 synthetic spoken requests within 20% word error on the emulator) and isn't in the app. Daily time triggers fire only while the app is open, and motion triggers don't fire at all.
 - **Model weights** must be pushed separately (debug builds). A store build would need an in-app download.

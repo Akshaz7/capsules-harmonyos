@@ -26,8 +26,7 @@ export function failureDetail(result: GenerateResult): string {
 }
 
 /** What works without the cloud, shown in Settings and on the failure card (wording fixed by T3-8). */
-export const LIMITS_TEXT = 'On this phone: timers, counters, checklists. Scoreboards, calculators and quizzes need ' +
-  'cloud AI (Mistral EU), turn it on in Settings.';
+export const LIMITS_TEXT = 'Common apps are made on your phone. Unusual ones need cloud AI (Mistral EU).';
 
 /** T3-13: shown instead of any other card when core's English-only gate (T4-11) refuses a request. */
 export const LANGUAGE_MESSAGE = 'Harmoniser understands English for now. Try: ';

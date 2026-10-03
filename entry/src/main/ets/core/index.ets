@@ -28,6 +28,7 @@ import {
 import { getRequestCache, getTemplateLibrary } from './templates';
 import { CactusProvider, DeviceOcr, loadImage, OnDeviceStatus, runPhotoEvalIfRequested } from './providers/CactusProvider';
 import { generateFromImageWith } from './providers/CloudVision';
+import { runSpeechEvalIfRequested } from './providers/SpeechInput';
 
 export * from './CapsuleTypes';
 export { validateCapsule, validateCapsuleObject, parseAction, permissionForAction, permissionForComponent,
@@ -48,6 +49,8 @@ export {
 export { OnDeviceStatus } from './providers/CactusProvider';
 export { initTemplates, matchTemplate, getTemplateLibrary, getRequestCache, TEMPLATE_BADGE, TEMPLATE_ORIGIN
 } from './templates';
+export { VoiceInput, VOICE_LANGUAGE, VOICE_NOTHING_HEARD, VOICE_PERMISSION, VOICE_UNAVAILABLE
+} from './providers/SpeechInput';
 export { IMAGE_NOT_READABLE, IMAGE_NOT_UNDERSTOOD, IMAGE_TOO_LARGE, IMAGE_UNSUPPORTED, MAX_IMAGE_BYTES
 } from './providers/CloudVision';
 export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';
@@ -148,6 +151,7 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
   setTimeout(() => { // debug-only phone photo eval; runs only if scripts/phone-photo-eval.sh pushed its marker
     runPhotoEvalIfRequested(context, onDevice, deviceOcr,
       (path: string, allowCloud: boolean) => generateCapsuleFromImage(path, { allowCloud: allowCloud }));
+    runSpeechEvalIfRequested(context); // likewise for scripts/phone-speech-eval.sh
   }, 3000);
   models = [];
   modelConfigs = [];
