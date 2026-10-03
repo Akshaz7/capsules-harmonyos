@@ -1,6 +1,7 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { initCapsuleModel } from '../core';
 
 const DOMAIN = 0x0000;
 
@@ -12,6 +13,10 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+    // Loads the optional AI fallback config; stays rules-only if missing. Never throws.
+    initCapsuleModel(this.context).then((ready: boolean) => {
+      hilog.info(DOMAIN, 'testTag', 'initCapsuleModel ready=%{public}s', String(ready));
+    });
   }
 
   onDestroy(): void {
