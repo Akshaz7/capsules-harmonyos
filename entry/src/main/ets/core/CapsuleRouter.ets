@@ -67,6 +67,13 @@ export function routeCapsule(capsule: Capsule): CapsuleRoute {
       reason: 'App only: motion counters and triggers run while the capsule is open in the app.'
     };
   }
+  const readings: number = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'device').length;
+  if (readings > 0) {
+    return {
+      widget: false,
+      reason: 'App only: live readings such as the battery are shown in the app.'
+    };
+  }
   if (isV1(capsule)) {
     return routeV1(capsule);
   }

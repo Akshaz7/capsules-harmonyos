@@ -155,7 +155,8 @@ function cloudNotice(provider: string): CloudNotice {
 }
 /** What capsules can do, for the "can't do that by design" card. */
 const CAPSULE_ABILITIES = 'timers, counters, checklists, calculations, inputs and lists, reminders, ' +
-  'notifications, vibration and the motion sensor';
+  'notifications, vibration, the motion sensor (shakes while a capsule is open), the battery reading and a ' +
+  'weather reading from Open-Meteo';
 
 /** How often due daily triggers are checked while the app is open. */
 const TRIGGER_CHECK_MS = 30 * 1000;
