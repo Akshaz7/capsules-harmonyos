@@ -12,6 +12,7 @@ import { shareCapsule } from './ShareExport';
 @ComponentV2
 export struct SharingBar {
   @Param capsule: Capsule | undefined = undefined;
+  @Param showShare: boolean = true;
   @Event onImported: (payload: PreparedImport) => void = () => {
   };
   @Local message: string = '';
@@ -94,12 +95,14 @@ export struct SharingBar {
   build() {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
-        Button('Share')
-          .layoutWeight(1)
-          .enabled(this.capsule !== undefined && !this.busy)
-          .onClick(() => {
-            this.share();
-          })
+        if (this.showShare) {
+          Button('Share')
+            .layoutWeight(1)
+            .enabled(this.capsule !== undefined && !this.busy)
+            .onClick(() => {
+              this.share();
+            })
+        }
         Button('Import')
           .layoutWeight(1)
           .enabled(!this.busy)
