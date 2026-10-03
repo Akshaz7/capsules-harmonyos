@@ -195,6 +195,8 @@ struct HarmoniserCard {
     }
     .width('100%')
     .height(28)
+    .responseRegion({ x: 0, y: -10, width: '100%', height: BIG_BUTTON }) // 48vp tap area
+    .onClick(() => this.onTap()) // the title opens the app; the rest of the card is left to its buttons
   }
 
   /** A large round accent button with a system symbol. */
@@ -350,14 +352,14 @@ struct HarmoniserCard {
     Column({ space: 4 }) {
       this.header(v, v.caption)
       Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(r.items.slice(0, v.wide ? 6 : 3), (item: CardCheckItem) => {
+        ForEach(r.items.slice(0, v.wide ? 4 : 2), (item: CardCheckItem) => {
           CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
         }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
       }
       .width('100%')
       .layoutWeight(1)
-      if (r.items.length > (v.wide ? 6 : 3)) {
-        Text(`+${r.items.length - (v.wide ? 6 : 3)} more`)
+      if (r.items.length > (v.wide ? 4 : 2)) {
+        Text(`+${r.items.length - (v.wide ? 4 : 2)} more`)
           .fontSize(11)
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
@@ -417,9 +419,9 @@ struct HarmoniserCard {
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .textAlign(TextAlign.Center)
       .padding({ left: 12, right: 12 })
-      .height(40)
+      .height(BIG_BUTTON)
       .constraintSize({ minWidth: 64 })
-      .borderRadius(20)
+      .borderRadius(BIG_BUTTON / 2)
       .backgroundColor(fill ? v.accent : tint(v.accent))
       .opacity(b.enabled ? 1 : 0.4)
       .onClick(() => this.press(v, b))
@@ -549,28 +551,37 @@ struct HarmoniserCard {
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.Center)
+    .onClick(() => this.onTap()) // blank: choose a capsule; removed/app-only: open the app
+  }
+
+  /** The layout for one view. */
+  @Builder
+  content(v: CardView) {
+    if (v.layout === 'counter' && v.rows.some((r: CardRow) => r.kind === 'counter')) {
+      this.counterLayout(v, v.rows.filter((r: CardRow) => r.kind === 'counter')[0])
+    } else if (v.layout === 'goal') {
+      this.goalLayout(v)
+    } else if (v.layout === 'timer' && v.rows.some((r: CardRow) => r.kind === 'timer')) {
+      this.timerLayout(v, v.rows.filter((r: CardRow) => r.kind === 'timer')[0])
+    } else if (v.layout === 'checklist' && v.rows.some((r: CardRow) => r.kind === 'checklist')) {
+      this.checklistLayout(v, v.rows.filter((r: CardRow) => r.kind === 'checklist')[0])
+    } else if (v.layout === 'logic') {
+      this.logicLayout(v)
+    } else if (v.layout === 'rows') {
+      this.rowsLayout(v)
+    } else {
+      this.messageLayout(v)
+    }
   }
 
   build() {
     Column() {
-      if (parseView(this.viewJson).layout === 'counter' && parseView(this.viewJson).rows.length > 0) {
-        this.counterLayout(parseView(this.viewJson),
-          parseView(this.viewJson).rows.filter((r: CardRow) => r.kind === 'counter')[0])
-      } else if (parseView(this.viewJson).layout === 'goal') {
-        this.goalLayout(parseView(this.viewJson))
-      } else if (parseView(this.viewJson).layout === 'timer' && parseView(this.viewJson).rows.length > 0) {
-        this.timerLayout(parseView(this.viewJson),
-          parseView(this.viewJson).rows.filter((r: CardRow) => r.kind === 'timer')[0])
-      } else if (parseView(this.viewJson).layout === 'checklist' && parseView(this.viewJson).rows.length > 0) {
-        this.checklistLayout(parseView(this.viewJson),
-          parseView(this.viewJson).rows.filter((r: CardRow) => r.kind === 'checklist')[0])
-      } else if (parseView(this.viewJson).layout === 'logic') {
-        this.logicLayout(parseView(this.viewJson))
-      } else if (parseView(this.viewJson).layout === 'rows') {
-        this.rowsLayout(parseView(this.viewJson))
-      } else {
-        this.messageLayout(parseView(this.viewJson))
-      }
+      // Builders get the view by value, and ArkUI does not redraw a builder when such a value changes
+      // (BUG-13: taps were saved but the card kept showing the old count). Keying the content on the
+      // view JSON rebuilds it from the new view on every update.
+      ForEach([this.viewJson], (json: string) => {
+        this.content(parseView(json))
+      }, (json: string) => json)
     }
     .width('100%')
     .height('100%')
@@ -578,7 +589,6 @@ struct HarmoniserCard {
     .backgroundColor($r('sys.color.comp_background_primary'))
     .borderRadius($r('sys.float.ohos_id_corner_radius_card'))
     .clip(true)
-    .onClick(() => this.onTap())
   }
 }
 
@@ -710,9 +720,9 @@ struct CompactRow {
         SymbolGlyph($r('sys.symbol.plus')).fontSize(18).fontColor([$r('sys.color.font_on_primary')])
       }
     }
-    .width(40)
-    .height(40)
-    .borderRadius(20)
+    .width(BIG_BUTTON)
+    .height(BIG_BUTTON)
+    .borderRadius(BIG_BUTTON / 2)
     .backgroundColor(this.accent)
     .onClick(() => {
       postCardAction(this, { action: 'message', params: { op: op, id: this.row.id, index: -1 } });
@@ -761,7 +771,7 @@ struct CompactRow {
       }
     }
     .width('100%')
-    .height(44)
+    .height(BIG_BUTTON)
   }
 }
 
@@ -798,7 +808,7 @@ struct CheckRow {
         .layoutWeight(1)
     }
     .width(this.wide ? '50%' : '100%')
-    .height(34)
+    .height(BIG_BUTTON)
     .onClick(() => {
       postCardAction(this, {
         action: 'message',
