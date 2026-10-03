@@ -17,14 +17,16 @@ import { util } from '@kit.ArkTS';
 import { fileIo } from '@kit.CoreFileKit';
 import { GenerateResult } from './CapsuleTypes';
 import { CapsuleModel } from './CapsuleModel';
-import { AI_NOT_CONFIGURED, generateCapsuleWith } from './CapsuleGenerator';
+import { AI_NOT_CONFIGURED, GenerateOptions, generateCapsuleWith } from './CapsuleGenerator';
 import { createProvider, HttpResponse, HttpTransport, ModelConfigResult, parseModelConfig } from './ModelProvider';
+import { CactusProvider, OnDeviceStatus } from './providers/CactusProvider';
 
 export * from './CapsuleTypes';
 export { validateCapsule, validateCapsuleObject, parseAction, permissionForAction, permissionForComponent,
   componentId } from './CapsuleValidator';
 export { parseRequest } from './RuleParser';
-export { AI_NOT_CONFIGURED, NO_RULE_MATCH } from './CapsuleGenerator';
+export { AI_NOT_CONFIGURED, NO_RULE_MATCH, GenerateOptions } from './CapsuleGenerator';
+export { OnDeviceStatus } from './providers/CactusProvider';
 export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';
 
 const CONFIG_FILE: string = 'config.local.json';
@@ -62,6 +64,7 @@ export interface ModelStatus {
 let model: CapsuleModel | null = null;
 let modelError: string = 'initCapsuleModel() has not been called';
 let status: ModelStatus = { configured: false, source: 'none', message: AI_NOT_CONFIGURED };
+const onDevice: CactusProvider = new CactusProvider();
 
 interface ConfigText {
   source: ConfigSource;
@@ -102,6 +105,7 @@ export async function loadModelConfig(context: common.Context): Promise<ModelCon
  * Never throws.
  */
 export async function initCapsuleModel(context: common.Context): Promise<boolean> {
+  onDevice.init(context); // loads the on-device model in the background; never throws
   model = null;
   const found = await readConfigText(context);
   if (found === null) {
@@ -126,7 +130,16 @@ export function getModelStatus(): ModelStatus {
   return status;
 }
 
-/** Rule parser first, model as fallback. Returns a validated capsule or a clear error. */
-export async function generateCapsule(request: string): Promise<GenerateResult> {
-  return generateCapsuleWith(request, model, modelError);
+/** On-device model status: "On-device AI ready", "On-device model not installed", ... */
+export function getOnDeviceStatus(): OnDeviceStatus {
+  return onDevice.getStatus();
+}
+
+/**
+ * Rule parser, then the on-device model, then the cloud model (only if configured and
+ * options.allowCloud is not false). Returns a validated capsule or a clear error.
+ */
+export async function generateCapsule(request: string, options?: GenerateOptions): Promise<GenerateResult> {
+  await onDevice.whenInitialised();
+  return generateCapsuleWith(request, model, modelError, onDevice.isReady() ? onDevice : null, options);
 }

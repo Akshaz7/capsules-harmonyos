@@ -81,7 +81,7 @@ export interface ValidationResult {
   errors: string[]; // each prefixed with a JSON path, e.g. "$.ui[2].action: ..."; empty when ok
 }
 
-export type CapsuleOrigin = 'rules' | 'model';
+export type CapsuleOrigin = 'rules' | 'on-device' | 'cloud';
 
 export interface GenerateResult {
   ok: boolean;

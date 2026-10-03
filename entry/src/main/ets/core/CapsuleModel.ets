@@ -81,7 +81,7 @@ export class CapsuleModel {
       }
       const result = validateCapsule(extractJson(reply));
       if (result.ok) {
-        return { ok: true, capsule: result.capsule, origin: 'model', details: [] };
+        return { ok: true, capsule: result.capsule, origin: 'cloud', details: [] };
       }
       lastErrors = result.errors;
       messages.push({ role: 'assistant', content: reply });
