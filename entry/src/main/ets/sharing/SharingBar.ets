@@ -77,7 +77,11 @@ export struct SharingBar {
 
   private report(text: string): void {
     if (this.compact) {
-      this.getUIContext().getPromptAction().showToast({ message: text });
+      try {
+        this.getUIContext().getPromptAction().showToast({ message: text });
+      } catch (e) {
+        this.message = text;
+      }
     } else {
       this.message = text;
     }

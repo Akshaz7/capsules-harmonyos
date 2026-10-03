@@ -28,7 +28,11 @@ import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon, rout
 import { CapsuleStore } from './CapsuleStore';
 import { ConsentView } from './ConsentView';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { refreshCapsuleWidgets } from '../widget/WidgetService';
+import {
+  assignCapsuleToWidget, firstBlankWidget, listWidgets, refreshCapsuleWidgets, WidgetInfo
+} from '../widget/WidgetService';
+import { WidgetCapsulePicker } from './WidgetCapsulePicker';
+import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
@@ -36,6 +40,7 @@ import { PreparedImport, SharingBar } from '../sharing';
 
 const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
+const CHOOSE_PAGE = 'chooseCapsule';
 // Stored as a capsule origin so the sheet and the card badge say where it came from.
 const IMPORTED_ORIGIN = 'imported';
 const OPEN_CURVE: ICurve = curves.springMotion(0.45, 0.9);
@@ -163,6 +168,10 @@ struct Index {
   @Local smarterBusyId: string = '';
   /** Capsules whose "Add to home screen" how-to is expanded. Open on first view, collapsed after. */
   @Local hintOpenIds: string[] = [];
+  /** Placed Harmoniser widgets, in the order they were added. */
+  @Local widgets: WidgetInfo[] = [];
+  /** Set by EntryAbility when a blank widget asks the user to choose a capsule. */
+  @Local launch: WidgetLaunch = widgetLaunch();
   @Local settings: AppSettings = new AppSettings();
   @Local showSheet: boolean = false;
   @Local request: string = '';
@@ -195,6 +204,95 @@ struct Index {
     this.entries = this.store.all()
       .filter((c: Capsule) => gate.hasDecided(c.id))
       .map((c: Capsule) => this.makeEntry(c));
+    this.loadWidgets();
+    if (this.launch.formId.length > 0) {
+      // Cold start from a blank widget: open the picker once the Navigation is up.
+      setTimeout(() => this.openCapsulePicker(), 0);
+    }
+  }
+
+  @Monitor('launch.formId')
+  onWidgetLaunch(): void {
+    if (this.launch.formId.length > 0) {
+      this.openCapsulePicker();
+    }
+  }
+
+  private openCapsulePicker(): void {
+    this.close();
+    this.nav.clear();
+    this.nav.pushPath({ name: CHOOSE_PAGE });
+  }
+
+  private loadWidgets(): void {
+    if (this.ctx) {
+      this.widgets = listWidgets(this.ctx);
+    }
+  }
+
+  private widgetLabel(w: WidgetInfo, index: number): string {
+    const entry = this.entries.find((e: CapsuleEntry) => e.capsule.id === w.capsuleId);
+    return `Widget ${index + 1}: ${entry ? entry.capsule.name : 'empty'}`;
+  }
+
+  /** From the picker a blank widget opened: show the chosen capsule on that widget. */
+  private async pickForWidget(capsuleId: string): Promise<void> {
+    const formId = this.launch.formId;
+    if (!this.ctx || formId.length === 0) {
+      return;
+    }
+    const ok = await assignCapsuleToWidget(this.ctx, formId, capsuleId);
+    const name = this.entries.find((e: CapsuleEntry) => e.capsule.id === capsuleId)?.capsule.name ?? 'It';
+    this.toast(ok ? `${name} is now on your home screen` : "That widget isn't available any more");
+    this.launch.formId = '';
+    this.loadWidgets();
+    this.nav.pop();
+  }
+
+  /** "Show on home screen widget": fill a blank widget, else ask which widget to replace. */
+  private showOnWidget(entry: CapsuleEntry): void {
+    const ctx = this.ctx;
+    if (!ctx) {
+      return;
+    }
+    this.loadWidgets();
+    const index = this.widgets.findIndex((w: WidgetInfo) => w.capsuleId === entry.capsule.id);
+    if (index >= 0) {
+      this.toast(`Already on your home screen (Widget ${index + 1})`);
+      return;
+    }
+    const blank = firstBlankWidget(ctx);
+    if (blank !== null) {
+      this.putOnWidget(entry, blank.formId);
+      return;
+    }
+    this.getUIContext().showActionSheet({
+      title: 'Replace which widget?',
+      message: 'All your Harmoniser widgets are in use.',
+      autoCancel: true,
+      sheets: this.widgets.map((w: WidgetInfo, i: number): SheetInfo => {
+        const sheet: SheetInfo = { title: this.widgetLabel(w, i), action: () => this.putOnWidget(entry, w.formId) };
+        return sheet;
+      })
+    });
+  }
+
+  private async putOnWidget(entry: CapsuleEntry, formId: string): Promise<void> {
+    if (!this.ctx) {
+      return;
+    }
+    const ok = await assignCapsuleToWidget(this.ctx, formId, entry.capsule.id);
+    this.loadWidgets();
+    const index = this.widgets.findIndex((w: WidgetInfo) => w.formId === formId);
+    this.toast(ok ? `Showing ${entry.capsule.name} on Widget ${index + 1}` : "Couldn't show it on that widget");
+  }
+
+  private toast(text: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: text });
+    } catch (e) {
+      hilog.warn(0x0001, 'Index', 'toast failed: %{public}s', text);
+    }
   }
 
   aboutToDisappear(): void {
@@ -264,6 +362,7 @@ struct Index {
       return;
     }
     this.entries.forEach((e: CapsuleEntry) => e.runtime.applyState(loadState(ctx, e.capsule)));
+    this.loadWidgets(); // the user may have added or removed widgets while away
     hilog.info(0x0001, 'Index', 'reloaded widget state for %{public}d capsules', this.entries.length);
   }
 
@@ -600,6 +699,11 @@ struct Index {
   pageMap(name: string) {
     if (name === LOG_PAGE && this.gate) {
       LogView({ log: this.gate.log })
+    } else if (name === CHOOSE_PAGE) {
+      WidgetCapsulePicker({
+        entries: this.entries,
+        onPick: (capsuleId: string) => this.pickForWidget(capsuleId)
+      })
     } else if (name === SETTINGS_PAGE) {
       SettingsView({ settings: this.settings, cloudStatus: this.cloudConfigured ? '' : this.modelStatus })
     }
@@ -913,7 +1017,31 @@ struct Index {
 
   @Builder
   routeCard(entry: CapsuleEntry) {
-    if (entry.route.widget) {
+    if (entry.route.widget && this.widgets.length > 0) {
+      Column({ space: 6 }) {
+        Button() {
+          Row({ space: 8 }) {
+            SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+              .fontSize(18)
+              .fontColor([$r('sys.color.brand')])
+            Text('Show on home screen widget')
+              .fontSize($r('sys.float.Body_L'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('sys.color.brand'))
+          }
+        }
+        .width('100%')
+        .height(48)
+        .backgroundColor($r('sys.color.comp_background_tertiary'))
+        .onClick(() => this.showOnWidget(entry))
+        if (this.widgets.some((w: WidgetInfo) => w.capsuleId === entry.capsule.id)) {
+          Text('On your home screen')
+            .fontSize($r('sys.float.Caption_M'))
+            .fontColor($r('sys.color.font_tertiary'))
+        }
+      }
+      .width('100%')
+    } else if (entry.route.widget) {
       Column({ space: 10 }) {
         Row({ space: 10 }) {
           SymbolGlyph($r('sys.symbol.square_grid_2x2'))
