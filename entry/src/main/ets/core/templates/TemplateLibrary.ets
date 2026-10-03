@@ -40,6 +40,8 @@ export interface TemplateEntry {
   capsule: Object;
   category?: string;
   language?: string;
+  /** false: hidden from the Marketplace list (display only); Create still matches and builds it. */
+  listed?: boolean;
 }
 
 export interface TemplateHit {
