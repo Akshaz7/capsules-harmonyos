@@ -8,7 +8,8 @@
 // HTTP transport differs (Node fetch instead of @kit.NetworkKit).
 //
 // Usage (from the repo root):
-//   node scripts/eval-providers.mjs [--only mistral] [--delay 2000] [--out results.json]
+//   node scripts/eval-providers.mjs [--only mistral] [--match tennis,darts] [--delay 2000] [--out results.json]
+// --match keeps only requests containing one of the comma-separated words (case-insensitive).
 // --delay waits that many ms between requests (default 1500). HTTP 429 replies are retried up to
 // 4 times with backoff, so free-tier rate limits slow the run instead of failing it.
 // Needs Node 18+ and network access; downloads esbuild through npx on first run.
@@ -242,13 +243,33 @@ async function runSet(model, config, setName, requests) {
   return line;
 }
 
+const words = (arg('--match') ?? '').toLowerCase().split(',').map((w) => w.trim()).filter((w) => w.length > 0);
+const pick = (set) => set.filter(([request]) => words.length === 0 || words.some((w) => request.toLowerCase().includes(w)));
+
 const summary = [];
 for (const config of configs) {
   const model = new lib.CapsuleModel(lib.createProvider(config, new FetchTransport()));
-  summary.push(await runSet(model, config, 'tuning set', REQUESTS));
-  summary.push(await runSet(model, config, 'held-out set', HELD_OUT));
+  for (const [name, set] of [['tuning set', pick(REQUESTS)], ['held-out set', pick(HELD_OUT)]]) {
+    if (set.length > 0) {
+      summary.push(await runSet(model, config, name, set));
+    }
+  }
 }
 console.log(`\nSummary\n${summary.join('\n')}`);
+
+// Side by side: one row per request, one column per provider.
+if (configs.length > 1) {
+  const requests = [...new Set(results.map((r) => r.request))];
+  console.log(`\n| Request | ${configs.map((c) => `${c.provider} (${c.model})`).join(' | ')} |`);
+  console.log(`|---|${configs.map(() => '---').join('|')}|`);
+  for (const request of requests) {
+    const cells = configs.map((c) => {
+      const r = results.find((x) => x.request === request && x.provider === c.provider);
+      return r === undefined ? '' : `${r.verdict.replace(/\|/g, '/')} (${(r.ms / 1000).toFixed(1)} s)`;
+    });
+    console.log(`| ${request.substring(0, 50)} | ${cells.join(' | ')} |`);
+  }
+}
 
 const out = arg('--out');
 if (out) {
