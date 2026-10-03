@@ -46,13 +46,16 @@ interface ExampleChip {
   request: string;
 }
 
-const EXAMPLES: ExampleChip[] = [
-  { label: 'Timers', icon: $r('sys.symbol.timer'), request: '3 timers pasta 9 sauce 15 bread 6' },
-  { label: 'Squats', icon: $r('sys.symbol.dumbbell'), request: 'count my squats' },
-  { label: 'Water', icon: $r('sys.symbol.drop'), request: 'water 8 glasses' },
-  { label: 'Checklist', icon: $r('sys.symbol.checkmark_circle'),
-    request: 'checklist for leaving home: keys, wallet, charger' }
+// The input's placeholder cycles through these so the app reads as open-ended, not a list of presets.
+const PLACEHOLDERS: string[] = [
+  'Try: tennis scoreboard me vs Sam',
+  'Try: km to miles converter',
+  'Try: split dinner 120 between 4',
+  'Try: quiz me on 3 capitals',
+  'Try: habit streak for reading',
+  'Try: pasta 9 min, sauce 15 min'
 ];
+const PLACEHOLDER_MS = 3000;
 
 // Shown after a failed create. Each request is one the offline rules can build.
 const RETRY_SUGGESTIONS: ExampleChip[] = [
@@ -121,6 +124,8 @@ struct Index {
   private store: CapsuleStore | undefined = undefined;
   private ctx: common.UIAbilityContext | undefined = undefined;
   private statusPoll: number = -1;
+  private placeholderTimer: number = -1;
+  @Local placeholderIndex: number = 0;
   @Local entries: CapsuleEntry[] = [];
   @Local openId: string = '';
   @Local pending: Capsule | undefined = undefined;
@@ -146,6 +151,9 @@ struct Index {
     this.store = new CapsuleStore(ctx);
     this.settings.load(ctx);
     this.watchModelStatus();
+    this.placeholderTimer = setInterval(() => {
+      this.placeholderIndex = (this.placeholderIndex + 1) % PLACEHOLDERS.length;
+    }, PLACEHOLDER_MS);
     // Saved capsules were approved before; ones whose consent was lost get dropped.
     const gate = this.gate;
     this.entries = this.store.all()
@@ -156,6 +164,7 @@ struct Index {
   aboutToDisappear(): void {
     this.entries.forEach((e: CapsuleEntry) => e.runtime.stop());
     clearInterval(this.statusPoll);
+    clearInterval(this.placeholderTimer);
   }
 
   // Core initialises the cloud config and the on-device model async; they may finish after the first render.
@@ -468,7 +477,7 @@ struct Index {
   @Builder
   inputCard() {
     Column({ space: 12 }) {
-      TextArea({ placeholder: 'Describe a tiny app…', text: this.request })
+      TextArea({ placeholder: PLACEHOLDERS[this.placeholderIndex], text: this.request })
         .height(96)
         .fontSize($r('sys.float.Body_L'))
         .backgroundColor(Color.Transparent)
@@ -510,31 +519,6 @@ struct Index {
     .padding(16)
     .borderRadius(24)
     .backgroundColor($r('sys.color.comp_background_primary'))
-  }
-
-  @Builder
-  chips() {
-    Flex({ wrap: FlexWrap.Wrap }) {
-      ForEach(EXAMPLES, (chip: ExampleChip) => {
-        Row({ space: 6 }) {
-          SymbolGlyph(chip.icon)
-            .fontSize(16)
-            .fontColor([$r('sys.color.icon_emphasize')])
-          Text(chip.label)
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.font_primary'))
-        }
-        .height(36)
-        .padding({ left: 14, right: 14 })
-        .margin({ right: 8, bottom: 8 })
-        .borderRadius(18)
-        .backgroundColor($r('sys.color.comp_background_primary'))
-        .onClick(() => {
-          this.request = chip.request;
-        })
-      }, (chip: ExampleChip) => chip.label)
-    }
-    .width('100%')
   }
 
   @Builder
@@ -663,7 +647,6 @@ struct Index {
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
           .padding({ left: 4 })
-        this.chips()
         if (this.failed) {
           this.failedCard()
         } else if (this.message.length > 0) {
