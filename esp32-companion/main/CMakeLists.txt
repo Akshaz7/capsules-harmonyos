@@ -5,6 +5,7 @@ idf_component_register(
         "capsule.c"
         "net.c"
         "http_api.c"
+        "validate.c"
         "ui.c"
         "motion.c"
         "beep.c"

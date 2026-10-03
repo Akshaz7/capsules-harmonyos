@@ -10,14 +10,18 @@
 #include "capsule.h"
 #include "motion.h"
 #include "ui.h"
+#include "validate.h"
 
 static const char *TAG = "http";
 
 #define MAX_BODY_BYTES 1024
+#define MAX_JSON_DEPTH 8  // cJSON recurses once per level, on this task's stack
 
 #define ERR_BAD_JSON "body must be a JSON object"
 #define ERR_BAD_TYPE "type must be \"timer\" or \"counter\""
-#define ERR_BAD_LABEL "label must be a string"
+#define ERR_TOO_DEEP "JSON nested too deeply"
+#define ERR_HAS_NUL "body must not contain a NUL character"
+#define ERR_BAD_LABEL "label must be a UTF-8 string"
 #define ERR_BAD_SECONDS "seconds must be a number from 1 to 359999"
 #define ERR_BAD_COUNT "count must be a number from 0 to 999999"
 #define ERR_BAD_RUNNING "running must be true or false"
@@ -77,12 +81,15 @@ static esp_err_t send_state(httpd_req_t *req)
 
 // ---- request parsing ----
 
-// Returns the body as a JSON object, or NULL after answering with an error.
-static cJSON *read_json_body(httpd_req_t *req)
+// Reads the body into *json. When *json comes back NULL the request has been answered with
+// an error and the handler returns this function's result: ESP_FAIL where part of the body
+// was never read, so that the server closes the socket instead of waiting for the rest.
+static esp_err_t read_json_body(httpd_req_t *req, cJSON **json)
 {
+    *json = NULL;
     if (req->content_len > MAX_BODY_BYTES) {
         send_error(req, "413 Content Too Large", "body too large");
-        return NULL;
+        return ESP_FAIL;
     }
     char body[MAX_BODY_BYTES + 1];
     size_t received = 0;
@@ -90,19 +97,27 @@ static cJSON *read_json_body(httpd_req_t *req)
         int n = httpd_req_recv(req, body + received, req->content_len - received);
         if (n <= 0) {
             send_error(req, "408 Request Timeout", "body not received");
-            return NULL;
+            return ESP_FAIL;
         }
         received += n;
     }
     body[received] = '\0';
-    // Strict: nothing but whitespace may follow the JSON value.
-    cJSON *json = cJSON_ParseWithLengthOpts(body, received + 1, NULL, true);
-    if (!cJSON_IsObject(json)) {
-        cJSON_Delete(json);
-        send_error(req, "400 Bad Request", ERR_BAD_JSON);
-        return NULL;
+    switch (json_scan(body, received, MAX_JSON_DEPTH)) {
+    case JSON_SCAN_TOO_DEEP:
+        return send_error(req, "400 Bad Request", ERR_TOO_DEEP);
+    case JSON_SCAN_HAS_NUL:
+        return send_error(req, "400 Bad Request", ERR_HAS_NUL);
+    case JSON_SCAN_OK:
+        break;
     }
-    return json;
+    // Strict: nothing but whitespace may follow the JSON value.
+    cJSON *parsed = cJSON_ParseWithLengthOpts(body, received + 1, NULL, true);
+    if (!cJSON_IsObject(parsed)) {
+        cJSON_Delete(parsed);
+        return send_error(req, "400 Bad Request", ERR_BAD_JSON);
+    }
+    *json = parsed;
+    return ESP_OK;
 }
 
 // Optional integer field. False if it is present but not a number in [min, max].
@@ -174,6 +189,9 @@ static const char *apply_capsule(const cJSON *json)
         return ERR_BAD_LABEL;
     }
     const char *text = label ? label->valuestring : "";
+    if (!utf8_valid(text)) {
+        return ERR_BAD_LABEL;  // raw bytes in the body that are not UTF-8: the screen cannot show them
+    }
     if (strcmp(type->valuestring, "timer") == 0) {
         return apply_timer(json, text);
     }
@@ -204,9 +222,10 @@ static esp_err_t get_state(httpd_req_t *req)
 
 static esp_err_t post_capsule(httpd_req_t *req)
 {
-    cJSON *json = read_json_body(req);
+    cJSON *json;
+    esp_err_t err = read_json_body(req, &json);
     if (!json) {
-        return ESP_OK;
+        return err;
     }
     const char *error = apply_capsule(json);
     cJSON_Delete(json);
@@ -219,9 +238,10 @@ static esp_err_t post_capsule(httpd_req_t *req)
 
 static esp_err_t post_action(httpd_req_t *req)
 {
-    cJSON *json = read_json_body(req);
+    cJSON *json;
+    esp_err_t err = read_json_body(req, &json);
     if (!json) {
-        return ESP_OK;
+        return err;
     }
     capsule_action_t action;
     bool known = find_action(json, &action);
@@ -230,7 +250,13 @@ static esp_err_t post_action(httpd_req_t *req)
         return send_error(req, "400 Bad Request", ERR_BAD_ACTION);
     }
     if (action == CAPSULE_ACT_MOTION_ON && !motion_available()) {
-        return send_error(req, "503 Service Unavailable", ERR_NO_MOTION);
+        // Still 409 where motion_on does not apply at all: the missing sensor is not the reason.
+        capsule_state_t state;
+        capsule_get(&state);
+        if (state.type == CAPSULE_COUNTER) {
+            return send_error(req, "503 Service Unavailable", ERR_NO_MOTION);
+        }
+        return send_error(req, "409 Conflict", ERR_WRONG_CAPSULE);
     }
     if (!capsule_apply(action)) {
         return send_error(req, "409 Conflict", ERR_WRONG_CAPSULE);
@@ -259,11 +285,14 @@ static esp_err_t get_screenshot(httpd_req_t *req)
     put_le32(header + 2, sizeof(header) + row_bytes * height);
     put_le32(header + 18, width);
     put_le32(header + 22, height);
+    uint8_t *row = malloc(row_bytes);
+    if (!row) {  // found out before the header goes out, while an error can still be sent
+        free(pixels);
+        return send_error(req, "500 Internal Server Error", "out of memory");
+    }
     httpd_resp_set_type(req, "image/bmp");
     esp_err_t err = httpd_resp_send_chunk(req, (const char *)header, sizeof(header));
-
-    uint8_t *row = malloc(row_bytes);
-    for (int y = height - 1; row && err == ESP_OK && y >= 0; y--) {  // BMP rows go bottom-up
+    for (int y = height - 1; err == ESP_OK && y >= 0; y--) {  // BMP rows go bottom-up
         for (int x = 0; x < width; x++) {
             uint16_t pixel = pixels[y * width + x];  // RGB565 -> 8-bit B, G, R
             uint8_t r = pixel >> 11, g = (pixel >> 5) & 0x3F, b = pixel & 0x1F;
@@ -294,6 +323,7 @@ void http_api_start(void)
     config.server_port = HTTP_API_PORT;
     config.stack_size = 8192;        // the screenshot renders LVGL on this task
     config.lru_purge_enable = true;  // never run out of sockets because of idle keep-alives
+    config.recv_wait_timeout = 2;    // seconds; a body that stalls holds up everyone else
 
     httpd_handle_t server = NULL;
     ESP_ERROR_CHECK(httpd_start(&server, &config));
