@@ -87,8 +87,8 @@ export default function capsuleValidatorTest() {
     });
 
     it('rejects wrong schemaVersion, unknown permission and bad values', 0, () => {
-      expect(errorsOf('{"schemaVersion":1,"id":"x","name":"X","permissions":[],"ui":[]}'))
-        .assertContain('$.schemaVersion: must be 0');
+      expect(errorsOf('{"schemaVersion":2,"id":"x","name":"X","permissions":[],"ui":[]}'))
+        .assertContain('$.schemaVersion: must be 0 or 1');
       expect(errorsOf(withUi('["camera"]', '[]'))).assertContain('unknown permission "camera"');
       expect(errorsOf(withUi('["reminders"]', '[{"type":"timer","id":"t","label":"T","minutes":-1}]')))
         .assertContain('$.ui[0].minutes: must be a positive number');
