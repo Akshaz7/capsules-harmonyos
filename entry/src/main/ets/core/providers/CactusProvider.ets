@@ -5,8 +5,9 @@
  * as one line of JSON. The capsule is then built deterministically (same shapes as
  * RuleParser) and must pass validateCapsule. Slots must be grounded in the request
  * (every word slot shares a word with it, every number appears in it), which rejects the
- * model copying the prompt's examples. One retry with the rejection reason fed back.
- * Measured on the 10 eval requests: 5/10 correct, 0 wrong-but-valid, 5 clean rejections.
+ * model copying words from the prompt. The prompts contain no example values to copy, only
+ * <placeholders>. A failed attempt is retried once with a second, differently worded prompt
+ * and the rejection reason.
  *
  * The model is NOT in the .hap. Push it to the entry module's files dir (debug builds):
  *   scripts/push-model.sh <path-to>/lfm2-vl-450m-cq4
@@ -42,25 +43,102 @@ export interface OnDeviceStatus {
   message: string;
 }
 
-// Sent in the user turn with the request last (scored better than a system message on LFM2-450M).
-const SLOT_PROMPT: string =
+// Prompts are sent in the user turn with the request last (scored better than a system message
+// on LFM2-450M). Prompts without concrete examples scored far worse (0-3/15 on the eval), so
+// examples stay; grounding rejects any example value the model copies, and the retry leaves out
+// the examples whose values were copied.
+const KINDS: string[] = ['timers', 'counter', 'scoreboard', 'checklist', 'schedule', 'reminder', 'split', 'note'];
+
+const SLOT_HEADER: string =
   'Classify the request and extract its details. Reply with ONE line of JSON only, no prose, no code fences.\n' +
   'Pick exactly one kind:\n' +
-  '{"kind":"timers","timers":[{"label":"Eggs","minutes":7}]}  for durations, one entry per timer\n' +
-  '{"kind":"counter","label":"Pages"}  for counting things; add "goal":8,"unit":"glasses" when a target number is given\n' +
-  '{"kind":"checklist","name":"Gym bag","items":["towel","bottle"]}  for lists of things\n' +
-  '{"kind":"schedule","what":"Vitamins","times":["Morning","Night"]}  for things done at times of day\n' +
-  '{"kind":"reminder","text":"Call mum"}  for remind me to do something\n' +
-  '{"kind":"split","total":90,"people":3}  for splitting an amount\n' +
-  '{"kind":"note","text":"..."}  only if nothing else fits\n' +
-  'Examples:\n' +
-  'eggs 7 and toast 3 -> {"kind":"timers","timers":[{"label":"Eggs","minutes":7},{"label":"Toast","minutes":3}]}\n' +
-  'track pages I read -> {"kind":"counter","label":"Pages read"}\n' +
-  'read 20 pages -> {"kind":"counter","label":"Pages","goal":20,"unit":"pages"}\n' +
-  'gym bag: towel bottle shoes -> {"kind":"checklist","name":"Gym bag","items":["towel","bottle","shoes"]}\n' +
-  'vitamins morning and night -> {"kind":"schedule","what":"Vitamins","times":["Morning","Night"]}\n' +
-  'remind me to call mum -> {"kind":"reminder","text":"Call mum"}\n' +
-  'share 90 by 3 -> {"kind":"split","total":90,"people":3}';
+  'timers: {"kind":"timers","timers":[{"label":LABEL,"minutes":NUMBER}]} for durations, one entry per timer\n' +
+  'counter: {"kind":"counter","label":LABEL} for counting one thing; add "goal":NUMBER,"unit":UNIT for a target\n' +
+  'scoreboard: {"kind":"scoreboard","name":GAME,"counters":[NAME,NAME]} for two or more scores (players, teams or ' +
+  'exercises); "Player 1","Player 2" if no names are given\n' +
+  'checklist: {"kind":"checklist","name":TITLE,"items":[ITEM]} for lists of things\n' +
+  'schedule: {"kind":"schedule","what":WHAT,"times":[TIME]} for things done at times of day\n' +
+  'reminder: {"kind":"reminder","text":WHAT} for remind me to do something\n' +
+  'split: {"kind":"split","total":NUMBER,"people":NUMBER} for splitting an amount\n' +
+  'note: {"kind":"note","text":TEXT} only if nothing else fits\n' +
+  'Use only words and numbers from the request. Examples:';
+
+// [request, reply] pairs. None of them is an eval request.
+const SLOT_EXAMPLES: string[][] = [
+  ['eggs 7 and toast 3', '{"kind":"timers","timers":[{"label":"Eggs","minutes":7},{"label":"Toast","minutes":3}]}'],
+  ['track pages I read', '{"kind":"counter","label":"Pages read"}'],
+  ['drink 2 litres', '{"kind":"counter","label":"Drink","goal":2,"unit":"litres"}'],
+  ['chess me vs dad', '{"kind":"scoreboard","name":"Chess","counters":["Me","Dad"]}'],
+  ['volleyball score', '{"kind":"scoreboard","name":"Volleyball","counters":["Player 1","Player 2"]}'],
+  ['jumping jacks and burpees',
+    '{"kind":"scoreboard","name":"Jumping jacks and burpees","counters":["Jumping jacks","Burpees"]}'],
+  ['gym bag: towel bottle shoes', '{"kind":"checklist","name":"Gym bag","items":["towel","bottle","shoes"]}'],
+  ['vitamins morning and night', '{"kind":"schedule","what":"Vitamins","times":["Morning","Night"]}'],
+  ['remind me to call mum', '{"kind":"reminder","text":"Call mum"}'],
+  ['share 90 by 3', '{"kind":"split","total":90,"people":3}']
+];
+
+const SCOREBOARD_HEADER: string =
+  'Extract a scoreboard from the request. Reply with ONE line of JSON only: {"name":GAME,"counters":[NAME,NAME]}.\n' +
+  '"counters" lists the players, teams or exercises named in the request, or "Player 1","Player 2" if none are named.\n' +
+  'Use only words from the request. Examples:';
+
+const SCOREBOARD_EXAMPLES: string[][] = [
+  ['chess me vs dad', '{"name":"Chess","counters":["Me","Dad"]}'],
+  ['volleyball score', '{"name":"Volleyball","counters":["Player 1","Player 2"]}'],
+  ['jumping jacks and burpees', '{"name":"Jumping jacks and burpees","counters":["Jumping jacks","Burpees"]}']
+];
+
+const SCORE_CUES: RegExp = /\b(?:vs|versus|against|score|scores|scoreboard|game|match)\b/;
+
+/**
+ * Deterministic hint: requests that are clearly a scoreboard ("tennis game tracker", "me vs Sam",
+ * "pushups and situps"). LFM2-450M almost never picked the scoreboard kind on its own.
+ */
+function isScoreboardRequest(request: string): boolean {
+  const req = request.toLowerCase();
+  if (SCORE_CUES.test(req)) {
+    return true;
+  }
+  const parts = req.split(/\s+(?:and|&)\s+|\s*,\s*/);
+  return parts.length >= 2 && parts.every((p: string) => MOTION_WORDS.some((w: string) => p.includes(w)));
+}
+
+/** Sides named in a scoreboard request: "A vs B", or "A and B" when both are exercises; else none. */
+function namedSides(request: string): string[] {
+  const vs = request.split(/\s+(?:vs\.?|versus|against)\s+/i);
+  if (vs.length >= 2) {
+    return vs.map((p: string) => p.replace(/^.*\b(?:score|scores|scoreboard|game|match)\s+(?:for\s+)?/i, '').trim())
+      .filter((p: string) => p.length > 0);
+  }
+  const parts = request.split(/\s+(?:and|&)\s+|\s*,\s*/);
+  return parts.length >= 2 && parts.every((p: string) => MOTION_WORDS.some((w: string) => p.toLowerCase().includes(w))) ?
+    parts.map((p: string) => p.trim()) : [];
+}
+
+/** Scoreboard built without the model, used when the hinted extraction fails. */
+function fallbackScoreboard(request: string): BuildResult {
+  const req = request.trim();
+  const sides = namedSides(req);
+  const name = req.replace(/\b(?:game|match|score|scores|scoreboard|tracker|counter|for|the|a)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  const obj: JsonRecord = {
+    'kind': 'scoreboard', 'name': name.length > 0 ? name : 'Score', 'counters': sides.length >= 2 ? sides : DEFAULT_SIDES
+  };
+  return buildScoreboard(obj);
+}
+
+/** The prompt, leaving out examples whose reply contains any of `avoid` (values the model copied). */
+function promptWith(header: string, examples: string[][], avoid: string[]): string {
+  const lines = examples
+    .filter((ex: string[]) => !avoid.some((a: string) => a.length > 0 && ex[1].toLowerCase().includes(a.toLowerCase())))
+    .map((ex: string[]) => `${ex[0]} -> ${ex[1]}`);
+  return `${header}\n${lines.join('\n')}`;
+}
+
+// Scoreboard sides that need not appear in the request.
+const GENERIC_SIDE: RegExp = /^(?:(?:player|team|side)\s*\d+|me|you|us|them|home|away)$/i;
+const DEFAULT_SIDES: string[] = ['Player 1', 'Player 2'];
 
 // Same list RuleParser uses to pick a motion counter.
 const MOTION_WORDS: string[] = [
@@ -117,12 +195,34 @@ function strList(obj: JsonRecord, key: string): string[] {
   return out;
 }
 
-/** Returns the first {...} object in a reply, stripping fences or stray prose. */
+/** Returns the first balanced {...} object in a reply, skipping fences, prose and any later objects. */
 function extractObject(reply: string): string {
-  const s = reply.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  const start = s.indexOf('{');
-  const end = s.lastIndexOf('}');
-  return start >= 0 && end > start ? s.substring(start, end + 1) : s;
+  const start = reply.indexOf('{');
+  if (start < 0) {
+    return reply.trim();
+  }
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < reply.length; i++) {
+    const c = reply.charAt(i);
+    if (inString) {
+      if (c === '\\') {
+        i++;
+      } else if (c === '"') {
+        inString = false;
+      }
+    } else if (c === '"') {
+      inString = true;
+    } else if (c === '{') {
+      depth++;
+    } else if (c === '}') {
+      depth--;
+      if (depth === 0) {
+        return reply.substring(start, i + 1);
+      }
+    }
+  }
+  return reply.substring(start);
 }
 
 // ---- Capsule building (shapes match RuleParser) ----
@@ -212,6 +312,36 @@ function buildCounter(obj: JsonRecord): BuildResult {
   return { capsule: capsule(`count-${id}`, `${nice} counter`, motion ? ['motion'] : [], ui) };
 }
 
+/** Named sides of a scoreboard, defaulting to Player 1 / Player 2 when none are given. */
+function scoreboardSides(obj: JsonRecord): string[] {
+  const named = strList(obj, 'counters');
+  return named.length === 0 ? DEFAULT_SIDES : named;
+}
+
+function buildScoreboard(obj: JsonRecord): BuildResult {
+  const sides = scoreboardSides(obj);
+  if (sides.length < 2) {
+    return { error: 'a scoreboard needs two or more "counters"' };
+  }
+  const title = capitalize(str(obj, 'name') ?? 'Score');
+  const ids = new Ids();
+  const ui: CapsuleComponent[] = [];
+  let motion = false;
+  for (const side of sides) {
+    const nice = capitalize(side);
+    const id = ids.next(nice);
+    const usesMotion = MOTION_WORDS.some((w: string) => side.toLowerCase().includes(w));
+    motion = motion || usesMotion;
+    const counter: CounterComponent = { type: 'counter', id: id, label: nice, source: usesMotion ? 'motion' : 'manual' };
+    ui.push(counter, button(`+1 ${nice}`, `increment:${id}`));
+  }
+  for (const c of ui.filter((x: CapsuleComponent) => x.type === 'counter')) {
+    const counter = c as CounterComponent;
+    ui.push(button(`Reset ${counter.label}`, `reset:${counter.id}`));
+  }
+  return { capsule: capsule(`score-${title}`, title, motion ? ['motion'] : [], ui) };
+}
+
 function buildChecklist(obj: JsonRecord): BuildResult {
   const items = strList(obj, 'items');
   if (items.length === 0) {
@@ -278,9 +408,22 @@ function words(value: string): string[] {
     .map((w: string) => w.endsWith('s') ? w.substring(0, w.length - 1) : w);
 }
 
+/** Same word, or one is a prefix of the other with at least 4 letters ("water"/"watering", "push"/"pushup"). */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) {
+    return true;
+  }
+  const shorter = a.length <= b.length ? a : b;
+  const longer = a.length <= b.length ? b : a;
+  return shorter.length >= 4 && longer.startsWith(shorter);
+}
+
 function numberInRequest(n: number, request: string): boolean {
   return (request.match(/\d+(?:\.\d+)?/g) ?? []).some((m: string) => parseFloat(m) === n);
 }
+
+// The last slot value that failed grounding, so the retry can drop the example it came from.
+let lastUngrounded: string = '';
 
 /** Returns an error if the slots contain words or numbers that are not in the request. */
 function checkGrounding(obj: JsonRecord, request: string): string | null {
@@ -303,6 +446,12 @@ function checkGrounding(obj: JsonRecord, request: string): string | null {
     if (goal !== null) {
       numSlots.push(goal);
     }
+  } else if (kind === 'scoreboard') {
+    const name = str(obj, 'name');
+    if (name !== null) {
+      textSlots.push(name);
+    }
+    strList(obj, 'counters').filter((c: string) => !GENERIC_SIDE.test(c)).forEach((c: string) => textSlots.push(c));
   } else if (kind === 'checklist') {
     strList(obj, 'items').forEach((i: string) => textSlots.push(i));
   } else if (kind === 'schedule') {
@@ -313,20 +462,63 @@ function checkGrounding(obj: JsonRecord, request: string): string | null {
     numSlots.push(num(obj, 'total') ?? -1, num(obj, 'people') ?? -1);
   }
   for (const t of textSlots) {
-    if (!words(t).some((w: string) => requestWords.includes(w))) {
+    if (!words(t).some((w: string) => requestWords.some((r: string) => sameWord(w, r)))) {
+      lastUngrounded = t;
       return `"${t}" is not in the request; use the request's own words`;
     }
   }
   for (const n of numSlots) {
     if (!numberInRequest(n, request)) {
+      lastUngrounded = String(n);
       return `the number ${n} is not in the request; use the request's own numbers`;
     }
   }
   return null;
 }
 
+// Main text slot per kind, for replies like {"reminder":"water plants"}.
+const MAIN_SLOT: Record<string, string> = {
+  'counter': 'label', 'reminder': 'text', 'note': 'text', 'schedule': 'what', 'checklist': 'name', 'scoreboard': 'name'
+};
+
+/**
+ * Unwraps replies keyed by the kind instead of carrying "kind", e.g. {"split":{"total":84,"people":4}}
+ * or {"reminder":"water plants"}. Leaves anything else unchanged.
+ */
+function normalise(obj: JsonRecord): void {
+  if (str(obj, 'kind') !== null) {
+    const nested = asRecord(obj[str(obj, 'kind') as string]);
+    if (nested !== null) {
+      Object.keys(nested).forEach((k: string) => {
+        if (obj[k] === undefined) {
+          obj[k] = nested[k];
+        }
+      });
+    }
+    return;
+  }
+  for (const key of Object.keys(obj)) {
+    if (!KINDS.includes(key)) {
+      continue;
+    }
+    const inner: JsonValue = obj[key];
+    const rec = asRecord(inner);
+    if (rec !== null) {
+      Object.keys(rec).forEach((k: string) => {
+        obj[k] = rec[k];
+      });
+    } else if (typeof inner === 'string' && MAIN_SLOT[key] !== undefined) {
+      obj[MAIN_SLOT[key]] = inner;
+    } else if (!(Array.isArray(inner) && key === 'timers')) {
+      continue; // {"timers":[...]} already holds its slots; anything else is not a wrapper
+    }
+    obj['kind'] = key;
+    return;
+  }
+}
+
 /** Turns the model's slot reply into a capsule, or explains what was wrong with the reply. */
-function buildFromReply(reply: string, request: string): BuildResult {
+function buildFromReply(reply: string, request: string, kind?: string): BuildResult {
   let root: JsonValue;
   try {
     root = JSON.parse(extractObject(reply)) as JsonValue;
@@ -337,6 +529,10 @@ function buildFromReply(reply: string, request: string): BuildResult {
   if (obj === null) {
     return { error: 'the reply must be one JSON object' };
   }
+  normalise(obj);
+  if (kind !== undefined) {
+    obj['kind'] = kind;
+  }
   const ungrounded = checkGrounding(obj, request);
   if (ungrounded !== null) {
     return { error: ungrounded };
@@ -346,6 +542,8 @@ function buildFromReply(reply: string, request: string): BuildResult {
       return buildTimers(obj);
     case 'counter':
       return buildCounter(obj);
+    case 'scoreboard':
+      return buildScoreboard(obj);
     case 'checklist':
       return buildChecklist(obj);
     case 'schedule':
@@ -357,7 +555,7 @@ function buildFromReply(reply: string, request: string): BuildResult {
     case 'note':
       return buildNote(obj);
     default:
-      return { error: '"kind" must be one of timers, counter, checklist, schedule, reminder, split, note' };
+      return { error: '"kind" must be one of timers, counter, scoreboard, checklist, schedule, reminder, split, note' };
   }
 }
 
@@ -367,6 +565,8 @@ function buildFromReply(reply: string, request: string): BuildResult {
 export class CactusProvider implements CapsuleSource {
   private status: OnDeviceStatus = { ready: false, message: ON_DEVICE_NOT_INSTALLED };
   private initPromise: Promise<boolean> | null = null;
+  /** Raw model replies and rejection reasons from the last generate() call, for logs and evals. */
+  lastTrace: string[] = [];
 
   /** Loads the model from <entry files dir>/lfm2-vl-450m-cq4 off the UI thread. Never throws. */
   init(context: common.Context): Promise<boolean> {
@@ -411,7 +611,21 @@ export class CactusProvider implements CapsuleSource {
     }
   }
 
-  /** Slot-filling + deterministic build + validateCapsule, with one retry on errors. */
+  /** One engine call; returns the reply text or throws an Error with a user-facing message. */
+  private async run(prompt: string, maxTokens: number): Promise<string> {
+    let engine: EngineResponse;
+    try {
+      engine = JSON.parse(await complete(prompt, undefined, maxTokens)) as EngineResponse;
+    } catch (e) {
+      throw new Error('The on-device model failed to run.');
+    }
+    if (engine.success === false) {
+      throw new Error(`The on-device model failed: ${engine.error ?? 'unknown error'}`);
+    }
+    return engine.response ?? '';
+  }
+
+  /** Slot-filling + deterministic build + validateCapsule, with one example-free retry. */
   async generate(request: string): Promise<GenerateResult> {
     const req = request.trim();
     if (!this.status.ready) {
@@ -420,20 +634,34 @@ export class CactusProvider implements CapsuleSource {
     if (req.length === 0 || req.length > MAX_REQUEST_LENGTH) {
       return { ok: false, error: 'The request is empty or too long.', details: [] };
     }
-    let prompt = `${SLOT_PROMPT}\nRequest: ${req} ->`;
+    this.lastTrace = [];
+    const hinted = isScoreboardRequest(req);
+    if (hinted) {
+      this.lastTrace.push('hint: scoreboard');
+    }
+    const avoid: string[] = [];
     let lastError = '';
     let details: string[] = [];
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      let engine: EngineResponse;
+      let reply: string;
       try {
-        engine = JSON.parse(await complete(prompt, undefined, MAX_TOKENS)) as EngineResponse;
+        const examples = hinted ? SCOREBOARD_EXAMPLES : SLOT_EXAMPLES;
+        const header = hinted ? SCOREBOARD_HEADER : SLOT_HEADER;
+        const feedback = attempt === 1 ? '' :
+          `Your previous reply was rejected: ${lastError}. Reply again with one line of JSON only.\n`;
+        // "Request:" marks where the examples end; without it LFM2 repeated the first example. The scoreboard
+        // prompt scored best without it.
+        const lead = hinted ? '' : 'Request: ';
+        reply = await this.run(`${promptWith(header, examples, avoid)}\n${feedback}${lead}${req} ->`, MAX_TOKENS);
       } catch (e) {
-        return { ok: false, error: 'The on-device model failed to run.', details: [] };
+        return { ok: false, error: e instanceof Error ? e.message : 'The on-device model failed to run.', details: [] };
       }
-      if (engine.success === false) {
-        return { ok: false, error: `The on-device model failed: ${engine.error ?? 'unknown error'}`, details: [] };
+      this.lastTrace.push(`reply ${attempt}: ${reply}`);
+      lastUngrounded = '';
+      const built = buildFromReply(reply, req, hinted ? 'scoreboard' : undefined);
+      if (lastUngrounded.length > 0) {
+        avoid.push(lastUngrounded);
       }
-      const built = buildFromReply(engine.response ?? '', req);
       if (built.capsule !== undefined) {
         const v = validateCapsule(JSON.stringify(built.capsule));
         if (v.ok) {
@@ -445,8 +673,14 @@ export class CactusProvider implements CapsuleSource {
         lastError = built.error ?? 'unknown error';
         details = [];
       }
-      prompt = `${SLOT_PROMPT}\nYour previous reply was rejected: ${lastError}. Reply again with one line of JSON only.\n` +
-        `Request: ${req} ->`;
+      this.lastTrace.push(`rejected ${attempt}: ${lastError}`);
+    }
+    if (hinted) {
+      const fallback = fallbackScoreboard(req);
+      if (fallback.capsule !== undefined && validateCapsule(JSON.stringify(fallback.capsule)).ok) {
+        this.lastTrace.push('scoreboard fallback');
+        return { ok: true, capsule: fallback.capsule, origin: 'on-device', details: [] };
+      }
     }
     return {
       ok: false,
