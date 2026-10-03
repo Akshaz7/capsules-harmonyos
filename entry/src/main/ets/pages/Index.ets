@@ -139,6 +139,7 @@ struct Index {
   @Local failed: boolean = false;
   @Local modelStatus: string = getModelStatus().message;
   @Local cloudConfigured: boolean = getModelStatus().configured;
+  @Local euCloud: boolean = getModelStatus().euAvailable;
   @Local onDeviceStatus: string = getOnDeviceStatus().message;
   @Local nav: NavPathStack = new NavPathStack();
 
@@ -175,6 +176,7 @@ struct Index {
       const onDevice = getOnDeviceStatus();
       this.modelStatus = status.message;
       this.cloudConfigured = status.configured;
+      this.euCloud = status.euAvailable;
       this.onDeviceStatus = onDevice.message;
       tries++;
       if ((status.configured && onDevice.ready) || tries >= 20) {
@@ -270,7 +272,7 @@ struct Index {
     const smart = this.settings.aiMode === 'smart';
     const result = await this.generate(text, smart && this.settings.cloudNoticeAccepted);
     this.busy = false;
-    if (!result.ok && smart && !this.settings.cloudNoticeAccepted && getModelStatus().configured) {
+    if (!result.ok && smart && !this.settings.cloudNoticeAccepted && this.cloudUsable()) {
       // The device couldn't build it and the cloud would be next: ask once before the first cloud request.
       hilog.info(0x0001, 'Index', 'on-device failed (%{public}s); showing the cloud notice', result.error ?? '');
       this.showCloudNotice(text);
@@ -282,7 +284,11 @@ struct Index {
   /** Rules, then the on-device model, then the cloud model only when `allowCloud`. Never throws. */
   private async generate(text: string, allowCloud: boolean): Promise<GenerateResult> {
     try {
-      return await generateCapsule(text, { allowCloud: allowCloud });
+      return await generateCapsule(text, {
+        mode: this.settings.aiMode === 'on-device' ? 'on-device-only' : 'smart',
+        allowNonEu: this.settings.allowNonEu,
+        allowCloud: allowCloud
+      });
     } catch (e) {
       const failed: GenerateResult = { ok: false, error: `generateCapsule threw: ${(e as Error).message}`, details: [] };
       return failed;
@@ -411,12 +417,23 @@ struct Index {
     this.message = note;
   }
 
+  /** Whether smart mode may use a cloud provider: an EU one, or any one if non-EU providers are allowed. */
+  private cloudUsable(): boolean {
+    return this.euCloud || (this.cloudConfigured && this.settings.allowNonEu);
+  }
+
   /** Home status: on-device model state from core, then the cloud fallback state. */
   private statusLine(): string {
     if (this.settings.aiMode === 'on-device') {
       return `${this.onDeviceStatus} · On-device only`;
     }
-    return `${this.onDeviceStatus} · ${this.cloudConfigured ? 'Mistral (EU) when needed' : this.modelStatus}`;
+    if (this.euCloud) {
+      return `${this.onDeviceStatus} · Mistral (EU) when needed`;
+    }
+    if (this.cloudConfigured) {
+      return `${this.onDeviceStatus} · ${this.settings.allowNonEu ? 'Cloud AI when needed' : 'No EU cloud provider'}`;
+    }
+    return `${this.onDeviceStatus} · ${this.modelStatus}`;
   }
 
   @Builder
