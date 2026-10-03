@@ -3,6 +3,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define CAPSULE_LABEL_MAX_BYTES 48   // including the terminator; longer labels are cut
 #define CAPSULE_MAX_SECONDS 359999   // 99:59:59
@@ -39,8 +40,14 @@ void capsule_init(void);
 void capsule_get(capsule_state_t *out);
 const char *capsule_type_name(capsule_type_t type);
 
-void capsule_set_timer(const char *label, int seconds, bool running);
-void capsule_set_counter(const char *label, int count, bool motion);
+// Both return the generation of the capsule they set: capsule_generation() as it was at
+// that instant, taken under the same lock, whatever another task sets right after.
+uint32_t capsule_set_timer(const char *label, int seconds, bool running);
+uint32_t capsule_set_counter(const char *label, int count, bool motion);
+
+// Goes up by one each time a capsule is set. Lets a sender find out later whether the
+// capsule it set is still the one on screen (actions on a capsule do not change it).
+uint32_t capsule_generation(void);
 
 // Returns false when the action does not fit the current capsule (e.g. "pause" on a counter).
 bool capsule_apply(capsule_action_t action);

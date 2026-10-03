@@ -8,38 +8,13 @@
 #include "esp_log.h"
 
 #include "capsule.h"
-#include "motion.h"
+#include "capsule_json.h"
 #include "ui.h"
-#include "validate.h"
 
 static const char *TAG = "http";
 
 #define MAX_BODY_BYTES 1024
 #define MAX_DISCARD_BYTES 8192  // of a body that is too large, before giving up on the connection
-#define MAX_JSON_DEPTH 8  // cJSON recurses once per level, on this task's stack
-
-#define ERR_BAD_JSON "body must be a JSON object"
-#define ERR_BAD_TYPE "type must be \"timer\" or \"counter\""
-#define ERR_TOO_DEEP "JSON nested too deeply"
-#define ERR_HAS_NUL "body must not contain a NUL character"
-#define ERR_BAD_LABEL "label must be a UTF-8 string"
-#define ERR_BAD_SECONDS "seconds must be a number from 1 to 359999"
-#define ERR_BAD_COUNT "count must be a number from 0 to 999999"
-#define ERR_BAD_RUNNING "running must be true or false"
-#define ERR_BAD_MOTION "motion must be true or false"
-#define ERR_BAD_ACTION "action must be one of start, pause, toggle, reset, increment, motion_on, motion_off"
-#define ERR_WRONG_CAPSULE "action does not apply to the current capsule"
-#define ERR_NO_MOTION "motion sensor not available"
-
-static const struct {
-    const char *name;
-    capsule_action_t action;
-} ACTIONS[] = {
-    { "start", CAPSULE_ACT_START },         { "pause", CAPSULE_ACT_PAUSE },
-    { "toggle", CAPSULE_ACT_TOGGLE },       { "reset", CAPSULE_ACT_RESET },
-    { "increment", CAPSULE_ACT_INCREMENT }, { "motion_on", CAPSULE_ACT_MOTION_ON },
-    { "motion_off", CAPSULE_ACT_MOTION_OFF },
-};
 
 // ---- responses ----
 
@@ -68,16 +43,7 @@ static esp_err_t send_state(httpd_req_t *req)
 {
     capsule_state_t state;
     capsule_get(&state);
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "type", capsule_type_name(state.type));
-    cJSON_AddStringToObject(root, "label", state.label);
-    cJSON_AddNumberToObject(root, "count", state.count);
-    cJSON_AddNumberToObject(root, "seconds", state.seconds);
-    cJSON_AddNumberToObject(root, "remaining_seconds", state.remaining_seconds);
-    cJSON_AddBoolToObject(root, "running", state.running);
-    cJSON_AddBoolToObject(root, "done", state.done);
-    cJSON_AddBoolToObject(root, "motion", state.motion);
-    return send_json(req, "200 OK", root);
+    return send_json(req, "200 OK", capsule_json_state(&state));
 }
 
 // ---- request parsing ----
@@ -123,115 +89,12 @@ static esp_err_t read_json_body(httpd_req_t *req, cJSON **json)
         received += n;
     }
     body[received] = '\0';
-    switch (json_scan(body, received, MAX_JSON_DEPTH)) {
-    case JSON_SCAN_TOO_DEEP:
-        return send_error(req, "400 Bad Request", ERR_TOO_DEEP);
-    case JSON_SCAN_HAS_NUL:
-        return send_error(req, "400 Bad Request", ERR_HAS_NUL);
-    case JSON_SCAN_OK:
-        break;
+    const char *error = NULL;
+    *json = capsule_json_parse(body, received, &error);
+    if (!*json) {
+        return send_error(req, "400 Bad Request", error);
     }
-    // Strict: nothing but whitespace may follow the JSON value.
-    cJSON *parsed = cJSON_ParseWithLengthOpts(body, received + 1, NULL, true);
-    if (!cJSON_IsObject(parsed)) {
-        cJSON_Delete(parsed);
-        return send_error(req, "400 Bad Request", ERR_BAD_JSON);
-    }
-    *json = parsed;
     return ESP_OK;
-}
-
-// Optional integer field. False if it is present but not a number in [min, max].
-static bool read_int(const cJSON *json, const char *key, int min, int max, int *value)
-{
-    const cJSON *item = cJSON_GetObjectItemCaseSensitive(json, key);
-    if (!item) {
-        return true;
-    }
-    if (!cJSON_IsNumber(item) || item->valuedouble < min || item->valuedouble > max) {
-        return false;
-    }
-    *value = (int)item->valuedouble;
-    return true;
-}
-
-// Optional boolean field. False if it is present but not true/false.
-static bool read_bool(const cJSON *json, const char *key, bool *value)
-{
-    const cJSON *item = cJSON_GetObjectItemCaseSensitive(json, key);
-    if (!item) {
-        return true;
-    }
-    if (!cJSON_IsBool(item)) {
-        return false;
-    }
-    *value = cJSON_IsTrue(item);
-    return true;
-}
-
-static const char *apply_timer(const cJSON *json, const char *label)
-{
-    int seconds = 0;  // stays 0 when the field is missing, which is rejected too
-    bool running = true;
-    if (!read_int(json, "seconds", 1, CAPSULE_MAX_SECONDS, &seconds) || seconds == 0) {
-        return ERR_BAD_SECONDS;
-    }
-    if (!read_bool(json, "running", &running)) {
-        return ERR_BAD_RUNNING;
-    }
-    capsule_set_timer(label, seconds, running);
-    return NULL;
-}
-
-static const char *apply_counter(const cJSON *json, const char *label)
-{
-    int count = 0;
-    bool motion = false;
-    if (!read_int(json, "count", 0, CAPSULE_MAX_COUNT, &count)) {
-        return ERR_BAD_COUNT;
-    }
-    if (!read_bool(json, "motion", &motion)) {
-        return ERR_BAD_MOTION;
-    }
-    // Without a working sensor the counter still works by hand; /state shows motion:false.
-    capsule_set_counter(label, count, motion && motion_available());
-    return NULL;
-}
-
-// Returns NULL on success or the reason the capsule was rejected.
-static const char *apply_capsule(const cJSON *json)
-{
-    const cJSON *type = cJSON_GetObjectItemCaseSensitive(json, "type");
-    const cJSON *label = cJSON_GetObjectItemCaseSensitive(json, "label");
-    if (!cJSON_IsString(type)) {
-        return ERR_BAD_TYPE;
-    }
-    if (label && !cJSON_IsString(label)) {
-        return ERR_BAD_LABEL;
-    }
-    const char *text = label ? label->valuestring : "";
-    if (!utf8_valid(text)) {
-        return ERR_BAD_LABEL;  // raw bytes in the body that are not UTF-8: the screen cannot show them
-    }
-    if (strcmp(type->valuestring, "timer") == 0) {
-        return apply_timer(json, text);
-    }
-    if (strcmp(type->valuestring, "counter") == 0) {
-        return apply_counter(json, text);
-    }
-    return ERR_BAD_TYPE;
-}
-
-static bool find_action(const cJSON *json, capsule_action_t *action)
-{
-    const cJSON *name = cJSON_GetObjectItemCaseSensitive(json, "action");
-    for (size_t i = 0; cJSON_IsString(name) && i < sizeof(ACTIONS) / sizeof(ACTIONS[0]); i++) {
-        if (strcmp(name->valuestring, ACTIONS[i].name) == 0) {
-            *action = ACTIONS[i].action;
-            return true;
-        }
-    }
-    return false;
 }
 
 // ---- handlers ----
@@ -248,7 +111,7 @@ static esp_err_t post_capsule(httpd_req_t *req)
     if (!json) {
         return err;
     }
-    const char *error = apply_capsule(json);
+    const char *error = capsule_json_apply(json, NULL);
     cJSON_Delete(json);
     if (error) {
         return send_error(req, "400 Bad Request", error);
@@ -265,22 +128,18 @@ static esp_err_t post_action(httpd_req_t *req)
         return err;
     }
     capsule_action_t action;
-    bool known = find_action(json, &action);
+    bool known = capsule_json_action(cJSON_GetObjectItemCaseSensitive(json, "action"), &action);
     cJSON_Delete(json);
     if (!known) {
         return send_error(req, "400 Bad Request", ERR_BAD_ACTION);
     }
-    if (action == CAPSULE_ACT_MOTION_ON && !motion_available()) {
-        // Still 409 where motion_on does not apply at all: the missing sensor is not the reason.
-        capsule_state_t state;
-        capsule_get(&state);
-        if (state.type == CAPSULE_COUNTER) {
-            return send_error(req, "503 Service Unavailable", ERR_NO_MOTION);
-        }
+    switch (capsule_json_run(action)) {
+    case CAPSULE_RUN_NO_SENSOR:
+        return send_error(req, "503 Service Unavailable", ERR_NO_MOTION);
+    case CAPSULE_RUN_WRONG_CAPSULE:
         return send_error(req, "409 Conflict", ERR_WRONG_CAPSULE);
-    }
-    if (!capsule_apply(action)) {
-        return send_error(req, "409 Conflict", ERR_WRONG_CAPSULE);
+    case CAPSULE_RUN_OK:
+        break;
     }
     return send_state(req);
 }
