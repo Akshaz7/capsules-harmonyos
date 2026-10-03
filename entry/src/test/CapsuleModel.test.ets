@@ -2,7 +2,8 @@ import { describe, it, expect } from '@ohos/hypium';
 import {
   createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig, DEFAULT_ANTHROPIC_MODEL
 } from '../main/ets/core/ModelProvider';
-import { CapsuleModel, extractJson, SYSTEM_PROMPT } from '../main/ets/core/CapsuleModel';
+import { CapsuleModel, extractJson, SYSTEM_PROMPT, V1_EXAMPLES } from '../main/ets/core/CapsuleModel';
+import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 
 const GOOD: string =
   '{"schemaVersion":0,"id":"plants","name":"Plants","permissions":[],"ui":[{"type":"checklist","id":"p","items":["Fern"]}]}';
@@ -74,6 +75,15 @@ export default function capsuleModelTest() {
   });
 
   describe('CapsuleModel', () => {
+    it('teaches schema v1 with two valid example capsules', 0, () => {
+      expect(V1_EXAMPLES.length).assertEqual(2);
+      V1_EXAMPLES.forEach((json: string) => {
+        expect(validateCapsule(json).errors.join('\n')).assertEqual('');
+        expect(SYSTEM_PROMPT).assertContain(json);
+      });
+      expect(SYSTEM_PROMPT).assertContain('"schemaVersion": 1');
+    });
+
     it('sends request plus schema to Anthropic and returns a validated capsule', 0, async (done: Function) => {
       const t = new FakeTransport([anthropicReply('```json\n' + GOOD + '\n```')]);
       const r = await new CapsuleModel(createProvider(config('anthropic'), t)).generate('track my plants');
@@ -83,7 +93,7 @@ export default function capsuleModelTest() {
       expect(t.sent[0].url).assertEqual('https://api.anthropic.com/v1/messages');
       expect(t.sent[0].headers['x-api-key']).assertEqual('test-key');
       expect(t.sent[0].body).assertContain('track my plants');
-      expect(t.sent[0].body).assertContain('Capsule schema v0');
+      expect(t.sent[0].body).assertContain('Capsule schema (v0, plus v1');
       done();
     });
 
