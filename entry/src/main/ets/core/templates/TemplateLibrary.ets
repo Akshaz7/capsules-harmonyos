@@ -8,8 +8,8 @@
  * - list slot: a whole array element "@{items}" becomes the items; inside a longer string they are joined.
  * Filling replaces every placeholder and the result must pass validateCapsule, like every other source.
  *
- * search(request) scores templates by keywords: name, tags (Polish and synonyms included), slot hints
- * and description, with diacritics folded and loose word-ending matching ("pompek" = "pompki").
+ * search(request) scores templates by keywords: name, tags (synonyms included), slot hints and
+ * description, with English plurals folded ("scoreboards" = "scoreboard"). Requests are English only.
  * fill(template, request) fills slots by rules: numbers ("pomodoro 50/10", "break 10"), names
  * ("me vs Sam") and items ("shopping: milk, eggs"); slots it could not fill keep their default.
  * Pure logic: loading the rawfile and caching live in index.ets and RequestCache.ets.
@@ -33,7 +33,7 @@ export interface TemplateEntry {
   id: string;
   name: string;
   description: string;
-  /** Search words: synonyms, Polish words and inflections, other languages. */
+  /** Search words: English synonyms and the words people type. */
   tags: string[];
   slots: TemplateSlot[];
   /** Capsule JSON object with "@{slot}" placeholders. */
@@ -80,7 +80,7 @@ const FOLD: Record<string, string> = {
   'ý': 'y', 'ž': 'z'
 };
 
-/** Lower case with diacritics folded: "Licznik Pompek ŻÓŁW" -> "licznik pompek zolw". */
+/** Lower case with accents folded: "Café TIMER" -> "cafe timer". */
 export function foldText(text: string): string {
   const lower = text.toLowerCase();
   let out = '';
@@ -91,20 +91,13 @@ export function foldText(text: string): string {
   return out;
 }
 
-const CJK: RegExp = /[぀-ヿ㐀-鿿가-힯]/;
-
-/** Words that carry no meaning for matching (English and Polish). */
+/** Words that carry no meaning for matching. */
 const STOPWORDS: string[] = [
   'a', 'an', 'the', 'for', 'me', 'my', 'mine', 'i', 'we', 'us', 'our', 'you', 'vs', 'versus', 'against', 'and', 'or',
   'with', 'of', 'to', 'in', 'on', 'at', 'by', 'from', 'that', 'this', 'it', 'is', 'are', 'be', 'some', 'want', 'need',
   'please', 'make', 'create', 'build', 'give', 'get', 'new', 'simple', 'quick', 'little', 'small', 'app', 'apps',
   'application', 'capsule', 'just', 'can', 'could', 'would', 'like', 'let', 'lets', 'help', 'between', 'each', 'one',
-  'two', 'min', 'mins', 'minute', 'minutes', 'm', 'x', 'per', 'every', 'all', 'about', 'how', 'many', 'much',
-  // Polish
-  'dla', 'mnie', 'mi', 'moj', 'moja', 'moje', 'moich', 'z', 'ze', 'na', 'do', 'w', 'we', 'o', 'i', 'oraz', 'albo',
-  'lub', 'kontra', 'przeciw', 'zrob', 'stworz', 'chce', 'prosze', 'aplikacja', 'aplikacje', 'aplikacji', 'apka',
-  'apke', 'prosty', 'prosta', 'proste', 'minut', 'minuta', 'minuty', 'po', 'dzis', 'dzisiaj', 'jak', 'ile',
-  'kazdy', 'kazda', 'miedzy', 'sie', 'to', 'ten', 'ta', 'te', 'od', 'za'
+  'two', 'min', 'mins', 'minute', 'minutes', 'm', 'x', 'per', 'every', 'all', 'about', 'how', 'many', 'much'
 ];
 
 function isStopword(token: string): boolean {
@@ -113,7 +106,7 @@ function isStopword(token: string): boolean {
 
 /** Splits folded text into words of letters and digits. */
 function words(folded: string): string[] {
-  return folded.split(/[^a-z0-9぀-ヿ㐀-鿿가-힯]+/).filter((w: string) => w.length > 0);
+  return folded.split(/[^a-z0-9]+/).filter((w: string) => w.length > 0);
 }
 
 /** English plural and possessive endings: "scoreboards" -> "scoreboard". */
@@ -135,67 +128,22 @@ function commonPrefix(a: string, b: string): number {
   return i;
 }
 
-/** 1 for the same word (or plural), FUZZY for a different ending (Polish cases: "pompek" ~ "pompki"), else 0. */
-const FUZZY: number = 0.75;
-
-function closeness(a: string, b: string): number {
-  if (a === b || stem(a) === stem(b)) {
-    return 1;
-  }
-  const shorter = Math.min(a.length, b.length);
-  if (shorter < 5) {
-    return 0;
-  }
-  return commonPrefix(a, b) >= Math.max(4, shorter - 2) ? FUZZY : 0;
-}
-
+/** Same word, or the same word in the plural: "scoreboards" = "scoreboard". */
 function similar(a: string, b: string): boolean {
-  return closeness(a, b) > 0;
+  return a === b || stem(a) === stem(b);
 }
 
 // ---- Search ----
-
-const POLISH_WORDS: RegExp = new RegExp('\\b(licznik\\w*|lista|liste|minutnik\\w*|wynik\\w*|gr[aey]|zakup\\w*|pompk\\w*|' +
-  'pompek|przelicz\\w*|budzet\\w*|domow\\w*|stolic\\w*|trening\\w*|przerw\\w*|nauk\\w*|jajk\\w*|jajek|' +
-  'woda|wody|wode|kart[ay]?|rachun\\w*|podzia\\w*|brzusz\\w*|przysiad\\w*|kroki|krokow|codzienn\\w*|' +
-  'tygodn\\w*|sprzatan\\w*|obowiazk\\w*|nawyk\\w*|cwiczen\\w*|kalkulator\\w*|napiwek|napiwk\\w*|' +
-  'ile|dla|mnie|moj\\w*|na|do|przypomn\\w*|zrob|chce)\\b');
-
-/** "zh", "pl" or "en": which template language suits the request best. */
-export function requestLanguage(request: string): string {
-  if (CJK.test(request)) {
-    return 'zh';
-  }
-  return /[ąćęłńśźż]/i.test(request) || POLISH_WORDS.test(foldText(request)) ? 'pl' : 'en';
-}
-
-/** A template in another language than the request: English ones still suit everyone, others hardly. */
-function languageFactor(templateLanguage: string | undefined, requestLang: string): number {
-  const t = templateLanguage ?? 'en';
-  if (t === requestLang) {
-    return 1;
-  }
-  return t === 'en' ? 0.9 : 0.5;
-}
-
-interface Keyword {
-  word: string;
-  weight: number;
-}
 
 class IndexedTemplate {
   template: TemplateEntry;
   keywords: Keyword[] = [];
   nameWords: string[] = [];
-  cjk: string[] = [];
 
   constructor(template: TemplateEntry) {
     this.template = template;
     const add = (text: string, weight: number): void => {
       const folded = foldText(text);
-      if (CJK.test(folded)) {
-        this.cjk.push(folded.replace(/\s+/g, ''));
-      }
       const ws = words(folded).filter((w: string) => !isStopword(w) && !/^\d+$/.test(w));
       ws.forEach((w: string) => this.keywords.push({ word: w, weight: weight }));
       for (let i = 0; i + 1 < ws.length; i++) {
@@ -213,7 +161,7 @@ class IndexedTemplate {
   exactWeightOf(token: string): number {
     let best = 0;
     for (const k of this.keywords) {
-      if (k.weight > best && closeness(token, k.word) === 1) {
+      if (k.weight > best && similar(token, k.word)) {
         best = k.weight;
       }
     }
@@ -223,8 +171,8 @@ class IndexedTemplate {
   weightOf(token: string): number {
     let best = 0;
     for (const k of this.keywords) {
-      if (k.weight > best) {
-        best = Math.max(best, k.weight * closeness(token, k.word));
+      if (k.weight > best && similar(token, k.word)) {
+        best = k.weight;
       }
     }
     return best;
@@ -258,10 +206,10 @@ function capitalise(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.substring(1);
 }
 
-/** Names in "me vs Sam", "Anna versus Tom vs Ola", "Kasia kontra Ola", "between Ann and Bo". */
+/** Names in "me vs Sam", "Anna versus Tom vs Ola", "between Ann and Bo", "for Ann, Bo and Cy". */
 export function extractNames(request: string): string[] {
   const r = request.trim().replace(/[.!?]+$/, '');
-  const vs = r.split(/\s+(?:vs\.?|versus|against|kontra|przeciw|v)\s+/i);
+  const vs = r.split(/\s+(?:vs\.?|versus|against|v)\s+/i);
   let parts: string[] = [];
   if (vs.length >= 2) {
     parts = vs;
@@ -269,13 +217,13 @@ export function extractNames(request: string): string[] {
     parts[0] = lastWords(parts[0]);
     parts[parts.length - 1] = firstWords(parts[parts.length - 1]);
   } else {
-    // "between Ann and Bo", "for Ann, Bo and Cy", "dla Kasi i Oli": capitalised names (or me / ja) only
-    const list = r.match(/\b(?:between|for|dla|mi[eę]dzy|players?|gracze)\s+([^:]+)$/i);
+    // "between Ann and Bo", "for Ann, Bo and Cy": capitalised names (or me) only
+    const list = r.match(/\b(?:between|for|players?)\s+([^:]+)$/i);
     if (list !== null) {
-      const names = list[1].split(/\s*(?:,|;|&|\band\b|\bi\b|\boraz\b)\s*/i).map((p: string) => p.trim())
+      const names = list[1].split(/\s*(?:,|;|&|\band\b)\s*/i).map((p: string) => p.trim())
         .filter((p: string) => p.length > 0);
-      const isName = (p: string): boolean => /^(me|ja|mnie)$/i.test(p) ||
-        (/^[A-Z\u00C0-\u017F]/.test(p) && p.charAt(0) !== p.charAt(0).toLowerCase() && p.split(/\s+/).length <= 2 &&
+      const isName = (p: string): boolean => /^me$/i.test(p) ||
+        (/^[A-Z]/.test(p) && p.charAt(0) !== p.charAt(0).toLowerCase() && p.split(/\s+/).length <= 2 &&
           !/\d/.test(p));
       if (names.length >= 2 && names.length <= 8 && names.every(isName)) {
         parts = names;
@@ -306,13 +254,13 @@ export function extractItems(request: string): string[] {
   if (colon >= 0) {
     rest = request.substring(colon + 1);
   } else {
-    const m = request.match(/\b(?:items?|with|z|:)\s+(.+,.+)$/i);
+    const m = request.match(/\b(?:items?|with|:)\s+(.+,.+)$/i);
     rest = m !== null ? m[1] : '';
   }
   if (rest.trim().length === 0) {
     return [];
   }
-  return rest.split(/\s*(?:,|;|\band\b|\bi\b|\boraz\b|&|\n)\s*/i).map((s: string) => cleanSlotText(s))
+  return rest.split(/\s*(?:,|;|\band\b|&|\n)\s*/i).map((s: string) => cleanSlotText(s))
     .filter((s: string) => s.length > 0).slice(0, MAX_SLOT_ITEMS);
 }
 
@@ -359,27 +307,6 @@ function scoreTokens(index: IndexedTemplate, tokens: string[]): number {
     i++;
   }
   return total;
-}
-
-function scoreCjk(index: IndexedTemplate, folded: string): number {
-  const chars = folded.replace(/[^぀-ヿ㐀-鿿가-힯]/g, '');
-  if (chars.length === 0) {
-    return 0;
-  }
-  const covered: boolean[] = [];
-  for (let i = 0; i < chars.length; i++) {
-    covered.push(false);
-  }
-  index.cjk.forEach((tag: string) => {
-    let from = chars.indexOf(tag);
-    while (tag.length > 0 && from >= 0) {
-      for (let i = from; i < from + tag.length; i++) {
-        covered[i] = true;
-      }
-      from = chars.indexOf(tag, from + 1);
-    }
-  });
-  return covered.filter((c: boolean) => c).length / chars.length;
 }
 
 export class TemplateLibrary {
@@ -429,15 +356,13 @@ export class TemplateLibrary {
   /** Best matches first, at most `limit`, only templates that match at least one word. */
   search(request: string, limit?: number): TemplateHit[] {
     const parsed = parseTemplateRequest(request);
-    const hasCjk = CJK.test(parsed.folded);
-    const lang = requestLanguage(request);
     // Generic words ("timer", "counter", "scoreboard") match many templates; alone they pick none of them.
     const generic: string[] = parsed.tokens.filter((t: string) =>
       this.indexed.filter((ix: IndexedTemplate) => ix.weightOf(t) > 0).length > Math.max(4, this.indexed.length / 20));
     const hits: TemplateHit[] = [];
     this.indexed.forEach((index: IndexedTemplate) => {
       const hasList = index.template.slots.some((sl: TemplateSlot) => sl.kind === 'list');
-      const latin = (hasList ? parsed.tokensWithoutItems : parsed.tokens).filter((t: string) => !CJK.test(t));
+      const latin = hasList ? parsed.tokensWithoutItems : parsed.tokens;
       let score = 0;
       // names the template has no text slot for ("cards for Ann, Bo, Cy" with fixed players) count as unmatched
       const textSlots = index.template.slots.filter((sl: TemplateSlot) => sl.kind === 'text').length;
@@ -445,16 +370,11 @@ export class TemplateLibrary {
       if (latin.length > 0) {
         score = scoreTokens(index, latin) / (latin.length + lostNames);
       }
-      if (hasCjk) {
-        const c = scoreCjk(index, parsed.folded);
-        score = latin.length > 0 ? (score * latin.length + c * 2) / (latin.length + 2) : c;
-      }
       const specific = latin.some((t: string, i: number) => (generic.indexOf(t) < 0 && index.weightOf(t) > 0) ||
         (i + 1 < latin.length && index.exactWeightOf(t + latin[i + 1]) > 0)); // "times tables" is specific
-      if (latin.length > 0 && !specific && !hasCjk) {
+      if (latin.length > 0 && !specific) {
         score *= 0.5;
       }
-      score *= languageFactor(index.template.language, lang);
       if (score > 0) {
         const named = index.nameWords.filter((w: string) => parsed.tokens.some((t: string) => similar(t, w))).length;
         hits.push({
@@ -492,7 +412,7 @@ function hintDistance(parsed: ParsedRequest, n: NumberToken, slot: TemplateSlot)
     let steps = 0;
     for (let i = n.at + dir; i >= 0 && i < ws.length && steps < 3; i += dir) {
       const w = ws[i];
-      if (w === ',' || w === ';' || w === 'and' || w === 'i' || w === 'oraz' || w === 'then' || w === 'potem' || /^\d/.test(w)) {
+      if (w === ',' || w === ';' || w === 'and' || w === 'then' || /^\d/.test(w)) {
         break;
       }
       if (isStopword(w)) {
@@ -511,7 +431,7 @@ function hintDistance(parsed: ParsedRequest, n: NumberToken, slot: TemplateSlot)
 /** Words and numbers ("12.5" stays one number; "50/10", "3x10" split), with commas kept as their own word. */
 function numberWords(folded: string): string[] {
   const prepared = folded.replace(/(\d)\s*[x×\/\-]\s*(?=\d)/g, '$1 ').replace(/(\d)([a-z])/g, '$1 $2');
-  return prepared.match(/\d+(?:\.\d+)?|[a-z0-9\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]+|[,;]/g) ?? [];
+  return prepared.match(/\d+(?:\.\d+)?|[a-z0-9]+|[,;]/g) ?? [];
 }
 
 /**

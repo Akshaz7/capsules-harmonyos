@@ -32,7 +32,7 @@ interface CacheEntry {
 
 /** "  Tennis scoreboard, me vs SAM! " -> "tennis scoreboard me vs sam". Numbers and word order are kept. */
 export function normaliseRequest(request: string): string {
-  return foldText(request).replace(/[^a-z0-9぀-ヿ㐀-鿿가-힯./]+/g, ' ')
+  return foldText(request).replace(/[^a-z0-9./]+/g, ' ')
     .replace(/(^|\s)[./]+|[./]+(\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
 }
 

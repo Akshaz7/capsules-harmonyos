@@ -43,7 +43,7 @@ function grounded(value: SlotValue, requestFolded: string, requestNumbers: numbe
   }
   const items: string[] = Array.isArray(value) ? value as string[] : [value as string];
   return items.length > 0 && items.every((v: string) => {
-    const ws = foldText(String(v)).split(/[^a-z0-9㐀-鿿]+/).filter((w: string) => w.length > 0);
+    const ws = foldText(String(v)).split(/[^a-z0-9]+/).filter((w: string) => w.length > 0);
     return ws.length > 0 && ws.some((w: string) => requestFolded.indexOf(w) >= 0);
   });
 }

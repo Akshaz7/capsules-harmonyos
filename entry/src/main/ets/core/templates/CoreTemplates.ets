@@ -82,18 +82,17 @@ function entry(id: string, name: string, description: string, category: string, 
 export const CORE_TEMPLATES: TemplateEntry[] = [
   entry('tennis', 'Tennis scoreboard', 'Tennis points 0, 15, 30, 40, deuce, advantage and games for two players.',
     'games', ['tennis', 'tenis', 'tennis score', 'tennis scoreboard', 'scoreboard', 'score', 'scorer', 'points',
-      'match', 'deuce', 'wynik', 'wyniki', 'punkty', 'mecz', 'tablica wynikow', 'licznik punktow', '网球', '记分'],
+      'match', 'deuce'],
     '[{"name":"player1","kind":"text","default":"Player 1"},{"name":"player2","kind":"text","default":"Player 2"}]',
     TENNIS),
   entry('pomodoro', 'Pomodoro timer', 'Focus and break timers; starting one stops the other, with a round counter.',
     'study', ['pomodoro', 'focus', 'focus timer', 'study timer', 'work timer', 'deep work', 'productivity',
-      'tomato', 'pomidor', 'pomodoro timer', 'skupienie', 'nauka', 'praca', 'przerwa', 'minutnik', '番茄钟', '专注'],
-    '[{"name":"work","kind":"number","default":25,"hints":["work","focus","praca","nauka","skupienie"]},' +
-      '{"name":"rest","kind":"number","default":5,"hints":["break","rest","pause","przerwa","odpoczynek"]}]',
+      'tomato', 'pomodoro timer', 'focus and break', 'interval'],
+    '[{"name":"work","kind":"number","default":25,"hints":["work","focus","study"]},' +
+      '{"name":"rest","kind":"number","default":5,"hints":["break","rest","pause"]}]',
     POMODORO),
   entry('pushups', 'Push-up counter', 'Count push-ups with +1, +5 and +10 buttons towards a daily goal.',
-    'fitness', ['push-ups', 'push ups', 'pushups', 'push-up counter', 'press-ups', 'pompki', 'pompek', 'pompka',
-      'licznik pompek', 'licznik', 'counter', 'reps', 'powtorzenia', '俯卧撑'],
-    '[{"name":"goal","kind":"number","default":50,"hints":["goal","target","cel"]}]',
+    'fitness', ['push-ups', 'push ups', 'pushups', 'push-up counter', 'press-ups', 'press ups', 'counter', 'reps'],
+    '[{"name":"goal","kind":"number","default":50,"hints":["goal","target"]}]',
     PUSHUPS)
 ];

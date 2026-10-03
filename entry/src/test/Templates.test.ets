@@ -24,7 +24,7 @@ function timers(c: Capsule): number[] {
 }
 
 const CHECKLIST: TemplateEntry = {
-  id: 'packing', name: 'Packing list', description: 'Things to pack.', tags: ['packing', 'pakowanie', 'trip'],
+  id: 'packing', name: 'Packing list', description: 'Things to pack.', tags: ['packing', 'luggage', 'trip'],
   slots: [{ name: 'items', kind: 'list', default: ['passport'] }],
   capsule: JSON.parse('{"schemaVersion":0,"id":"packing","name":"Packing list","permissions":[],' +
     '"ui":[{"type":"checklist","id":"c","items":["@{items}"]},{"type":"text","text":"Pack @{items}"}]}') as Object
@@ -61,14 +61,15 @@ export default function templatesTest() {
     it('numbers next to a hint word go to that slot', 0, () => {
       expect(JSON.stringify(timers(match('pomodoro with a 10 minute break and 40 min focus').capsule)))
         .assertEqual('[40,10]');
-      expect(JSON.stringify(timers(match('pomodoro przerwa 15 praca 45').capsule))).assertEqual('[45,15]');
+      expect(JSON.stringify(timers(match('pomodoro break 15 work 45').capsule))).assertEqual('[45,15]');
+      expect(JSON.stringify(timers(match('pomodoro 40 work, 20 rest').capsule))).assertEqual('[40,20]');
     });
 
-    it('licznik pompek -> push-up counter', 0, () => {
-      const m = match('licznik pompek');
+    it('push-up counter -> push-up counter with a goal', 0, () => {
+      const m = match('push-up counter');
       expect(m.template.id).assertEqual('pushups');
       expect(m.capsule.name).assertEqual('Push-up counter');
-      expect(match('Licznik pompek na dziś cel 80').values['goal']).assertEqual(80);
+      expect(match('pushups goal 80').values['goal']).assertEqual(80);
     });
 
     it('nonsense -> null', 0, () => {
@@ -81,17 +82,19 @@ export default function templatesTest() {
       expect(matchTemplateIn(library, 'tennis scoreboard with tiebreaks, sets and a serve clock') === null).assertTrue();
     });
 
-    it('search ranks by score and folds diacritics', 0, () => {
-      expect(foldText('Żółw ŁĄKA')).assertEqual('zolw laka');
+    it('search ranks by score and folds accents and plurals', 0, () => {
+      expect(foldText('Café TIMER')).assertEqual('cafe timer');
+      expect(library.search('tennis scoreboards')[0].template.id).assertEqual('tennis');
       const hits = library.search('push ups counter');
       expect(hits[0].template.id).assertEqual('pushups');
       expect(hits[0].score).assertEqual(1);
-      expect(library.search('番茄钟')[0].template.id).assertEqual('pomodoro');
     });
 
     it('extracts names and items', 0, () => {
       expect(JSON.stringify(extractNames('darts Anna vs Tom vs Ola'))).assertEqual('["Anna","Tom","Ola"]');
-      expect(JSON.stringify(extractNames('chess kasia kontra ola'))).assertEqual('["Kasia","Ola"]');
+      expect(JSON.stringify(extractNames('volleyball Team A vs Team B'))).assertEqual('["Team A","Team B"]');
+      expect(JSON.stringify(extractNames('cards for Ann, Bo and Cy'))).assertEqual('["Ann","Bo","Cy"]');
+      expect(JSON.stringify(extractNames('checklist for keys and wallet'))).assertEqual('[]');
       expect(JSON.stringify(extractNames('scoreboard between Ann and Bo'))).assertEqual('["Ann","Bo"]');
       expect(JSON.stringify(extractItems('packing: socks, charger and passport')))
         .assertEqual('["socks","charger","passport"]');

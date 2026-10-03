@@ -12,6 +12,7 @@
 // Usage (from the repo root):
 //   node scripts/seed-capsules/seed.mjs [--only games,timers] [--concurrency 4] [--check]
 // --check skips generation and only re-validates the current library.json (exit 1 if anything is invalid).
+// --rebuild skips generation: refreshes the core templates in library.json and rewrites marketplace-seed.json.
 // Needs Node 18+; downloads esbuild through npx on first run. Never prints the API key.
 
 import { execFileSync } from 'node:child_process';
@@ -62,6 +63,8 @@ function check(t) {
   if (!/^[a-z0-9][a-z0-9-]{1,40}$/.test(t.id ?? '')) errors.push('id must be lowercase-kebab-case');
   for (const f of ['name', 'description']) if (typeof t[f] !== 'string' || t[f].length === 0) errors.push(`missing ${f}`);
   if (!Array.isArray(t.tags) || t.tags.length < 3) errors.push('needs at least 3 tags');
+  if ((t.language ?? 'en') !== 'en') errors.push('templates are English only');
+  if (/[^\x00-\x7f]/.test(JSON.stringify([t.tags, t.slots.map((s) => s.hints ?? [])]))) errors.push('tags and hints must be English');
   if (!Array.isArray(t.slots)) return errors.concat('slots must be an array');
   const json = JSON.stringify(t.capsule ?? null);
   for (const s of t.slots) {
@@ -115,7 +118,7 @@ const IDEAS = {
   ],
   quizzes: [
     'times-tables quiz with score', 'capital cities quiz (5 questions, multiple choice buttons)',
-    'Polish-English vocabulary flashcards with know / don\'t know counts', 'true or false science quiz',
+    'foreign vocabulary flashcards with know / don\'t know counts', 'true or false science quiz',
     'flag / country guess quiz with score', 'spelling practice self-check list with score'
   ],
   habits: [
@@ -150,16 +153,6 @@ const IDEAS = {
     'cleaning chores checklist', 'weekly chores rota for flatmates', 'plant watering checklist',
     'packing list for a trip', 'moving house checklist', 'baby feeding and diaper counters',
     'dog walk counter and feeding checklist', 'grocery pantry restock checklist', 'leaving home checklist (keys, wallet)'
-  ],
-  'non-English': [
-    'Polish (language "pl"): licznik pompek (push-up counter) with names and labels in Polish',
-    'Polish (language "pl"): lista zakupów (shopping list) with add/remove, labels in Polish',
-    'Polish (language "pl"): minutnik do jajek (egg timers) in Polish',
-    'Polish (language "pl"): wynik gry w karty (card game scores for 4 players) in Polish',
-    'Polish (language "pl"): podział rachunku (bill split) in Polish',
-    'Chinese (language "zh"): 喝水记录 water glasses counter in Chinese',
-    'Chinese (language "zh"): 番茄钟 focus/break timers in Chinese',
-    'Chinese (language "zh"): 购物清单 shopping checklist in Chinese'
   ]
 };
 
@@ -175,14 +168,12 @@ Use 0-3 slots, only for what a user would naturally say in a request: player or 
 player2, ...), durations in minutes and goals (number), list items (list). Every slot must appear in the capsule.
 
 Reply with ONE JSON array, nothing else. Each element:
-{ "id": kebab-case, "name": short English title (or in the requested language), "description": one sentence,
+{ "id": kebab-case, "name": short English title, "description": one sentence,
   "category": one of games, timers, calculators, quizzes, habits, fitness, cooking, study, money, household,
-  "language": "en" | "pl" | "zh",
-  "tags": 12-25 search words: English synonyms and the words people type ("scoreboard", "score", "counter"),
-    Polish translations WITH inflected forms (e.g. "pompki", "pompek", "licznik pompek", "tarcza", "rzutki",
-    "lotki"), and 1-2 Chinese words,
+  "language": "en",
+  "tags": 12-25 English search words: synonyms and the words people type ("scoreboard", "score", "counter"),
   "slots": [ { "name": letters only, "kind": "text" | "number" | "list", "default": value, "hints"?: [words that
-    tie a number to this slot, English and Polish, e.g. ["break","rest","przerwa"]] } ],
+    tie a number to this slot, e.g. ["break","rest"]] } ],
   "capsule": the capsule JSON object with placeholders }
 
 The capsule must be valid for this schema once placeholders are filled:
@@ -310,7 +301,7 @@ function report(templates) {
     else console.log(`  search("${t.name}") -> ${top?.template.id ?? 'none'}`);
   }
   for (const [request, want] of [['tennis scoreboard me vs Sam', 'tennis'], ['pomodoro 50/10', 'pomodoro'],
-    ['licznik pompek', 'pomp|push'], ['asdf qwerty', null]]) {
+    ['push-up counter', 'push'], ['asdf qwerty', null]]) {
     const m = lib.matchTemplateIn(library, request);
     console.log(`  ${(want === null ? m === null : m !== null && new RegExp(want).test(m.template.id)) ? 'ok  ' : 'FAIL'} ` +
       `"${request}" -> ${m ? `${m.template.id} ${m.score} "${m.capsule.name}"` : 'null'}`);
@@ -332,6 +323,15 @@ if (process.argv.includes('--check')) {
   console.log(`${templates.length - bad}/${templates.length} templates valid`);
   report(templates);
   process.exit(bad > 0 ? 1 : 0);
+}
+
+if (process.argv.includes('--rebuild')) {
+  const current = JSON.parse(readFileSync(LIBRARY, 'utf8')).templates;
+  const core = lib.CORE_TEMPLATES.map((t) => slim(JSON.parse(JSON.stringify(t))));
+  const rest = current.filter((t) => !core.some((c) => c.id === t.id) && check(t).length === 0);
+  write([...core, ...rest]);
+  report([...core, ...rest]);
+  process.exit(0);
 }
 
 const cfg = anthropicConfig();

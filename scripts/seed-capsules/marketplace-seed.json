@@ -13,15 +13,7 @@
    "scorer",
    "points",
    "match",
-   "deuce",
-   "wynik",
-   "wyniki",
-   "punkty",
-   "mecz",
-   "tablica wynikow",
-   "licznik punktow",
-   "网球",
-   "记分"
+   "deuce"
   ],
   "language": "en",
   "capsule": {
@@ -150,15 +142,9 @@
    "deep work",
    "productivity",
    "tomato",
-   "pomidor",
    "pomodoro timer",
-   "skupienie",
-   "nauka",
-   "praca",
-   "przerwa",
-   "minutnik",
-   "番茄钟",
-   "专注"
+   "focus and break",
+   "interval"
   ],
   "language": "en",
   "capsule": {
@@ -243,15 +229,9 @@
    "pushups",
    "push-up counter",
    "press-ups",
-   "pompki",
-   "pompek",
-   "pompka",
-   "licznik pompek",
-   "licznik",
+   "press ups",
    "counter",
-   "reps",
-   "powtorzenia",
-   "俯卧撑"
+   "reps"
   ],
   "language": "en",
   "capsule": {
@@ -348,20 +328,7 @@
    "cooking",
    "kitchen",
    "minutes",
-   "timer",
-   "minutnik",
-   "makaron",
-   "sos",
-   "pieczywo czosnkowe",
-   "czosnek",
-   "chleb czosnkowy",
-   "gotowanie",
-   "kuchnia",
-   "minutnik kuchenny",
-   "czasomierz",
-   "timery",
-   "厨房",
-   "煮饭"
+   "timer"
   ],
   "language": "en",
   "capsule": {
@@ -443,17 +410,7 @@
    "cooking timer",
    "kitchen timer",
    "boiling",
-   "jajka",
-   "jajko",
-   "jajka na miękko",
-   "jajka na twardo",
-   "jajko na półmiękko",
-   "gotowanie jajek",
-   "minutnik do jajek",
-   "minutnik",
-   "timer",
-   "鸡蛋",
-   "煮蛋"
+   "timer"
   ],
   "language": "en",
   "capsule": {
@@ -535,19 +492,7 @@
    "circuit",
    "training",
    "gym",
-   "intervals",
-   "trening interwałowy",
-   "interwały",
-   "interwał",
-   "minutnik treningowy",
-   "praca",
-   "przerwa",
-   "rundy",
-   "runda",
-   "ćwiczenia",
-   "trening",
-   "间歇训练",
-   "健身"
+   "intervals"
   ],
   "language": "en",
   "capsule": {
@@ -644,16 +589,7 @@
    "round counter",
    "8 rounds",
    "fitness",
-   "exercise",
-   "trening",
-   "tabata minutnik",
-   "rundy",
-   "licznik rund",
-   "interwały",
-   "ćwiczenia",
-   "przerwa",
-   "塔巴塔",
-   "间歇"
+   "exercise"
   ],
   "language": "en",
   "capsule": {
@@ -753,18 +689,7 @@
    "brew",
    "brewing",
    "kettle",
-   "cup of tea",
-   "herbata",
-   "herbaty",
-   "zielona herbata",
-   "czarna herbata",
-   "ziołowa",
-   "zaparzanie",
-   "parzenie herbaty",
-   "minutnik do herbaty",
-   "napar",
-   "茶",
-   "泡茶"
+   "cup of tea"
   ],
   "language": "en",
   "capsule": {
@@ -840,18 +765,7 @@
    "sleep",
    "alarm",
    "short sleep",
-   "relax",
-   "drzemka",
-   "drzemki",
-   "minutnik drzemki",
-   "mała drzemka",
-   "sen",
-   "spanie",
-   "odpoczynek",
-   "budzik",
-   "20 minut",
-   "午睡",
-   "小睡"
+   "relax"
   ],
   "language": "en",
   "capsule": {
@@ -906,15 +820,7 @@
    "breathing",
    "calm",
    "sit",
-   "session",
-   "medytacja",
-   "medytacji",
-   "minutnik medytacji",
-   "uważność",
-   "relaks",
-   "oddech",
-   "冥想",
-   "静心"
+   "session"
   ],
   "language": "en",
   "capsule": {
@@ -998,16 +904,7 @@
    "fitness",
    "exercise",
    "sets",
-   "rest timer",
-   "deska",
-   "plank wyzwanie",
-   "deski",
-   "minutnik deski",
-   "trening",
-   "brzuch",
-   "mięśnie core",
-   "平板支撑",
-   "核心"
+   "rest timer"
   ],
   "language": "en",
   "capsule": {
@@ -1096,16 +993,7 @@
    "clothes",
    "chores",
    "household",
-   "cycle",
-   "pranie",
-   "pralka",
-   "suszarka",
-   "minutnik prania",
-   "suszenie",
-   "pranie timer",
-   "ubrania",
-   "洗衣",
-   "烘干"
+   "cycle"
   ],
   "language": "en",
   "capsule": {
@@ -1192,16 +1080,7 @@
    "proofing",
    "proof",
    "oven",
-   "sourdough",
-   "chleb",
-   "pieczenie",
-   "chleba",
-   "wyrastanie",
-   "ciasto",
-   "piekarnik",
-   "minutnik do pieczenia",
-   "烘焙",
-   "面包"
+   "sourdough"
   ],
   "language": "en",
   "capsule": {
@@ -1301,15 +1180,7 @@
    "screen time",
    "look away",
    "20 20 20",
-   "break reminder",
-   "przerwa dla oczu",
-   "oczy",
-   "zmęczone oczy",
-   "ekran",
-   "praca przy komputerze",
-   "minutnik",
-   "护眼",
-   "休息"
+   "break reminder"
   ],
   "language": "en",
   "capsule": {
@@ -1391,14 +1262,7 @@
    "mobility",
    "neck",
    "hamstring",
-   "shoulder",
-   "rozciąganie",
-   "rozciągania",
-   "minutnik rozciągania",
-   "ćwiczenia",
-   "mobilność",
-   "拉伸",
-   "伸展"
+   "shoulder"
   ],
   "language": "en",
   "capsule": {
@@ -1507,16 +1371,7 @@
    "board game timer",
    "turn timer",
    "move timer",
-   "stopwatch",
-   "zegar szachowy",
-   "szachy",
-   "zegar",
-   "minutnik",
-   "czas na ruch",
-   "partia",
-   "gra planszowa",
-   "国际象棋",
-   "棋钟"
+   "stopwatch"
   ],
   "language": "en",
   "capsule": {
@@ -1600,16 +1455,7 @@
    "backyard game",
    "to 21",
    "points",
-   "tally",
-   "rzut workiem",
-   "worek",
-   "gra w worki",
-   "wynik",
-   "tablica wyników",
-   "licznik punktów",
-   "punkty",
-   "玉米洞",
-   "沙包"
+   "tally"
   ],
   "language": "en",
   "capsule": {
@@ -1756,16 +1602,7 @@
    "cards",
    "bet",
    "stack",
-   "home game",
-   "żetony",
-   "poker żetony",
-   "licznik żetonów",
-   "stawka",
-   "pula",
-   "wpisowe",
-   "karty",
-   "扑克",
-   "筹码"
+   "home game"
   ],
   "language": "en",
   "capsule": {
@@ -1954,15 +1791,7 @@
    "scoreboard",
    "wins",
    "tally",
-   "match",
-   "bilard",
-   "bilardowy",
-   "rack wygrane",
-   "wynik",
-   "partia",
-   "frejmy",
-   "台球",
-   "桌球"
+   "match"
   ],
   "language": "en",
   "capsule": {
@@ -2078,16 +1907,7 @@
    "points",
    "leader",
    "game night",
-   "question counter",
-   "turniej",
-   "quiz drużynowy",
-   "wieczór quizowy",
-   "wyniki drużyn",
-   "punkty",
-   "drużyna",
-   "licznik punktów",
-   "知识竞赛",
-   "答题"
+   "question counter"
   ],
   "language": "en",
   "capsule": {
@@ -2293,16 +2113,7 @@
    "janken",
    "draw",
    "rounds",
-   "match",
-   "kamień papier nożyce",
-   "papier kamień nożyce",
-   "wynik",
-   "licznik",
-   "remis",
-   "runda",
-   "do dwóch wygranych",
-   "石头剪刀布",
-   "猜拳"
+   "match"
   ],
   "language": "en",
   "capsule": {
@@ -2415,16 +2226,7 @@
    "street parking",
    "countdown",
    "timer",
-   "minutes left",
-   "parkometr",
-   "parkowanie",
-   "strefa płatnej parkingu",
-   "bilet parkingowy",
-   "minutnik",
-   "odliczanie",
-   "samochód",
-   "停车",
-   "计时器"
+   "minutes left"
   ],
   "language": "en",
   "capsule": {
@@ -2499,16 +2301,7 @@
    "countdown",
    "timer",
    "toastmasters",
-   "lecture",
-   "wystąpienie",
-   "przemówienie",
-   "prezentacja",
-   "minutnik",
-   "odliczanie",
-   "ostrzeżenie",
-   "ostatnia minuta",
-   "演讲",
-   "计时器"
+   "lecture"
   ],
   "language": "en",
   "capsule": {
@@ -2601,19 +2394,7 @@
    "sleep",
    "routine",
    "timer",
-   "parenting",
-   "dzieci",
-   "dziecko",
-   "kąpiel",
-   "bajka",
-   "czytanie",
-   "dobranoc",
-   "usypianie",
-   "pora spania",
-   "rutyna",
-   "minutnik",
-   "睡前",
-   "孩子"
+   "parenting"
   ],
   "language": "en",
   "capsule": {
@@ -2726,16 +2507,7 @@
    "total",
    "calculator",
    "service charge",
-   "waiter",
-   "napiwek",
-   "kalkulator napiwku",
-   "napiwku",
-   "rachunek",
-   "procent",
-   "restauracja",
-   "oblicz napiwek",
-   "小费",
-   "账单"
+   "waiter"
   ],
   "language": "en",
   "capsule": {
@@ -2798,17 +2570,7 @@
    "each",
    "group",
    "calculator",
-   "friends",
-   "podział rachunku",
-   "podziel rachunek",
-   "rachunek",
-   "napiwek",
-   "na osobę",
-   "osób",
-   "kalkulator",
-   "dzielenie",
-   "分摊",
-   "平分账单"
+   "friends"
   ],
   "language": "en",
   "capsule": {
@@ -2909,15 +2671,7 @@
    "unit converter",
    "length",
    "km",
-   "mi",
-   "kilometry",
-   "kilometrów",
-   "przelicznik",
-   "na mile",
-   "konwerter",
-   "przelicz",
-   "公里",
-   "英里"
+   "mi"
   ],
   "language": "en",
   "capsule": {
@@ -2979,16 +2733,7 @@
    "f to c",
    "weather",
    "oven",
-   "unit converter",
-   "temperatura",
-   "stopnie",
-   "stopni",
-   "celsjusza",
-   "przelicznik",
-   "na fahrenheita",
-   "konwerter",
-   "摄氏度",
-   "华氏度"
+   "unit converter"
   ],
   "language": "en",
   "capsule": {
@@ -3050,16 +2795,7 @@
    "converter",
    "mass",
    "body weight",
-   "unit converter",
-   "kilogramy",
-   "kilogramów",
-   "funty",
-   "funtów",
-   "waga",
-   "przelicznik",
-   "konwerter",
-   "公斤",
-   "磅"
+   "unit converter"
   ],
   "language": "en",
   "capsule": {
@@ -3123,16 +2859,7 @@
    "ft",
    "in",
    "unit converter",
-   "length",
-   "centymetry",
-   "centymetrów",
-   "stopy",
-   "cale",
-   "wzrost",
-   "przelicznik",
-   "konwerter",
-   "厘米",
-   "英尺"
+   "length"
   ],
   "language": "en",
   "capsule": {
@@ -3186,17 +2913,7 @@
    "score",
    "checkout",
    "bust",
-   "pub game",
-   "rzutki",
-   "lotki",
-   "tarcza",
-   "rzutki do tarczy",
-   "licznik rzutek",
-   "punkty",
-   "wynik",
-   "kto wygrał",
-   "飞镖",
-   "计分"
+   "pub game"
   ],
   "language": "en",
   "capsule": {
@@ -3356,17 +3073,7 @@
    "service",
    "win by 2",
    "deuce",
-   "11 points",
-   "tenis stołowy",
-   "ping pong wynik",
-   "tenis stołowy tablica",
-   "licznik punktów",
-   "punkty",
-   "serwis",
-   "zmiana serwisu",
-   "przewaga",
-   "乒乓球",
-   "记分牌"
+   "11 points"
   ],
   "language": "en",
   "capsule": {
@@ -3522,17 +3229,7 @@
    "games won",
    "best of three",
    "racket",
-   "racquet",
-   "kort",
-   "badminton wynik",
-   "licznik punktów",
-   "punkty",
-   "wynik",
-   "pałki",
-   "lotka",
-   "tablica wyników",
-   "羽毛球",
-   "记分牌"
+   "racquet"
   ],
   "language": "en",
   "capsule": {
@@ -3700,17 +3397,7 @@
    "sets won",
    "25 points",
    "best of five",
-   "team score",
-   "siatkówka",
-   "siatkowka",
-   "plażówka",
-   "licznik punktów",
-   "wynik",
-   "sety",
-   "punkty",
-   "tablica wyników",
-   "排球",
-   "记分牌"
+   "team score"
   ],
   "language": "en",
   "capsule": {
@@ -3890,18 +3577,7 @@
    "quarter",
    "points",
    "team score",
-   "lead",
-   "koszykówka",
-   "koszykowka",
-   "kosz",
-   "licznik punktów",
-   "wynik",
-   "tablica wyników",
-   "rzut za 3",
-   "kwarta",
-   "punkty",
-   "篮球",
-   "记分牌"
+   "lead"
   ],
   "language": "en",
   "capsule": {
@@ -4074,18 +3750,7 @@
    "match timer",
    "90 minutes",
    "half time",
-   "fixture",
-   "piłka nożna",
-   "pilka nozna",
-   "mecz",
-   "wynik meczu",
-   "bramki",
-   "gole",
-   "licznik goli",
-   "tablica wyników",
-   "czas meczu",
-   "足球",
-   "比分"
+   "fixture"
   ],
   "language": "en",
   "capsule": {
@@ -4219,17 +3884,7 @@
    "consistency",
    "day streak",
    "best streak",
-   "tracker",
-   "nawyk",
-   "nawyki",
-   "seria",
-   "serie",
-   "licznik serii",
-   "dni z rzędu",
-   "codzienny nawyk",
-   "śledzenie nawyków",
-   "习惯",
-   "连续打卡"
+   "tracker"
   ],
   "language": "en",
   "capsule": {
@@ -4333,17 +3988,7 @@
    "water intake",
    "counter",
    "drinking",
-   "health",
-   "woda",
-   "pić wodę",
-   "szklanki",
-   "szklanek",
-   "szklanki wody",
-   "nawodnienie",
-   "licznik szklanek",
-   "cel dzienny",
-   "喝水",
-   "饮水"
+   "health"
   ],
   "language": "en",
   "capsule": {
@@ -4432,17 +4077,7 @@
    "daily goal",
    "reading goal",
    "books",
-   "progress",
-   "czytanie",
-   "strony",
-   "stron",
-   "książka",
-   "książki",
-   "licznik stron",
-   "dzienny cel",
-   "czytam",
-   "阅读",
-   "读书"
+   "progress"
   ],
   "language": "en",
   "capsule": {
@@ -4531,17 +4166,7 @@
    "sugar",
    "day streak",
    "challenge",
-   "healthy eating",
-   "bez cukru",
-   "cukier",
-   "seria",
-   "dni bez cukru",
-   "licznik dni",
-   "dieta",
-   "wyzwanie",
-   "bez słodyczy",
-   "戒糖",
-   "无糖"
+   "healthy eating"
   ],
   "language": "en",
   "capsule": {
@@ -4625,17 +4250,7 @@
    "morning habits",
    "wake up",
    "to do",
-   "start the day",
-   "poranek",
-   "rutyna poranna",
-   "poranna rutyna",
-   "lista poranna",
-   "rano",
-   "lista zadań",
-   "codzienna rutyna",
-   "nawyki",
-   "早晨",
-   "晨间习惯"
+   "start the day"
   ],
   "language": "en",
   "capsule": {
@@ -4676,17 +4291,7 @@
    "routine",
    "sleep",
    "before bed",
-   "to do",
-   "wieczór",
-   "rutyna wieczorna",
-   "wieczorna rutyna",
-   "lista wieczorna",
-   "przed snem",
-   "sen",
-   "lista zadań",
-   "wieczorem",
-   "晚间",
-   "睡前习惯"
+   "to do"
   ],
   "language": "en",
   "capsule": {
@@ -4731,19 +4336,7 @@
    "l/100km",
    "price per litre",
    "car",
-   "mileage",
-   "paliwo",
-   "koszt paliwa",
-   "koszt podróży",
-   "spalanie",
-   "benzyna",
-   "olej napędowy",
-   "trasa",
-   "litry",
-   "cena za litr",
-   "kilometry",
-   "油费",
-   "旅行"
+   "mileage"
   ],
   "language": "en",
   "capsule": {
@@ -4825,18 +4418,7 @@
    "deal",
    "markdown",
    "final price",
-   "promo",
-   "rabat",
-   "zniżka",
-   "promocja",
-   "przecena",
-   "cena po rabacie",
-   "oszczędności",
-   "procent",
-   "kalkulator rabatu",
-   "zakupy",
-   "折扣",
-   "打折"
+   "promo"
   ],
   "language": "en",
   "capsule": {
@@ -4913,18 +4495,7 @@
    "fitness",
    "kg",
    "cm",
-   "wskaźnik bmi",
-   "masa ciała",
-   "waga",
-   "wzrost",
-   "kalkulator bmi",
-   "otyłość",
-   "niedowaga",
-   "nadwaga",
-   "zdrowie",
-   "BMI",
-   "体重指数",
-   "健康"
+   "BMI"
   ],
   "language": "en",
   "capsule": {
@@ -4994,17 +4565,7 @@
    "tax",
    "vat",
    "tip",
-   "what percent",
-   "procent",
-   "procenty",
-   "procentów",
-   "ile procent",
-   "kalkulator procentowy",
-   "oblicz procent",
-   "podatek",
-   "napiwek",
-   "百分比",
-   "计算器"
+   "what percent"
   ],
   "language": "en",
   "capsule": {
@@ -5107,19 +4668,7 @@
    "10k",
    "5k",
    "jogging",
-   "training",
-   "tempo",
-   "bieganie",
-   "tempo biegu",
-   "bieg",
-   "kalkulator tempa",
-   "prędkość",
-   "dystans",
-   "czas",
-   "półmaraton",
-   "maraton",
-   "跑步",
-   "配速"
+   "training"
   ],
   "language": "en",
   "capsule": {
@@ -5207,19 +4756,7 @@
    "conversion",
    "kitchen",
    "recipe",
-   "tablespoon",
-   "szklanki",
-   "szklanka",
-   "szklanek",
-   "mililitry",
-   "gramy",
-   "mąka",
-   "mąki",
-   "przelicznik",
-   "kuchnia",
-   "przepis",
-   "烹饪",
-   "换算"
+   "tablespoon"
   ],
   "language": "en",
   "capsule": {
@@ -5291,18 +4828,7 @@
    "tax rate",
    "23%",
    "calculator",
-   "podatek vat",
-   "kalkulator vat",
-   "vat 23",
-   "netto",
-   "brutto",
-   "cena netto",
-   "cena brutto",
-   "faktura",
-   "stawka vat",
-   "podatek",
-   "增值税",
-   "税率"
+   "vat 23"
   ],
   "language": "en",
   "capsule": {
@@ -5401,17 +4927,7 @@
    "years to days",
    "years to weeks",
    "birthday",
-   "calculator",
-   "wiek",
-   "wiek w dniach",
-   "ile dni",
-   "ile tygodni",
-   "dni życia",
-   "tygodnie",
-   "lata na dni",
-   "kalkulator wieku",
-   "年龄",
-   "天数"
+   "calculator"
   ],
   "language": "en",
   "capsule": {
@@ -5481,18 +4997,7 @@
    "double recipe",
    "halve recipe",
    "cooking",
-   "calculator",
-   "przepis",
-   "skalowanie przepisu",
-   "porcje",
-   "porcji",
-   "liczba porcji",
-   "składniki",
-   "przelicz przepis",
-   "kuchnia",
-   "kalkulator",
-   "食谱",
-   "份量"
+   "calculator"
   ],
   "language": "en",
   "capsule": {
@@ -5614,18 +5119,7 @@
    "repayment",
    "total cost",
    "mortgage",
-   "calculator",
-   "kredyt",
-   "pożyczka",
-   "rata",
-   "miesięczna rata",
-   "rata kredytu",
-   "kalkulator kredytowy",
-   "odsetki",
-   "oprocentowanie",
-   "raty",
-   "贷款",
-   "月供"
+   "calculator"
   ],
   "language": "en",
   "capsule": {
@@ -5706,18 +5200,7 @@
    "price per kg",
    "price per liter",
    "calculator",
-   "which is cheaper",
-   "cena jednostkowa",
-   "cena za kilogram",
-   "cena za litr",
-   "porównanie cen",
-   "porównaj ceny",
-   "co jest tańsze",
-   "tańszy",
-   "zakupy",
-   "kalkulator",
-   "单价",
-   "比价"
+   "which is cheaper"
   ],
   "language": "en",
   "capsule": {
@@ -5811,17 +5294,7 @@
    "daily",
    "tablets",
    "reminder",
-   "habit",
-   "witaminy",
-   "leki",
-   "tabletki",
-   "suplementy",
-   "rano",
-   "wieczorem",
-   "lista",
-   "apteczka",
-   "吃药",
-   "维生素"
+   "habit"
   ],
   "language": "en",
   "capsule": {
@@ -5874,15 +5347,7 @@
    "reflection",
    "habit",
    "positive",
-   "wellbeing",
-   "dziennik",
-   "wdzięczność",
-   "dziennik wdzięczności",
-   "dobre rzeczy",
-   "pamiętnik",
-   "codziennie",
-   "感恩",
-   "日记"
+   "wellbeing"
   ],
   "language": "en",
   "capsule": {
@@ -5981,16 +5446,7 @@
    "mental health",
    "daily",
    "habit",
-   "mood diary",
-   "nastrój",
-   "humor",
-   "samopoczucie",
-   "emocje",
-   "tracker nastroju",
-   "licznik nastroju",
-   "dziennik nastroju",
-   "心情",
-   "情绪"
+   "mood diary"
   ],
   "language": "en",
   "capsule": {
@@ -6137,16 +5593,7 @@
    "rest",
    "night",
    "sleep goal",
-   "habit",
-   "sen",
-   "sen dziennik",
-   "godziny snu",
-   "średnia",
-   "tygodniowa średnia",
-   "spanie",
-   "dziennik snu",
-   "睡眠",
-   "睡眠记录"
+   "habit"
   ],
   "language": "en",
   "capsule": {
@@ -6263,16 +5710,7 @@
    "tracker",
    "fitness",
    "habit",
-   "progress",
-   "kroki",
-   "licznik kroków",
-   "cel kroków",
-   "spacer",
-   "krokomierz",
-   "dzienny cel",
-   "10000 kroków",
-   "步数",
-   "走路"
+   "progress"
   ],
   "language": "en",
   "capsule": {
@@ -6378,16 +5816,7 @@
    "workout tracker",
    "strength training",
    "gym",
-   "weights",
-   "serie",
-   "seria",
-   "powtórzenia",
-   "powtórzeń",
-   "liczba serii",
-   "licznik powtórzeń",
-   "trening siłowy",
-   "训练",
-   "组数"
+   "weights"
   ],
   "language": "en",
   "capsule": {
@@ -6514,15 +5943,7 @@
    "legs",
    "fitness",
    "workout",
-   "home workout",
-   "przysiady",
-   "przysiadów",
-   "licznik przysiadów",
-   "wyzwanie przysiadów",
-   "cel",
-   "trening nóg",
-   "深蹲",
-   "计数"
+   "home workout"
   ],
   "language": "en",
   "capsule": {
@@ -6644,14 +6065,7 @@
    "rep counter",
    "best score",
    "fitness",
-   "workout",
-   "brzuszki",
-   "brzuszków",
-   "licznik brzuszków",
-   "mięśnie brzucha",
-   "rekord",
-   "仰卧起坐",
-   "计数"
+   "workout"
   ],
   "language": "en",
   "capsule": {
@@ -6760,16 +6174,7 @@
    "deadlift",
    "strength",
    "training plan",
-   "weightlifting",
-   "siłownia",
-   "trening",
-   "lista ćwiczeń",
-   "rozgrzewka",
-   "wyciskanie",
-   "martwy ciąg",
-   "przysiad",
-   "健身",
-   "清单"
+   "weightlifting"
   ],
   "language": "en",
   "capsule": {
@@ -6812,15 +6217,7 @@
    "lap length",
    "cardio",
    "counter",
-   "fitness",
-   "bieganie",
-   "okrążenia",
-   "okrążeń",
-   "licznik okrążeń",
-   "bieżnia",
-   "dystans",
-   "跑步",
-   "圈数"
+   "fitness"
   ],
   "language": "en",
   "capsule": {
@@ -6915,15 +6312,7 @@
    "hiit",
    "exercise",
    "fitness",
-   "home workout",
-   "pajacyki",
-   "pajacyków",
-   "licznik pajacyków",
-   "skoki",
-   "rozgrzewka",
-   "minutnik",
-   "开合跳",
-   "计数"
+   "home workout"
   ],
   "language": "en",
   "capsule": {
@@ -7049,15 +6438,7 @@
    "french press",
    "aeropress",
    "coffee ratio",
-   "water ratio",
-   "kawa",
-   "kawy",
-   "parzenie kawy",
-   "zaparzanie",
-   "minutnik",
-   "przelew",
-   "咖啡",
-   "冲泡"
+   "water ratio"
   ],
   "language": "en",
   "capsule": {
@@ -7178,18 +6559,7 @@
    "racquet",
    "game counter",
    "match",
-   "two players",
-   "wynik",
-   "tablica wyników",
-   "licznik punktów",
-   "punkty",
-   "punktów",
-   "mecz",
-   "gem",
-   "gema",
-   "rakieta",
-   "计分板",
-   "壁球"
+   "two players"
   ],
   "language": "en",
   "capsule": {
@@ -7336,18 +6706,7 @@
    "round counter",
    "four players",
    "4 players",
-   "tally",
-   "karty",
-   "gra w karty",
-   "remik",
-   "punkty",
-   "punktów",
-   "wyniki",
-   "rundy",
-   "runda",
-   "tabela wyników",
-   "扑克",
-   "记分"
+   "tally"
   ],
   "language": "en",
   "capsule": {
@@ -7556,17 +6915,7 @@
    "words",
    "moves",
    "history",
-   "letters",
-   "wynik",
-   "punkty",
-   "punktów",
-   "scrabble wyniki",
-   "licznik punktów",
-   "gra słowna",
-   "słowa",
-   "gracz",
-   "拼字游戏",
-   "计分"
+   "letters"
   ],
   "language": "en",
   "capsule": {
@@ -7701,17 +7050,7 @@
    "ten pin",
    "total score",
    "scoreboard",
-   "tracker",
-   "kręgle",
-   "kręgli",
-   "wynik",
-   "ramka",
-   "ramki",
-   "kręgielnia",
-   "strajk",
-   "punkty",
-   "保龄球",
-   "计分"
+   "tracker"
   ],
   "language": "en",
   "capsule": {
@@ -7918,17 +7257,7 @@
    "course",
    "birdie",
    "bogey",
-   "golf score",
-   "karta wyników",
-   "wynik",
-   "uderzenia",
-   "uderzeń",
-   "dołek",
-   "dołki",
-   "dołków",
-   "pole golfowe",
-   "高尔夫",
-   "杆数"
+   "golf score"
   ],
   "language": "en",
   "capsule": {
@@ -8121,18 +7450,7 @@
    "round counter",
    "order",
    "tabletop",
-   "game night",
-   "gra planszowa",
-   "plansza",
-   "tura",
-   "tury",
-   "kolejka",
-   "czyja kolej",
-   "gracz",
-   "graczy",
-   "następny gracz",
-   "桌游",
-   "回合"
+   "game night"
   ],
   "language": "en",
   "capsule": {
@@ -8257,17 +7575,7 @@
    "strength",
    "workout log",
    "training log",
-   "tonnage",
-   "sztanga",
-   "siłownia",
-   "ciężar",
-   "ciężary",
-   "powtórzenia",
-   "serie",
-   "objętość treningowa",
-   "trening siłowy",
-   "举重",
-   "健身"
+   "tonnage"
   ],
   "language": "en",
   "capsule": {
@@ -8384,16 +7692,7 @@
    "progress",
    "fitness challenge",
    "bodyweight",
-   "streak",
-   "pompki",
-   "pompek",
-   "wyzwanie",
-   "wyzwanie 30 dni",
-   "licznik pompek",
-   "dzień",
-   "trening",
-   "俯卧撑",
-   "挑战"
+   "streak"
   ],
   "language": "en",
   "capsule": {
@@ -8511,16 +7810,7 @@
    "daily steps",
    "10000 steps",
    "stride",
-   "hiking",
-   "krokomierz",
-   "kroki",
-   "licznik kroków",
-   "spacer",
-   "chodzenie",
-   "marsz",
-   "cel kroków",
-   "计步器",
-   "步数"
+   "hiking"
   ],
   "language": "en",
   "capsule": {
@@ -8578,15 +7868,7 @@
    "best set",
    "calisthenics",
    "bar",
-   "back workout",
-   "podciąganie",
-   "podciągnięcia",
-   "drążek",
-   "licznik podciągnięć",
-   "rekord",
-   "rekord życiowy",
-   "引体向上",
-   "个人最佳"
+   "back workout"
   ],
   "language": "en",
   "capsule": {
@@ -8724,17 +8006,7 @@
    "remove items",
    "food list",
    "supermarket",
-   "store",
-   "lista zakupów",
-   "lista zakupow",
-   "zakupy",
-   "zakupów",
-   "sklep",
-   "lista",
-   "produkty",
-   "spożywcze",
-   "购物清单",
-   "买菜"
+   "store"
   ],
   "language": "en",
   "capsule": {
@@ -8828,18 +8100,7 @@
    "crepes",
    "batter",
    "baking",
-   "checklist",
-   "naleśniki",
-   "nalesniki",
-   "naleśników",
-   "placki",
-   "pankejki",
-   "składniki",
-   "skladniki",
-   "przepis",
-   "śniadanie",
-   "煎饼",
-   "食材"
+   "checklist"
   ],
   "language": "en",
   "capsule": {
@@ -8884,17 +8145,7 @@
    "what to cook",
    "dinners",
    "food plan",
-   "checklist",
-   "plan posiłków",
-   "plan posilkow",
-   "jadłospis",
-   "jadlospis",
-   "obiady",
-   "tydzień",
-   "tydzien",
-   "posiłki",
-   "每周菜单",
-   "饮食计划"
+   "checklist"
   ],
   "language": "en",
   "capsule": {
@@ -8941,16 +8192,7 @@
    "baking timer",
    "oven timer",
    "recipe timer",
-   "pizza timer",
-   "ciasto na pizzę",
-   "ciasto na pizze",
-   "ciasto",
-   "wyrastanie",
-   "wyrabianie",
-   "pieczenie",
-   "minutnik",
-   "披萨",
-   "面团"
+   "pizza timer"
   ],
   "language": "en",
   "capsule": {
@@ -9055,17 +8297,7 @@
    "sausage",
    "grilling",
    "rest meat",
-   "cooking timer",
-   "grillowanie",
-   "grilla",
-   "odwracanie",
-   "strona",
-   "mięso",
-   "mieso",
-   "kiełbasa",
-   "minutnik",
-   "烧烤",
-   "烤肉"
+   "cooking timer"
   ],
   "language": "en",
   "capsule": {
@@ -9176,16 +8408,7 @@
    "intake",
    "eaten",
    "calorie tracker",
-   "count calories",
-   "licznik kalorii",
-   "kalorie",
-   "kalorii",
-   "dzienny cel",
-   "dieta",
-   "jedzenie",
-   "odchudzanie",
-   "卡路里",
-   "热量"
+   "count calories"
   ],
   "language": "en",
   "capsule": {
@@ -9282,17 +8505,7 @@
    "revise",
    "syllabus",
    "to do",
-   "tick off",
-   "egzamin",
-   "powtórka",
-   "powtórki",
-   "lista tematów",
-   "temat",
-   "tematy",
-   "sprawdzian",
-   "nauka do egzaminu",
-   "考试",
-   "复习"
+   "tick off"
   ],
   "language": "en",
   "capsule": {
@@ -9333,16 +8546,7 @@
    "assignment list",
    "due",
    "student",
-   "homework list",
-   "praca domowa",
-   "zadania domowe",
-   "zadanie",
-   "lista zadań",
-   "odrabianie lekcji",
-   "szkoła",
-   "uczeń",
-   "作业",
-   "任务"
+   "homework list"
   ],
   "language": "en",
   "capsule": {
@@ -9433,16 +8637,7 @@
    "time tracker",
    "progress",
    "hours studied",
-   "target",
-   "sesja nauki",
-   "godziny nauki",
-   "licznik godzin",
-   "cel",
-   "nauka",
-   "sesje",
-   "postęp",
-   "学习",
-   "小时"
+   "target"
   ],
   "language": "en",
   "capsule": {
@@ -9546,16 +8741,7 @@
    "score",
    "grade calculator",
    "average grade",
-   "school grades",
-   "średnia",
-   "średnia ocen",
-   "oceny",
-   "ocena",
-   "kalkulator ocen",
-   "liczenie średniej",
-   "szkoła",
-   "平均分",
-   "成绩"
+   "school grades"
   ],
   "language": "en",
   "capsule": {
@@ -9669,16 +8855,7 @@
    "flashcards",
    "new words",
    "foreign language",
-   "language goal",
-   "słówka",
-   "słownictwo",
-   "nauka języka",
-   "licznik słówek",
-   "słówek",
-   "języki obce",
-   "nauka słówek",
-   "单词",
-   "语言学习"
+   "language goal"
   ],
   "language": "en",
   "capsule": {
@@ -9778,17 +8955,7 @@
    "library",
    "to read",
    "literature",
-   "novels",
-   "lektury",
-   "lista lektur",
-   "książki",
-   "książka",
-   "lista książek",
-   "czytanie",
-   "do przeczytania",
-   "przeczytane",
-   "阅读",
-   "书单"
+   "novels"
   ],
   "language": "en",
   "capsule": {
@@ -9834,16 +9001,7 @@
    "clean house",
    "to do",
    "checklist",
-   "spring cleaning",
-   "sprzątanie",
-   "sprzatanie",
-   "obowiązki domowe",
-   "lista sprzątania",
-   "porządki",
-   "prace domowe",
-   "lista obowiązków",
-   "打扫",
-   "清洁"
+   "spring cleaning"
   ],
   "language": "en",
   "capsule": {
@@ -9888,17 +9046,7 @@
    "who cleans",
    "household chores",
    "shared flat",
-   "rotation",
-   "obowiązki",
-   "grafik sprzątania",
-   "współlokatorzy",
-   "współlokator",
-   "dyżury",
-   "sprzątanie",
-   "kolejka",
-   "harmonogram",
-   "室友",
-   "轮值"
+   "rotation"
   ],
   "language": "en",
   "capsule": {
@@ -9989,17 +9137,7 @@
    "indoor plants",
    "watering schedule",
    "flowers",
-   "green",
-   "rośliny",
-   "rosliny",
-   "podlewanie",
-   "kwiaty",
-   "podlać",
-   "kwiatki",
-   "lista roślin",
-   "doniczki",
-   "植物",
-   "浇水"
+   "green"
   ],
   "language": "en",
   "capsule": {
@@ -10052,17 +9190,7 @@
    "luggage",
    "travel checklist",
    "what to pack",
-   "journey",
-   "pakowanie",
-   "lista do spakowania",
-   "wyjazd",
-   "podróż",
-   "walizka",
-   "urlop",
-   "wakacje",
-   "bagaż",
-   "打包",
-   "旅行"
+   "journey"
   ],
   "language": "en",
   "capsule": {
@@ -10111,16 +9239,7 @@
    "boxes",
    "packing boxes",
    "house move",
-   "removals",
-   "przeprowadzka",
-   "przeprowadzki",
-   "lista przeprowadzkowa",
-   "kartony",
-   "nowe mieszkanie",
-   "pakowanie",
-   "zmiana mieszkania",
-   "搬家",
-   "清单"
+   "removals"
   ],
   "language": "en",
   "capsule": {
@@ -10170,17 +9289,7 @@
    "bottle",
    "breastfeeding",
    "wet diaper",
-   "dirty diaper",
-   "dziecko",
-   "niemowlę",
-   "karmienie",
-   "pieluchy",
-   "pielucha",
-   "licznik karmień",
-   "licznik pieluch",
-   "宝宝",
-   "喂奶",
-   "尿布"
+   "dirty diaper"
   ],
   "language": "en",
   "capsule": {
@@ -10330,17 +9439,7 @@
    "supplies",
    "running low",
    "buy list",
-   "checklist",
-   "spiżarnia",
-   "spiżarni",
-   "zakupy",
-   "lista zakupów",
-   "uzupełnić",
-   "zapasy",
-   "produkty",
-   "kuchnia",
-   "买菜",
-   "储藏室"
+   "checklist"
   ],
   "language": "en",
   "capsule": {
@@ -10442,17 +9541,7 @@
    "door",
    "lock up",
    "forgot",
-   "reminder",
-   "wychodzenie z domu",
-   "wychodzę",
-   "klucze",
-   "portfel",
-   "lista kontrolna",
-   "przed wyjściem",
-   "telefon",
-   "zamknąć drzwi",
-   "出门",
-   "钥匙"
+   "reminder"
   ],
   "language": "en",
   "capsule": {
@@ -10511,18 +9600,7 @@
    "walks",
    "feeding",
    "meals",
-   "water",
-   "pies",
-   "spacer",
-   "spacery",
-   "spacerów",
-   "licznik spacerów",
-   "karmienie psa",
-   "karmienie",
-   "pies spacer",
-   "zwierzak",
-   "遛狗",
-   "喂狗"
+   "water"
   ],
   "language": "en",
   "capsule": {
@@ -10589,18 +9667,7 @@
    "finance",
    "household budget",
    "personal finance",
-   "how much left",
-   "budżet",
-   "budżet domowy",
-   "miesięczny budżet",
-   "wydatki",
-   "dochody",
-   "pensja",
-   "wypłata",
-   "ile zostało",
-   "oszczędzanie",
-   "预算",
-   "月预算"
+   "how much left"
   ],
   "language": "en",
   "capsule": {
@@ -10730,17 +9797,7 @@
    "save money",
    "progress",
    "tracker",
-   "fund",
-   "oszczędności",
-   "cel oszczędzania",
-   "oszczędzanie",
-   "wpłata",
-   "wpłaty",
-   "skarbonka",
-   "cel",
-   "odkładanie",
-   "储蓄",
-   "存钱"
+   "fund"
   ],
   "language": "en",
   "capsule": {
@@ -10884,16 +9941,7 @@
    "sum",
    "receipts",
    "money tracker",
-   "daily expenses",
-   "wydatki",
-   "dziennik wydatków",
-   "rejestr wydatków",
-   "suma",
-   "lista wydatków",
-   "koszty",
-   "licznik wydatków",
-   "记账",
-   "支出"
+   "daily expenses"
   ],
   "language": "en",
   "capsule": {
@@ -11000,16 +10048,7 @@
    "kids money",
    "money for kids",
    "children",
-   "spending",
-   "kieszonkowe",
-   "kieszonkowe dziecka",
-   "skarbonka",
-   "saldo",
-   "dziecko",
-   "pieniądze dziecka",
-   "wydatki dziecka",
-   "零花钱",
-   "儿童"
+   "spending"
   ],
   "language": "en",
   "capsule": {
@@ -11147,17 +10186,7 @@
    "rent",
    "household",
    "settle up",
-   "flat",
-   "współlokatorzy",
-   "współlokator",
-   "podział kosztów",
-   "wspólne wydatki",
-   "rachunki",
-   "kto komu wisi",
-   "rozliczenie",
-   "mieszkanie",
-   "分摊",
-   "室友"
+   "flat"
   ],
   "language": "en",
   "capsule": {
@@ -11292,18 +10321,7 @@
    "cost split",
    "divide",
    "friends",
-   "journey budget",
-   "wyjazd",
-   "wycieczka",
-   "cena na osobę",
-   "koszt na osobę",
-   "podział kosztów",
-   "wakacje",
-   "podróż",
-   "grupa",
-   "na głowę",
-   "旅行",
-   "人均"
+   "journey budget"
   ],
   "language": "en",
   "capsule": {
@@ -11437,893 +10455,6 @@
   }
  },
  {
-  "id": "fanqiezhong-zh",
-  "title": "番茄钟",
-  "category": "study",
-  "tags": [
-   "番茄钟",
-   "专注",
-   "专注计时",
-   "学习计时",
-   "工作计时",
-   "休息",
-   "计时器",
-   "番茄工作法",
-   "pomodoro",
-   "focus timer",
-   "study timer",
-   "work timer",
-   "break timer",
-   "productivity",
-   "deep work",
-   "timer",
-   "minutnik",
-   "pomidor",
-   "skupienie",
-   "nauka",
-   "praca",
-   "przerwa",
-   "odpoczynek",
-   "licznik czasu"
-  ],
-  "language": "zh",
-  "capsule": {
-   "schemaVersion": 1,
-   "id": "fanqiezhong-zh",
-   "name": "番茄钟 25/5",
-   "permissions": [
-    "reminders"
-   ],
-   "ui": [
-    {
-     "type": "timer",
-     "id": "focus",
-     "label": "专注",
-     "minutes": 25
-    },
-    {
-     "type": "timer",
-     "id": "rest",
-     "label": "休息",
-     "minutes": 5
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "开始专注",
-       "do": [
-        "stopTimer:rest",
-        "startTimer:focus"
-       ]
-      },
-      {
-       "type": "button",
-       "label": "开始休息",
-       "do": [
-        "stopTimer:focus",
-        "startTimer:rest",
-        "increment:rounds"
-       ]
-      }
-     ]
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "暂停",
-       "do": [
-        "pauseTimer:focus",
-        "pauseTimer:rest"
-       ]
-      },
-      {
-       "type": "button",
-       "label": "停止",
-       "do": [
-        "stopTimer:focus",
-        "stopTimer:rest"
-       ]
-      }
-     ]
-    },
-    {
-     "type": "counter",
-     "id": "rounds",
-     "label": "完成轮数",
-     "source": "manual"
-    }
-   ]
-  }
- },
- {
-  "id": "gouwu-qingdan-zh",
-  "title": "购物清单",
-  "category": "household",
-  "tags": [
-   "购物清单",
-   "购物",
-   "清单",
-   "买菜",
-   "采购",
-   "超市",
-   "待买",
-   "shopping list",
-   "shopping",
-   "groceries",
-   "grocery list",
-   "checklist",
-   "to buy",
-   "supermarket",
-   "shopping checklist",
-   "lista zakupów",
-   "zakupy",
-   "lista zakupow",
-   "zakupów",
-   "sklep",
-   "lista",
-   "do kupienia"
-  ],
-  "language": "zh",
-  "capsule": {
-   "schemaVersion": 1,
-   "id": "gouwu-qingdan-zh",
-   "name": "购物清单",
-   "permissions": [],
-   "state": {
-    "note": {
-     "type": "text",
-     "initial": ""
-    }
-   },
-   "ui": [
-    {
-     "type": "text",
-     "text": "今天要买的东西"
-    },
-    {
-     "type": "checklist",
-     "id": "shopping",
-     "items": [
-      "牛奶",
-      "鸡蛋",
-      "面包",
-      "水果"
-     ]
-    },
-    {
-     "type": "input",
-     "bind": "note",
-     "kind": "text",
-     "label": "备注"
-    },
-    {
-     "type": "when",
-     "if": "len(note) > 0",
-     "show": [
-      {
-       "type": "display",
-       "text": "备注:{note}"
-      }
-     ]
-    },
-    {
-     "type": "button",
-     "label": "清除备注",
-     "do": [
-      {
-       "reset": "note"
-      }
-     ]
-    }
-   ]
-  }
- },
- {
-  "id": "licznik-pompek-pl",
-  "title": "Licznik pompek",
-  "category": "fitness",
-  "tags": [
-   "pompki",
-   "pompek",
-   "licznik pompek",
-   "liczba pompek",
-   "trening",
-   "ćwiczenia",
-   "cel dzienny",
-   "push-up",
-   "push ups",
-   "pushup counter",
-   "counter",
-   "rep counter",
-   "fitness",
-   "siłownia",
-   "powtórzenia",
-   "wyzwanie",
-   "训练",
-   "俯卧撑"
-  ],
-  "language": "pl",
-  "capsule": {
-   "schemaVersion": 1,
-   "id": "licznik-pompek-pl",
-   "name": "Licznik pompek – cel 50",
-   "permissions": [],
-   "state": {
-    "reps": {
-     "type": "number",
-     "initial": 0
-    }
-   },
-   "computed": {
-    "left": "max(0, 50 - reps)"
-   },
-   "ui": [
-    {
-     "type": "display",
-     "text": "Pompki: {reps} / 50"
-    },
-    {
-     "type": "display",
-     "text": "Zostało: {left}"
-    },
-    {
-     "type": "when",
-     "if": "reps >= 50",
-     "show": [
-      {
-       "type": "display",
-       "text": "Cel osiągnięty! Świetna robota!"
-      }
-     ]
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "+1",
-       "do": [
-        {
-         "set": "reps",
-         "to": "reps + 1"
-        }
-       ]
-      },
-      {
-       "type": "button",
-       "label": "+5",
-       "do": [
-        {
-         "set": "reps",
-         "to": "reps + 5"
-        }
-       ]
-      },
-      {
-       "type": "button",
-       "label": "+10",
-       "do": [
-        {
-         "set": "reps",
-         "to": "reps + 10"
-        }
-       ]
-      }
-     ]
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "Cofnij 1",
-       "do": [
-        {
-         "set": "reps",
-         "to": "max(0, reps - 1)"
-        }
-       ],
-       "enabledIf": "reps > 0"
-      },
-      {
-       "type": "button",
-       "label": "Wyzeruj",
-       "do": [
-        {
-         "reset": "reps"
-        }
-       ]
-      }
-     ]
-    }
-   ]
-  }
- },
- {
-  "id": "lista-zakupow-pl",
-  "title": "Lista zakupów",
-  "category": "household",
-  "tags": [
-   "lista zakupów",
-   "zakupy",
-   "lista",
-   "sklep",
-   "zakupów",
-   "produkty",
-   "spożywcze",
-   "shopping list",
-   "shopping",
-   "grocery",
-   "groceries",
-   "to buy",
-   "checklist",
-   "supermarket",
-   "dodaj",
-   "usuń",
-   "lista sklepowa",
-   "购物清单",
-   "购物"
-  ],
-  "language": "pl",
-  "capsule": {
-   "schemaVersion": 1,
-   "id": "lista-zakupow-pl",
-   "name": "Lista zakupów",
-   "permissions": [],
-   "state": {
-    "items": {
-     "type": "list",
-     "initial": [
-      "mleko",
-      "chleb",
-      "jajka"
-     ]
-    },
-    "newItem": {
-     "type": "text",
-     "initial": ""
-    }
-   },
-   "ui": [
-    {
-     "type": "display",
-     "text": "Liczba pozycji: {len(items)}"
-    },
-    {
-     "type": "list",
-     "source": "items"
-    },
-    {
-     "type": "input",
-     "bind": "newItem",
-     "kind": "text",
-     "label": "Nowy produkt"
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "Dodaj",
-       "do": [
-        {
-         "push": "items",
-         "value": "newItem"
-        },
-        {
-         "reset": "newItem"
-        }
-       ],
-       "enabledIf": "len(newItem) > 0"
-      },
-      {
-       "type": "button",
-       "label": "Usuń ostatni",
-       "do": [
-        {
-         "pop": "items"
-        }
-       ],
-       "enabledIf": "len(items) > 0"
-      }
-     ]
-    },
-    {
-     "type": "button",
-     "label": "Przywróć listę początkową",
-     "do": [
-      {
-       "reset": "items"
-      },
-      {
-       "reset": "newItem"
-      }
-     ]
-    }
-   ]
-  }
- },
- {
-  "id": "minutnik-do-jajek-pl",
-  "title": "Minutnik do jajek",
-  "category": "cooking",
-  "tags": [
-   "minutnik",
-   "minutnik do jajek",
-   "jajka",
-   "jajko",
-   "jajek",
-   "gotowanie jajek",
-   "na miękko",
-   "na twardo",
-   "egg timer",
-   "egg",
-   "boiled egg",
-   "soft boiled",
-   "hard boiled",
-   "cooking timer",
-   "kitchen timer",
-   "timer",
-   "kuchnia",
-   "czas gotowania",
-   "煮蛋",
-   "计时器"
-  ],
-  "language": "pl",
-  "capsule": {
-   "schemaVersion": 1,
-   "id": "minutnik-do-jajek-pl",
-   "name": "Minutnik do jajek 6/10 min",
-   "permissions": [
-    "reminders"
-   ],
-   "ui": [
-    {
-     "type": "timer",
-     "id": "miekkie",
-     "label": "Jajko na miękko",
-     "minutes": 6
-    },
-    {
-     "type": "timer",
-     "id": "twarde",
-     "label": "Jajko na twardo",
-     "minutes": 10
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "Start na miękko",
-       "do": [
-        "stopTimer:twarde",
-        "startTimer:miekkie"
-       ]
-      },
-      {
-       "type": "button",
-       "label": "Start na twardo",
-       "do": [
-        "stopTimer:miekkie",
-        "startTimer:twarde"
-       ]
-      }
-     ]
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "Pauza",
-       "do": [
-        "pauseTimer:miekkie",
-        "pauseTimer:twarde"
-       ]
-      },
-      {
-       "type": "button",
-       "label": "Stop",
-       "do": [
-        "stopTimer:miekkie",
-        "stopTimer:twarde"
-       ]
-      }
-     ]
-    }
-   ]
-  }
- },
- {
-  "id": "wynik-gry-w-karty-pl",
-  "title": "Wynik gry w karty",
-  "category": "games",
-  "tags": [
-   "karty",
-   "gra w karty",
-   "wynik",
-   "wyniki",
-   "punkty",
-   "punktacja",
-   "tablica wyników",
-   "licznik punktów",
-   "gracze",
-   "czterech graczy",
-   "tysiąc",
-   "remik",
-   "brydż",
-   "scoreboard",
-   "score",
-   "card game",
-   "cards",
-   "points",
-   "score keeper",
-   "4 players",
-   "纸牌",
-   "计分"
-  ],
-  "language": "pl",
-  "capsule": {
-   "schemaVersion": 1,
-   "id": "wynik-gry-w-karty-pl",
-   "name": "Wynik gry w karty",
-   "permissions": [],
-   "state": {
-    "s1": {
-     "type": "number",
-     "initial": 0
-    },
-    "s2": {
-     "type": "number",
-     "initial": 0
-    },
-    "s3": {
-     "type": "number",
-     "initial": 0
-    },
-    "s4": {
-     "type": "number",
-     "initial": 0
-    },
-    "pts": {
-     "type": "number",
-     "initial": 0
-    }
-   },
-   "computed": {
-    "top": "max(s1, s2, s3, s4)",
-    "leader": "if(s1 == top, 'Ania', if(s2 == top, 'Bartek', if(s3 == top, 'Celina', 'Gracz 4')))"
-   },
-   "ui": [
-    {
-     "type": "display",
-     "text": "Prowadzi: {leader} ({top} pkt)"
-    },
-    {
-     "type": "input",
-     "bind": "pts",
-     "kind": "number",
-     "label": "Punkty do dodania (może być ujemna liczba)"
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "display",
-       "text": "Ania: {s1}"
-      },
-      {
-       "type": "button",
-       "label": "Dodaj",
-       "do": [
-        {
-         "set": "s1",
-         "to": "s1 + pts"
-        }
-       ]
-      }
-     ]
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "display",
-       "text": "Bartek: {s2}"
-      },
-      {
-       "type": "button",
-       "label": "Dodaj",
-       "do": [
-        {
-         "set": "s2",
-         "to": "s2 + pts"
-        }
-       ]
-      }
-     ]
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "display",
-       "text": "Celina: {s3}"
-      },
-      {
-       "type": "button",
-       "label": "Dodaj",
-       "do": [
-        {
-         "set": "s3",
-         "to": "s3 + pts"
-        }
-       ]
-      }
-     ]
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "display",
-       "text": "Gracz 4: {s4}"
-      },
-      {
-       "type": "button",
-       "label": "Dodaj",
-       "do": [
-        {
-         "set": "s4",
-         "to": "s4 + pts"
-        }
-       ]
-      }
-     ]
-    },
-    {
-     "type": "button",
-     "label": "Nowa gra",
-     "do": [
-      {
-       "reset": "s1"
-      },
-      {
-       "reset": "s2"
-      },
-      {
-       "reset": "s3"
-      },
-      {
-       "reset": "s4"
-      },
-      {
-       "reset": "pts"
-      }
-     ]
-    }
-   ]
-  }
- },
- {
-  "id": "podzial-rachunku-pl",
-  "title": "Podział rachunku",
-  "category": "money",
-  "tags": [
-   "rachunek",
-   "podział rachunku",
-   "podziel rachunek",
-   "dzielenie rachunku",
-   "napiwek",
-   "na osobę",
-   "restauracja",
-   "kalkulator",
-   "kalkulator rachunku",
-   "składka",
-   "wspólny rachunek",
-   "bill split",
-   "split the bill",
-   "tip",
-   "tip calculator",
-   "split",
-   "per person",
-   "restaurant",
-   "calculator",
-   "分账",
-   "账单"
-  ],
-  "language": "pl",
-  "capsule": {
-   "schemaVersion": 1,
-   "id": "podzial-rachunku-pl",
-   "name": "Podział rachunku na 4 os.",
-   "permissions": [],
-   "state": {
-    "bill": {
-     "type": "number",
-     "initial": 0
-    },
-    "tipPct": {
-     "type": "number",
-     "initial": 10
-    },
-    "people": {
-     "type": "number",
-     "initial": 4
-    }
-   },
-   "computed": {
-    "tipAmount": "round(bill * tipPct / 100, 2)",
-    "total": "round(bill + tipAmount, 2)",
-    "perPerson": "round(total / max(people, 1), 2)"
-   },
-   "ui": [
-    {
-     "type": "input",
-     "bind": "bill",
-     "kind": "number",
-     "label": "Kwota rachunku"
-    },
-    {
-     "type": "input",
-     "bind": "tipPct",
-     "kind": "number",
-     "label": "Napiwek (%)"
-    },
-    {
-     "type": "input",
-     "bind": "people",
-     "kind": "number",
-     "label": "Liczba osób"
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "+1 osoba",
-       "do": [
-        {
-         "set": "people",
-         "to": "people + 1"
-        }
-       ]
-      },
-      {
-       "type": "button",
-       "label": "-1 osoba",
-       "do": [
-        {
-         "set": "people",
-         "to": "people - 1"
-        }
-       ],
-       "enabledIf": "people > 1"
-      }
-     ]
-    },
-    {
-     "type": "display",
-     "text": "Napiwek: {tipAmount}"
-    },
-    {
-     "type": "display",
-     "text": "Razem: {total}"
-    },
-    {
-     "type": "display",
-     "text": "Na osobę: {perPerson}"
-    }
-   ]
-  }
- },
- {
-  "id": "he-shui-ji-lu-zh",
-  "title": "喝水记录",
-  "category": "habits",
-  "tags": [
-   "喝水",
-   "喝水记录",
-   "喝水提醒",
-   "水杯",
-   "每日喝水",
-   "饮水",
-   "打卡",
-   "习惯",
-   "健康",
-   "water",
-   "water tracker",
-   "water intake",
-   "glasses of water",
-   "hydration",
-   "drink water",
-   "counter",
-   "habit",
-   "picie wody",
-   "szklanki wody",
-   "woda",
-   "licznik szklanek",
-   "nawodnienie"
-  ],
-  "language": "zh",
-  "capsule": {
-   "schemaVersion": 1,
-   "id": "he-shui-ji-lu-zh",
-   "name": "喝水记录（目标 8 杯）",
-   "permissions": [],
-   "state": {
-    "glasses": {
-     "type": "number",
-     "initial": 0
-    }
-   },
-   "computed": {
-    "ml": "glasses * 250",
-    "left": "max(0, 8 - glasses)"
-   },
-   "ui": [
-    {
-     "type": "display",
-     "text": "今天已喝 {glasses} / 8 杯（约 {ml} 毫升）"
-    },
-    {
-     "type": "display",
-     "text": "还差 {left} 杯"
-    },
-    {
-     "type": "when",
-     "if": "glasses >= 8",
-     "show": [
-      {
-       "type": "display",
-       "text": "今天的目标达成了！"
-      }
-     ]
-    },
-    {
-     "type": "row",
-     "items": [
-      {
-       "type": "button",
-       "label": "喝一杯",
-       "do": [
-        {
-         "set": "glasses",
-         "to": "glasses + 1"
-        }
-       ]
-      },
-      {
-       "type": "button",
-       "label": "撤销",
-       "do": [
-        {
-         "set": "glasses",
-         "to": "max(0, glasses - 1)"
-        }
-       ],
-       "enabledIf": "glasses > 0"
-      }
-     ]
-    },
-    {
-     "type": "button",
-     "label": "重置",
-     "do": [
-      {
-       "reset": "glasses"
-      }
-     ]
-    }
-   ]
-  }
- },
- {
   "id": "times-tables-quiz",
   "title": "Times tables quiz",
   "category": "quizzes",
@@ -12338,18 +10469,7 @@
    "score",
    "practice",
    "kids",
-   "school",
-   "tabliczka mnożenia",
-   "tabliczka mnozenia",
-   "mnożenie",
-   "mnozenie",
-   "quiz z mnożenia",
-   "tabliczki mnożenia",
-   "matematyka",
-   "razy",
-   "wynik",
-   "乘法表",
-   "数学"
+   "school"
   ],
   "language": "en",
   "capsule": {
@@ -12469,16 +10589,7 @@
    "general knowledge",
    "score",
    "school",
-   "stolice",
-   "stolica",
-   "quiz geograficzny",
-   "geografia",
-   "stolice państw",
-   "stolice europy",
-   "quiz",
-   "wiedza ogólna",
-   "首都",
-   "地理"
+   "quiz"
   ],
   "language": "en",
   "capsule": {
@@ -12811,20 +10922,7 @@
    "words",
    "know",
    "dont know",
-   "study",
-   "fiszki",
-   "fiszka",
-   "słówka",
-   "slowka",
-   "słownictwo",
-   "angielski",
-   "polski",
-   "nauka angielskiego",
-   "tłumaczenie",
-   "umiem",
-   "nie umiem",
-   "词汇",
-   "单词卡"
+   "study"
   ],
   "language": "en",
   "capsule": {
@@ -12982,18 +11080,7 @@
    "kids",
    "score",
    "biology",
-   "physics",
-   "prawda czy fałsz",
-   "prawda fałsz",
-   "prawda czy falsz",
-   "quiz naukowy",
-   "nauka",
-   "ciekawostki",
-   "wiedza",
-   "quiz z nauki",
-   "fizyka",
-   "对错",
-   "科学"
+   "physics"
   ],
   "language": "en",
   "capsule": {
@@ -13179,18 +11266,7 @@
    "trivia",
    "multiple choice",
    "score",
-   "kids",
-   "flagi",
-   "flaga",
-   "zgadnij flagę",
-   "zgadnij flage",
-   "quiz z flag",
-   "kraje",
-   "państwa",
-   "geografia",
-   "quiz geograficzny",
-   "国旗",
-   "猜国家"
+   "kids"
   ],
   "language": "en",
   "capsule": {
@@ -13524,18 +11600,7 @@
    "school",
    "homework",
    "study",
-   "score",
-   "ortografia",
-   "pisownia",
-   "dyktando",
-   "ortografia ćwiczenia",
-   "słówka",
-   "lista słówek",
-   "lista słów",
-   "sprawdzian",
-   "ćwiczenie pisowni",
-   "拼写",
-   "单词"
+   "score"
   ],
   "language": "en",
   "capsule": {
