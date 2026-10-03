@@ -20,6 +20,12 @@ function timerSummary(c: Capsule): string {
     .map((x: CapsuleComponent) => `${(x as TimerComponent).label} ${(x as TimerComponent).minutes}`).join('|');
 }
 
+/** "Label: step, step" for each button with v1 "do" steps. */
+function sequenceButtons(c: Capsule): string[] {
+  return c.ui.filter((x: CapsuleComponent) => x.type === 'button' && (x as ButtonComponent).do !== undefined)
+    .map((x: CapsuleComponent) => `${(x as ButtonComponent).label}: ${((x as ButtonComponent).do ?? []).join(', ')}`);
+}
+
 export default function ruleParserTest() {
   describe('RuleParser', () => {
     it('makes three timers and a start-all button', 0, () => {
@@ -177,6 +183,31 @@ export default function ruleParserTest() {
       expect(parseRequest('')).assertNull();
       expect(parseRequest('plan a trip to Kraków with my friends')).assertNull();
       expect(parseRequest('timers')).assertNull();
+    });
+    it('pomodoro: starting the break stops focus and the reverse (BUG-10)', 0, () => {
+      const c = parseValid('pomodoro');
+      expect(c.schemaVersion).assertEqual(1);
+      expect(timerSummary(c)).assertEqual('Focus 25|Break 5');
+      expect(JSON.stringify(sequenceButtons(c))).assertEqual(JSON.stringify([
+        'Start focus: stopTimer:break, startTimer:focus', 'Start break: stopTimer:focus, startTimer:break'
+      ]));
+      expect(c.ui.some((x: CapsuleComponent) => x.type === 'button' && (x as ButtonComponent).action === 'startAllTimers'))
+        .assertFalse();
+      expect(timerSummary(parseValid('pomodoro 50/10 min'))).assertEqual('Focus 50|Break 10');
+      const pressed = applyActions(c, initialState(c), c.ui[3] as ButtonComponent);
+      expect(pressed.ok).assertTrue();
+      expect(pressed.actions.join(', ')).assertEqual('stopTimer:focus, startTimer:break');
+    });
+
+    it('focus and break timers take turns; other timer pairs still start together', 0, () => {
+      const c = parseValid('work 50 min, rest 10 min');
+      expect(JSON.stringify(sequenceButtons(c))).assertEqual(JSON.stringify([
+        'Start work: stopTimer:rest, startTimer:work', 'Start rest: stopTimer:work, startTimer:rest'
+      ]));
+      expect(sequenceButtons(parseValid('timers focus 25 short break 5')).length).assertEqual(2);
+      const pasta = parseValid('pasta 9 min, sauce 15 min');
+      expect(sequenceButtons(pasta).length).assertEqual(0);
+      expect(pasta.ui.some((x: CapsuleComponent) => (x as ButtonComponent).action === 'startAllTimers')).assertTrue();
     });
   });
 }

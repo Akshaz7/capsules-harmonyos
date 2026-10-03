@@ -92,6 +92,10 @@ Rules:
 - Ids are short lowercase-kebab-case and unique. Actions must refer to existing ids
   (startTimer, pauseTimer, stopTimer, resetTimer -> a timer; increment -> a counter).
 - Timer minutes are positive numbers. Checklists have at least one item.
+- Timers that take turns (focus and break, work and rest, a Pomodoro) never run together: use "schemaVersion": 1
+  and give each its own button whose "do" stops the other timer first, e.g. "Start break" with
+  "do": ["stopTimer:focus", "startTimer:break"] and "Start focus" with "do": ["stopTimer:break", "startTimer:focus"].
+  No "Start all" for them.
 - Every countdown is a "timer" component with its minutes. Expressions have no clock or current time, so never
   build a countdown, elapsed time or progress from state or computed values.
 - Use "schemaVersion": 0 when the v0 components are enough. Use "schemaVersion": 1 when the capsule needs

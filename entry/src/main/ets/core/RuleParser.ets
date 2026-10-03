@@ -207,6 +207,11 @@ function parseTimers(req: string): Capsule | null {
       return null;
     }
   }
+  if (specs.length === 2 && BREAK_LABEL.test(specs[0].label) !== BREAK_LABEL.test(specs[1].label)) {
+    const ss = specs;
+    return sequentialTimers(`timers-${slug(ss[0].label + ' ' + ss[1].label)}`, `${ss[0].label} and ${ss[1].label.toLowerCase()}`,
+      ss[0], ss[1]);
+  }
   const ids = new Ids();
   const ui: CapsuleComponent[] = specs.map((s: TimerSpec): CapsuleComponent => {
     const t: TimerComponent = { type: 'timer', id: ids.next(s.label), label: s.label, minutes: s.minutes };
@@ -220,6 +225,49 @@ function parseTimers(req: string): Capsule | null {
   const labels = specs.map((s: TimerSpec) => s.label);
   const name = labels.length === 1 ? labels[0] : `${labels.join(', ')} timers`;
   return capsule(`timers-${slug(labels.join(' '))}`, name, ['reminders'], ui);
+}
+
+/** A timer that follows another one (focus, then break): the two run one after the other, never together. */
+const BREAK_LABEL: RegExp = /^(?:(?:short|long) )?(?:break|rest|pause)$/i;
+
+/**
+ * Two timers that take turns (Pomodoro): each "Start" button stops the other timer first, so starting the
+ * break ends the focus timer and the reverse (v1 "do" steps). No "Start all".
+ */
+function sequentialTimers(id: string, name: string, first: TimerSpec, second: TimerSpec): Capsule {
+  const ids = new Ids();
+  const a: TimerComponent = { type: 'timer', id: ids.next(first.label), label: first.label, minutes: first.minutes };
+  const b: TimerComponent = { type: 'timer', id: ids.next(second.label), label: second.label, minutes: second.minutes };
+  const startA: ButtonComponent = {
+    type: 'button', label: `Start ${a.label.toLowerCase()}`, action: '', do: [`stopTimer:${b.id}`, `startTimer:${a.id}`]
+  };
+  const startB: ButtonComponent = {
+    type: 'button', label: `Start ${b.label.toLowerCase()}`, action: '', do: [`stopTimer:${a.id}`, `startTimer:${b.id}`]
+  };
+  const c: Capsule = { schemaVersion: 1, id: id, name: name, permissions: ['reminders'], ui: [a, b, startA, startB] };
+  return c;
+}
+
+function timerSpec(label: string, minutes: number): TimerSpec {
+  const t = new TimerSpec();
+  t.label = label;
+  t.minutes = minutes;
+  t.hasUnit = true;
+  return t;
+}
+
+/** "pomodoro", "pomodoro timer", "pomodoro 50 10", "pomodoro 50/10 min": focus then break. */
+function parsePomodoro(req: string): Capsule | null {
+  const m = req.match(/^(?:a |my )?pomodoro(?: timer)?(?: (\d+)(?: ?min\w*)?(?: ?[\/,+] ?| and | )(\d+)(?: ?min\w*)?)?$/);
+  if (m === null) {
+    return null;
+  }
+  const focus = m[1] !== undefined ? parseInt(m[1], 10) : 25;
+  const rest = m[2] !== undefined ? parseInt(m[2], 10) : 5;
+  if (focus <= 0 || rest <= 0) {
+    return null;
+  }
+  return sequentialTimers('pomodoro', 'Pomodoro', timerSpec('Focus', focus), timerSpec('Break', rest));
 }
 
 function counterCapsule(thing: string): Capsule {
@@ -364,7 +412,7 @@ export function parseRequest(request: string): Capsule | null {
     return null;
   }
   const rules: ((r: string) => Capsule | null)[] = [
-    parseTimers, parseSplit, parseChecklist, parseCounter, parseSchedule, parseGoal
+    parsePomodoro, parseTimers, parseSplit, parseChecklist, parseCounter, parseSchedule, parseGoal
   ];
   for (const rule of rules) {
     const result = rule(req);

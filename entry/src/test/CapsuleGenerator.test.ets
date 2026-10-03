@@ -413,6 +413,11 @@ export default function capsuleGeneratorTest() {
       expect(PLAN_PROMPT.includes('any language')).assertFalse();
       expect(SYSTEM_PROMPT.includes('any language')).assertFalse();
     });
+
+    it('the prompt makes timers that take turns stop each other (BUG-10)', 0, () => {
+      expect(SYSTEM_PROMPT).assertContain('"Start break" with\n  "do": ["stopTimer:focus", "startTimer:break"]');
+      expect(SYSTEM_PROMPT).assertContain('"Start focus" with "do": ["stopTimer:break", "startTimer:focus"]');
+    });
   });
 
   describe('English-only gate (T4-11)', () => {
