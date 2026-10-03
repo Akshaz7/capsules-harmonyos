@@ -309,6 +309,14 @@ export default function capsuleModelTest() {
       expect(msg).assertContain('Reply with the corrected capsule JSON only.');
     });
 
+    it('a made-up str() gets the text + number hint in the retry (BUG-9)', 0, () => {
+      const errors = validateCapsule('{"schemaVersion":1,"id":"pushups","name":"Push-ups","permissions":[],' +
+        '"state":{"n":{"type":"number","initial":0}},"ui":[{"type":"display","text":"{\'Done: \' + str(n)}"}]}').errors;
+      expect(errors.join(' ')).assertContain('unknown function "str"');
+      expect(retryMessage(errors)).assertContain("'Done: ' + count instead of 'Done: ' + str(count)");
+      expect(retryMessage(['$.ui[0].label: is required']).includes('str()')).assertFalse();
+    });
+
     it('spells out the v1 name and expression rules', 0, () => {
       expect(SYSTEM_PROMPT).assertContain('No hyphens');
       expect(SYSTEM_PROMPT).assertContain('no [ ] indexing');

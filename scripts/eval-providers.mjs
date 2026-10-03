@@ -8,8 +8,9 @@
 // HTTP transport differs (Node fetch instead of @kit.NetworkKit).
 //
 // Usage (from the repo root):
-//   node scripts/eval-providers.mjs [--only mistral] [--match tennis,darts] [--delay 2000] [--out results.json]
+//   node scripts/eval-providers.mjs [--only mistral] [--match tennis,darts] [--repeat 5] [--delay 2000] [--out results.json]
 // --match keeps only requests containing one of the comma-separated words (case-insensitive).
+// --repeat N runs each picked request N times (e.g. --match push-up --repeat 5 for the BUG-9 str() check).
 // --delay waits that many ms between requests (default 1500). HTTP 429 replies are retried up to
 // 4 times with backoff, so free-tier rate limits slow the run instead of failing it.
 // Needs Node 18+ and network access; downloads esbuild through npx on first run.
@@ -205,6 +206,13 @@ const REFUSALS = [
       `expected unsupported, got ${r.ok ? 'a capsule' : r.failure ?? r.error}`)]
 ];
 
+// English requests that tempt a model into str() (BUG-9): text + number is already text in v1.
+const STR_SET = [
+  ['push-up counter for today', (c) => need(ofType(c, 'counter').length > 0 || c.schemaVersion === 1, 'no count')],
+  ['water tracker that shows how many glasses are left of 8',
+    (c) => need(JSON.stringify(c).includes('8'), 'no goal of 8')]
+];
+
 // ---- Run ----
 
 const results = [];
@@ -265,13 +273,15 @@ async function runSet(model, config, setName, requests, refusals = false) {
 }
 
 const words = (arg('--match') ?? '').toLowerCase().split(',').map((w) => w.trim()).filter((w) => w.length > 0);
-const pick = (set) => set.filter(([request]) => words.length === 0 || words.some((w) => request.toLowerCase().includes(w)));
+const repeat = Math.max(1, parseInt(arg('--repeat') ?? '1', 10) || 1);
+const pick = (set) => set.filter(([request]) => words.length === 0 || words.some((w) => request.toLowerCase().includes(w)))
+  .flatMap((entry) => Array(repeat).fill(entry));
 
 const summary = [];
 for (const config of configs) {
   const model = new lib.CapsuleModel(lib.createProvider(config, new FetchTransport()));
   for (const [name, set] of [['tuning set', pick(REQUESTS)], ['held-out set', pick(HELD_OUT)],
-    ['refusal set', pick(REFUSALS)]]) {
+    ['refusal set', pick(REFUSALS)], ['str() set', pick(STR_SET)]]) {
     if (set.length > 0) {
       summary.push(await runSet(model, config, name, set, name === 'refusal set'));
     }

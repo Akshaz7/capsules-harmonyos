@@ -117,8 +117,11 @@ Rules:
 /** The follow-up sent after an invalid reply: quotes every validator error verbatim. */
 export function retryMessage(errors: string[]): string {
   const quoted = errors.map((e: string) => `- "${e}"`).join('\n');
+  const unknownFunction = errors.some((e: string) => e.includes('unknown function'));
+  const hint = unknownFunction ? 'There is no str(), concat() or now(): text + number is already text, so write ' +
+    "'Done: ' + count instead of 'Done: ' + str(count). " : '';
   return `The validator rejected that capsule with these exact errors:\n${quoted}\n` +
-    'Fix every error listed and keep the rest of the capsule. Follow the v1 name and expression rules. ' +
+    'Fix every error listed and keep the rest of the capsule. Follow the v1 name and expression rules. ' + hint +
     'Reply with the corrected capsule JSON only.';
 }
 
