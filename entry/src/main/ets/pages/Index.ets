@@ -68,6 +68,8 @@ import { getInstallToken, getMarketplaceToken } from '../adapters/InstallToken';
 import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
+import { HomeHero } from './HomeHero';
+import { reduceMotion, springCurve, successTick } from './Motion';
 import { BUILT_FROM_TEMPLATE } from './CapsuleEntry';
 import { copyToCache, pickPhoto, removeSnap, SNAP_HINT, SNAP_NEEDS_CLOUD, takePhoto } from './SnapPhoto';
 import { CapsuleState, TimerRun } from '../core/WidgetModel';
@@ -103,6 +105,8 @@ const PLACEHOLDERS: string[] = [
   'Try: pasta 9 min, sauce 15 min'
 ];
 const PLACEHOLDER_MS = 3000;
+const TYPE_MS = 55; // one character per tick while typing the placeholder
+const HOLD_TICKS = 30; // ~1.6 s with a whole example shown
 
 // Shown after a failed create. Each request is one the offline rules can build.
 const RETRY_SUGGESTIONS: ExampleChip[] = [
@@ -243,6 +247,15 @@ struct Index {
   /** Time of the last trigger check; the trigger cards re-read "Next: ..." from it. */
   @Local triggerNow: number = Date.now();
   @Local placeholderIndex: number = 0;
+  /** UI-1: the placeholder as typed so far (types and erases the examples). */
+  @Local placeholderText: string = PLACEHOLDERS[0];
+  @Local inputFocused: boolean = false;
+  /** Bumped on tap: drives the camera symbol's bounce effect. */
+  @Local cameraBounce: number = 0;
+  @Local shimmerOn: boolean = false;
+  private typed: number = 0;
+  private erasing: boolean = false;
+  private holdTicks: number = 0;
   @Local entries: CapsuleEntry[] = [];
   @Local openId: string = '';
   @Local pending: Capsule | undefined = undefined;
@@ -292,9 +305,15 @@ struct Index {
     this.store = new CapsuleStore(ctx);
     this.settings.load(ctx);
     this.watchModelStatus();
-    this.placeholderTimer = setInterval(() => {
-      this.placeholderIndex = (this.placeholderIndex + 1) % PLACEHOLDERS.length;
-    }, PLACEHOLDER_MS);
+    if (reduceMotion()) {
+      this.placeholderTimer = setInterval(() => {
+        this.placeholderIndex = (this.placeholderIndex + 1) % PLACEHOLDERS.length;
+        this.placeholderText = PLACEHOLDERS[this.placeholderIndex];
+      }, PLACEHOLDER_MS);
+    } else {
+      this.placeholderText = '';
+      this.placeholderTimer = setInterval(() => this.typePlaceholder(), TYPE_MS);
+    }
     // Saved capsules were approved before; ones whose consent was lost get dropped.
     const gate = this.gate;
     this.entries = this.store.all()
@@ -987,7 +1006,10 @@ struct Index {
     this.pendingMarketItem = undefined;
     this.store?.add(capsule);
     const entry = this.makeEntry(capsule);
-    this.entries = [entry].concat(this.entries);
+    successTick();
+    this.getUIContext().animateTo({ curve: springCurve() }, () => {
+      this.entries = [entry].concat(this.entries); // the card springs into "Your capsules"
+    });
     if (this.gate.isAllowed(capsule, 'reminders')) {
       this.timers?.prepare().then(() => this.notifications?.ensureEnabled());
     }
@@ -1001,7 +1023,7 @@ struct Index {
     if (this.ctx) {
       refreshCapsuleWidgets(this.ctx);
     }
-    setTimeout(() => this.open(capsule.id), 300);
+    setTimeout(() => this.open(capsule.id), reduceMotion() ? 300 : 700); // let the card land first
   }
 
   private cancelPending(): void {
@@ -1513,8 +1535,14 @@ struct Index {
     Column({ space: 12 }) {
       // No inner padding here: the card's 16vp is the only inset, so the text lines up with the
       // Create button. Even a few vp of TextArea padding clipped the first glyph ("k", "W", "M").
-      TextArea({ placeholder: PLACEHOLDERS[this.placeholderIndex], text: this.request })
+      TextArea({ placeholder: this.placeholderText, text: this.request })
         .height(96)
+        .onFocus(() => {
+          this.inputFocused = true;
+        })
+        .onBlur(() => {
+          this.inputFocused = false;
+        })
         .width('100%')
         .fontSize($r('sys.float.Body_L'))
         .backgroundColor(Color.Transparent)
@@ -1528,13 +1556,17 @@ struct Index {
           SymbolGlyph($r('sys.symbol.camera'))
             .fontSize(20)
             .fontColor([$r('sys.color.icon_primary')])
+            .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.cameraBounce)
         }
         .width(40)
         .height(40)
         .enabled(!this.busy)
         .accessibilityText('Snap')
         .accessibilityDescription(SNAP_HINT)
-        .onClick(() => this.snap())
+        .onClick(() => {
+          this.cameraBounce++;
+          this.snap();
+        })
         Blank()
         Button() {
           Row({ space: 6 }) {
@@ -1550,11 +1582,15 @@ struct Index {
               .fontColor($r('sys.color.font_on_primary'))
           }
           .padding({ left: 18, right: 18 })
+          .height(40)
+          .overlay(this.shimmer(), { align: Alignment.Start })
         }
         .height(40)
+        .clip(true)
         .backgroundColor($r('sys.color.brand'))
+        .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: 0.92 })
         .enabled(!this.busy && this.request.trim().length > 0)
-        .opacity(!this.busy && this.request.trim().length > 0 ? 1 : 0.4)
+        .opacity(this.busy || this.request.trim().length > 0 ? 1 : 0.4)
         .onClick(() => {
           this.create();
         })
@@ -1564,7 +1600,56 @@ struct Index {
     .width('100%')
     .padding(16)
     .borderRadius(24)
-    .backgroundColor($r('sys.color.comp_background_primary'))
+    // Frosted material over the hero gradient, with a soft shadow; a brand glow while typing.
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THIN)
+    .border({ width: this.inputFocused ? 1.5 : 0.5,
+      color: this.inputFocused ? $r('sys.color.brand') : $r('sys.color.comp_divider') })
+    .shadow(this.inputFocused ? { radius: 28, color: '#335B8CFF', offsetY: 6 } :
+      { radius: 16, color: '#14000000', offsetY: 4 })
+    .animation({ duration: 220, curve: Curve.EaseOut })
+  }
+
+  /** A light band sweeping across Create while it builds (not with reduce motion). */
+  @Builder
+  shimmer() {
+    if (this.busy && !reduceMotion()) {
+      Column()
+        .width(56)
+        .height(40)
+        .linearGradient({ angle: 90, colors: [['#00FFFFFF', 0], ['#55FFFFFF', 0.5], ['#00FFFFFF', 1]] })
+        .translate({ x: this.shimmerOn ? 160 : -60 })
+        .onAppear(() => {
+          this.shimmerOn = false;
+          this.getUIContext().animateTo({ duration: 1100, curve: Curve.Linear, iterations: -1 }, () => {
+            this.shimmerOn = true;
+          });
+        })
+    }
+  }
+
+  /** UI-1: type an example, hold it, erase it, move to the next. */
+  private typePlaceholder(): void {
+    const target = PLACEHOLDERS[this.placeholderIndex];
+    if (this.holdTicks > 0) {
+      this.holdTicks--;
+      return;
+    }
+    if (!this.erasing) {
+      this.typed = Math.min(this.typed + 1, target.length);
+      this.placeholderText = target.substring(0, this.typed);
+      if (this.typed === target.length) {
+        this.erasing = true;
+        this.holdTicks = HOLD_TICKS;
+      }
+      return;
+    }
+    this.typed = Math.max(this.typed - 2, 0);
+    this.placeholderText = target.substring(0, this.typed);
+    if (this.typed === 0) {
+      this.erasing = false;
+      this.holdTicks = 4;
+      this.placeholderIndex = (this.placeholderIndex + 1) % PLACEHOLDERS.length;
+    }
   }
 
   /** AI status on its own line under the input card: one line, ellipsis when long. */
@@ -1765,6 +1850,8 @@ struct Index {
     .borderRadius(24)
     .backgroundColor($r('sys.color.comp_background_primary'))
     .geometryTransition(entry.capsule.id)
+    // A new capsule lands with a spring (the insert runs inside animateTo in decide()).
+    .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.7, y: 0.7 })))
     .onClick(() => this.open(entry.capsule.id))
   }
 
@@ -1792,11 +1879,7 @@ struct Index {
           }
         }
         .width('100%')
-        Text('What do you need?')
-          .fontSize(32)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary'))
-          .width('100%')
+        HomeHero()
         this.inputCard()
         this.statusRow()
         Text('Tiny apps, made by asking.')
