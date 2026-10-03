@@ -21,6 +21,15 @@ export struct CapsuleView {
   @Require @Param runtime: CapsuleRuntime;
 
   @Builder
+  blockedItem(c: CapsuleComponent, reason: string) {
+    Text(`Blocked ${c.type}: ${reason}`)
+      .fontSize(14)
+      .fontColor(Color.Gray)
+      .width('100%')
+      .padding({ top: 8, bottom: 8 })
+  }
+
+  @Builder
   textItem(c: TextComponent) {
     Text(c.text).fontSize(16).width('100%')
   }
@@ -100,8 +109,10 @@ export struct CapsuleView {
         .fontWeight(FontWeight.Bold)
         .width('100%')
         .margin({ bottom: 8 })
-      ForEach(this.runtime.capsule.ui, (c: CapsuleComponent) => {
-        if (c.type === 'text') {
+      ForEach(this.runtime.capsule.ui, (c: CapsuleComponent, i: number) => {
+        if (this.runtime.blockReason(i).length > 0) {
+          this.blockedItem(c, this.runtime.blockReason(i))
+        } else if (c.type === 'text') {
           this.textItem(c as TextComponent)
         } else if (c.type === 'timer') {
           this.timerItem(c as TimerComponent, this.runtime.timer((c as TimerComponent).id))

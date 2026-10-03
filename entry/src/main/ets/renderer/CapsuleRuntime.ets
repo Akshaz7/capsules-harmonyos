@@ -65,6 +65,11 @@ export interface TimerScheduler {
   scheduleTimer(capsuleId: string, t: TimerState): void;
 }
 
+/** Approves each action before it runs (the gatekeeper). */
+export interface ActionGuard {
+  allowAction(action: string): boolean;
+}
+
 /** Live state for one rendered capsule. Actions from buttons go through dispatch(). */
 @ObservedV2
 export class CapsuleRuntime {
@@ -74,6 +79,9 @@ export class CapsuleRuntime {
   @Trace checklists: ChecklistState[] = [];
   @Trace numbers: NumberState[] = [];
   scheduler?: TimerScheduler;
+  guard?: ActionGuard;
+  // Per ui index: '' if the component may render, else why it is blocked.
+  @Trace blockReasons: string[] = [];
   private tickHandle: number = -1;
 
   constructor(capsule: Capsule) {
@@ -103,6 +111,10 @@ export class CapsuleRuntime {
     return this.checklists.find((c: ChecklistState) => c.listId === listId);
   }
 
+  blockReason(index: number): string {
+    return index < this.blockReasons.length ? this.blockReasons[index] : '';
+  }
+
   numberField(numberId: string): NumberState | undefined {
     return this.numbers.find((n: NumberState) => n.numberId === numberId);
   }
@@ -113,6 +125,9 @@ export class CapsuleRuntime {
     const kind = sep < 0 ? action : action.substring(0, sep);
     const arg = sep < 0 ? '' : action.substring(sep + 1);
     hilog.info(DOMAIN, TAG, 'dispatch %{public}s', action);
+    if (this.guard && !this.guard.allowAction(action)) {
+      return;
+    }
     switch (kind) {
       case 'startTimer': {
         const t = this.timer(arg);
