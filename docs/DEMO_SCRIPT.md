@@ -1,6 +1,6 @@
 # Demo script (90 seconds)
 
-One take of about 90 seconds. Most of it is on the **emulator**, the default the judges expect, with one clearly labelled **real-phone** segment. Every step shows something that is built and has been seen working. The marketplace appears only as "coming next" on the end card, unless it works end to end by 03:00 (then see [Marketplace swap](#marketplace-swap-only-if-it-works-end-to-end-by-0300)).
+One take of about 90 seconds. Most of it is on the **emulator**, the default the judges expect, with one clearly labelled **real-phone** segment. Every step shows something that is built and has been seen working. The marketplace appears only as "coming next" on the end card, unless it works end to end by 03:00 (then see [Marketplace swap](#marketplace-swap-only-if-it-works-end-to-end-by-0300)). **Status at `a3b92d7`:** search, Install, consent and Run work on the emulator *with the 108 shipped examples*; the live API still answered 503. Showing it with the shipped examples is honest only if the caption says so ("built-in examples; live marketplace offline"). T1 or Ash decides at 03:00.
 
 Use English only: Harmoniser rejects other languages by design. Leave out anything that isn't built or hasn't been seen working: vibration, motion counting, calendar alerts with the app closed, and scanning a capsule QR code (no device check yet). The P1 fixes have landed (timer Pause/Stop, Share on the phone, non-English requests), so they can be shown if time allows, but the 90 seconds below don't need them.
 
