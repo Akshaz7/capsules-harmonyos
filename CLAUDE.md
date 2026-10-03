@@ -39,4 +39,4 @@ With no config file anywhere, the app runs rules-only and reports "AI fallback n
 
 To compare providers, `node scripts/eval-providers.mjs` runs the same 15 requests through every provider in the root `config.local.json` (with the app's own prompt and validator) and prints valid/correct counts.
 
-`build-profile.json5` has no `signingConfigs`, so hvigor skips signing and outputs an unsigned HAP. The emulator accepts it. A physical device needs signing (`devecocli auth login` then `devecocli signature generate`). Never commit the generated signing material.
+`build-profile.json5` has no `signingConfigs`, so hvigor skips signing and outputs an unsigned HAP. The emulator accepts it. A physical device needs a signed HAP: in DevEco Studio open **File > Project Structure > Signing Configs**, sign in with the Huawei ID and tick **Automatically generate signature**. Don't use `devecocli signature generate`: it only works for mainland-China accounts. DevEco writes signing paths and encrypted passwords into `build-profile.json5`; don't commit that change. Never commit the generated signing material.

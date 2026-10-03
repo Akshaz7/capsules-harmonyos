@@ -10,6 +10,13 @@ This project uses AI-assisted development. Keep this document current and public
 | `deveco-cli` Agent Skill / `devecocli` | 1.3.4 | Command-line build, screenshots |
 | `hmos-arkui-develop-skill`, `hmos-arkts-knowledge-retriever` Agent Skills | Local skills | ArkUI/ArkTS API and syntax lookup before writing UI code; `devecocli docs` for Kit API and error-code lookup |
 | Claude Code general-purpose subagent (Claude Sonnet) | Anthropic | Read-only research of the Cactus-Compute Hugging Face models compatible with Cactus v2.2.2 (sizes, licences, formats); results checked by hand before any download |
+| Parallel Claude Code sessions (Claude Opus 5.5): T1 coordination, T2 docs, T3 app UI, T4 core, T5 Cactus | Anthropic | Development split by file ownership. Each session commits only its own paths on `main`. From sprint 2, T1 dispatches work through task files and builds the signed HAP from committed `main`. |
+| **Runtime (in the product):** LFM2-VL-450M, `cq4`, on Cactus v2.2.2 (our HarmonyOS port) | Liquid AI / Cactus Compute; see `docs/THIRD_PARTY.md` | On-device slot-filling for simple requests |
+| **Runtime:** Mistral `ministral-14b-latest` | Mistral AI (EU) | Default cloud model for logic requests (schema v1). Also run in the provider eval. |
+| **Runtime:** Claude `claude-sonnet-5-5` | Anthropic (outside the EU) | Opt-in cloud model ("Allow non-EU providers"). Also run in the provider eval. |
+| Gemma `gemma-4-E2B` (2-bit `cq2`) | Google, via Cactus-Compute on Hugging Face | Evaluated as an on-device model in the Cactus spike (0/10 correct, 4 times slower); not used |
+
+**Gemini was not used.** `GEMINI.md` is the template's compatibility shim, unchanged since the first commit, which points Gemini CLI at `AGENTS.md`. No MCP servers were used to build the product. The full product AI disclosure is in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
 
 ## Important prompts and instructions
 
@@ -49,38 +56,59 @@ This project uses AI-assisted development. Keep this document current and public
 
 ### Ideation and architecture
 
-[Describe how AI influenced the product idea, scope, architecture, and platform-capability choice.]
+Ash (team lead) chose the product idea and owned every product decision. That includes the capsule schema: `SCHEMA.md` is "the contract", and v1 and v1.1 changes were approved by Ash before any code changed. The agents proposed options with evidence, and Ash chose. Examples from the work log:
+- **Timers:** `reminderAgentManager` failed on phones without an AppGallery grant (error 1700002). The agent showed the log, and Ash chose Calendar Kit.
+- **On-device AI:** a Cactus spike outside the repo measured three approaches on the emulator: full-capsule generation (3/10 correct), tool calling (2/10) and slot-filling with grounding (5/10, 0 wrong). Ash chose slot-filling.
+- **Cloud:** the EU-first policy (Mistral by default, non-EU opt-in, consent per provider) follows the digital-sovereignty pitch in the on-device brief. The eval later showed it costs some accuracy, and the trade-off is documented rather than hidden.
+- **Architecture:** rules, then on-device, then cloud, then validator, then gatekeeper. Splitting into `core/` (pure, unit-testable ArkTS) and `pages/`, `renderer/`, `adapters/` (platform) let several sessions work in parallel without overlapping files.
 
 ### Implementation
 
-[Describe the AI-assisted coding workflow and how generated output was reviewed before acceptance.]
+Several Claude Code sessions ran in parallel, each with a brief (see "Important prompts and instructions") that names the paths it owns. Rules every session followed:
+- Commit only your own paths (`git add <paths>`, never `-A`), stay on `main`, never force-push, pull or rebase.
+- Look up every HarmonyOS API in the local DevEco docs or the hmos skills before using it, rather than writing from memory.
+- Build, install and check on the emulator after each step; commit small working slices.
+
+Generated code was accepted only after it passed the gates below. Product-visible decisions (UI, schema, privacy policy) went back to Ash, and Ash's bug reports from the phones were routed to the owning session as BUG entries. A docs session (T2) kept the README in step with the code, and ran a compliance audit that compared claims against code (`docs/COMPLIANCE.md`).
 
 ### Testing and debugging
 
-[Record builds, linting, tests, device/emulator runs, UI inspection, logs, screenshots, and manual checks.]
+- **Type-check and build:** `devecocli check arkts` on changed files, because hvigor only compiles files that something imports. Then `devecocli build --modules entry`.
+- **Unit tests:** `hvigorw … test` (Hypium), 164 tests at the time of writing. They cover the validator, rule parser, routing policy, cloud providers with fake transports, the v1 interpreter, widgets, sharing and shared text. Deliberately broken assertions were used once to confirm that failures are reported.
+- **Emulator:** install with `hdc`, launch with `aa start`, read `hilog`, take screenshots with `devecocli ui screenshot`. Several sessions share one emulator, so automated runs use `aa start --ps` parameters and result files instead of UI taps.
+- **Model evaluation:** `scripts/eval-providers.mjs` makes real provider calls with the app's own prompt, validator and interpreter. It has tuning, held-out, refusal and hard-logic sets. There is also an on-device eval on the emulator.
+- **Security checks:** byte scans of built `.hap` files for API keys, and a git-history scan for secrets before publishing.
+- **Real phones:** Ash tested on two phones, and reported issues were routed back as BUG entries.
 
 ## Unsuccessful approaches
 
-- [What was tried, why it failed, and what changed afterward.]
 - Core and UI sessions shared one checkout. The core session made a `feat/core` branch, which switched the branch for the UI session too, and the UI session's commit replaced the core session's uncommitted `CapsuleTypes.ets`. Fix: fast-forwarded `main`, deleted the branch, and both sessions now work on `main` and `git add` only their own paths. The core session added its exports to the UI session's version so existing imports keep working.
 - On-device full-capsule generation: LFM2-VL-450M and gemma-4-E2B cq2 were given the compact schema plus examples. LFM2 copied the example (most requests became a timer) and printed placeholders such as `<number>`; Gemma at 2-bit was worse and 4 times slower. We switched to slot-filling with a deterministic capsule builder.
 - Cactus tool calling (one tool per capsule kind, `force_tools`): the model over-picked `make_timers` and merged list items. It scored 2/10 against 5/10 for slot-filling, so it was not adopted.
 - An example-free retry prompt (no example values the model could copy) broke the output format and did not raise the score.
+- Timer reminders through `reminderAgentManager`: blocked on phones without an AppGallery Connect capability (1700002). Replaced with Calendar Kit events.
+- Mistral `mistral-large-latest`: the key's tier returned 403 `tier_not_allowed`, and Medium and Small allowed 0 requests a minute, so `ministral-14b-latest` is used.
+- First version of two-step cloud generation: Claude used up all 2048 output tokens thinking, and plans over-built simple apps. The limit was raised to 8192, and the plan prompt now asks for only what was requested.
+- `devecocli signature generate` for phone signing: it only works for mainland-China accounts. Signing is done in DevEco Studio (Signing Configs) instead.
+- DevEco Studio's project sync failed on the fresh template with "Invalid dependencies detected" while the files were valid. Building, installing and launching from the command line (`devecocli`, `hdc`) worked, and became the standard workflow.
 
 ## Known limitations
 
-- [Product, platform, model, data, testing, or tooling limitation.]
-- Schema v0 has no time-of-day reminder or computed values, so the rule parser turns "medication 8am and 8pm" into a dose checklist and works out bill splits as static text.
+- The rule parser turns "medication 8am and 8pm" into a dose checklist. Schema v1.1 time triggers are validated, but nothing runs them yet. (Computed values and live bill splits arrived with schema v1.)
+- Vibration and automatic motion counting are not built, although the schema has `vibration` and `motion` permissions.
 - `CapsuleModel.ets` holds a copy of `SCHEMA.md` for the prompt. It must be updated by hand if the schema changes.
 - Local unit tests can't call system APIs, so the network transport and rawfile loading in `core/index.ets` are type-checked but not unit-tested.
-- On-device AI handles 5 of the 10 eval requests correctly and rejects the other 5 cleanly. Slot grounding stops it returning a valid but wrong capsule, but multi-item requests (3 timers, a 3-item checklist) often fail. Rules run first, so the model only sees the requests rules miss.
+- On-device AI got 9 of 15 eval requests correct (first eval: 5 of 10, with the other 5 rejected cleanly). Slot grounding stops it returning a valid but wrong capsule, but multi-item requests (3 timers, a 3-item checklist) often fail. Rules run first, so the model only sees the requests rules miss.
 - `RuleParser`'s goal pattern turns "laundry done in 55 minutes" into a 55-minute goal counter before the on-device model sees it.
 - The on-device model must be pushed separately (`scripts/push-model.sh`, debug builds only); without it the status reads "On-device model not installed" and the app falls back cleanly. A release or AppGallery build would need an in-app download.
 - Cactus only ships arm64-v8a. Performance was measured on the emulator, which runs on the host's Apple M4 Pro cores; a phone will be slower and was not measured.
 
 ## Lessons learned
 
-- [Concise lesson that would help reproduce or improve the work.]
+- A strict validator is what makes model output safe to use. Every source (rules, the on-device model, the cloud, imports) goes through it, and its exact error messages make a good retry prompt.
+- Keep held-out eval requests that are never used for tuning. Single runs of a small model vary (12–14/15), so judge prompt changes over several runs.
+- Parallel agent sessions need explicit file ownership. One shared checkout plus `git checkout -b` in one session silently moved the others, so everyone stays on `main` and commits only their own paths.
+- Audit claims against code: UI text and prompts drifted ahead of what was built (vibration, motion), and a docs pass caught it.
 - In an ArkTS widget, a tap handler inside a `@Builder`'s `ForEach` sent another item's index on the device. Putting each item in its own `@Component` with `@Prop` fixed it. The widget compiler also rejects non-widget APIs such as `hitTestBehavior`, so check the "widget capability" note in the docs.
 - After an app update the launcher calls `onAddForm` again with the existing formId, so keep stored widget bindings instead of treating every call as a new widget.
 - hvigor only compiles `.ets` files that something imports. Use `devecocli check arkts <files>` to type-check files nothing imports yet. Local unit tests run with `hvigorw --mode module -p module=entry@default -p product=default test`, and results land in `entry/.test/default/intermediates/test/coverage_data/test_result.txt`.
