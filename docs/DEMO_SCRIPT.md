@@ -11,7 +11,7 @@ Use English only: Harmoniser rejects other languages by design. Leave out anythi
 - [ ] Emulator: push a `config.local.json` with a **Mistral** key; Settings: AI mode **Smart**, **Allow non-EU providers** off. Never show the file on screen.
 - [ ] Phone: run `scripts/push-model.sh` (on-device model) and launch the app once; Settings: AI mode **On-device only**. Check that the status line reads "On-device AI ready".
 - [ ] Emulator `config.local.json` also sets `marketplace.baseUrl` to `https://harmoniser-web.vercel.app`. Check that `curl https://harmoniser-web.vercel.app/api/capsules` lists Squat counter just before recording.
-- [ ] Record only after the widget tap fix (BUG-13) is on the build (Ash's call).
+- [ ] Use a build that includes the widget tap fix (BUG-13, `acfbaef`) and check that + on the widget updates the count before recording.
 - [ ] Emulator home screen: add one blank **Harmoniser** widget (2x2) beforehand ("Tap to choose a capsule").
 - [ ] Record the emulator window and the phone (its own screen recorder) separately; cut them together in editing.
 - [ ] Do a dry run of the cloud step. It takes 5–20 s: trim the wait and caption it ("cloud reply, trimmed").
