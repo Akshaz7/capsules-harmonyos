@@ -35,6 +35,10 @@ export { AI_NOT_CONFIGURED, NO_RULE_MATCH, CLOUD_OFF, ON_DEVICE_ONLY, GenerateMo
 } from './CapsuleGenerator';
 export { isEuProvider, cloudOrigin, ProviderName } from './ModelProvider';
 export {
+  DueTriggers, dueTimeTriggers, motionTriggers, nextFireTime, permissionForTrigger, runTrigger, scheduledOn,
+  TriggerGuard, triggerKey, TriggerRun
+} from './Triggers';
+export {
   capsuleFromSharedText, MAX_SHARED_TEXT, SharedKind, SharedTextResult, SHARED_EMPTY, SHARED_NOT_RECOGNISED,
   SHARED_TOO_LONG
 } from './SharedText';

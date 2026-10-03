@@ -8,6 +8,7 @@ import widgetModelTest from './WidgetModel.test';
 import exprTest from './Expr.test';
 import capsuleV1Test from './CapsuleV1.test';
 import sharedTextTest from './SharedText.test';
+import triggersTest from './Triggers.test';
 import sharingTest from './Sharing.test';
 
 export default function testsuite() {
@@ -21,5 +22,6 @@ export default function testsuite() {
   exprTest();
   capsuleV1Test();
   sharedTextTest();
+  triggersTest();
   sharingTest();
 }
