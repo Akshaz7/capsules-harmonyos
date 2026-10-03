@@ -24,3 +24,7 @@ export function refusalWords(result: GenerateResult): string[] {
 export function failureDetail(result: GenerateResult): string {
   return Array.isArray(result.details) ? result.details.join('; ') : '';
 }
+
+/** What works without the cloud, shown in Settings and on the failure card (wording fixed by T3-8). */
+export const LIMITS_TEXT = 'On this phone: timers, counters, checklists. Scoreboards, calculators and quizzes need ' +
+  'cloud AI (Mistral EU), turn it on in Settings.';

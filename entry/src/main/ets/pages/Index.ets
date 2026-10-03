@@ -34,7 +34,7 @@ import {
 import { WidgetCapsulePicker } from './WidgetCapsulePicker';
 import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
 import { ShareLaunch, shareLaunch } from './ShareLaunch';
-import { failureDetail, joinWords, refusalWords } from './CreateText';
+import { failureDetail, joinWords, LIMITS_TEXT, refusalWords } from './CreateText';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
@@ -889,6 +889,11 @@ struct Index {
         .fontSize($r('sys.float.Body_M'))
         .fontColor($r('sys.color.font_primary'))
         .width('100%')
+      Text(LIMITS_TEXT)
+        .fontSize($r('sys.float.Body_S'))
+        .fontColor($r('sys.color.font_secondary'))
+        .width('100%')
+        .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach(RETRY_SUGGESTIONS, (chip: ExampleChip) => {
           Row({ space: 6 }) {

@@ -1,4 +1,5 @@
 import { AiMode, AppSettings } from './AppSettings';
+import { LIMITS_TEXT } from './CreateText';
 
 /** Settings page (NavDestination). */
 @ComponentV2
@@ -70,6 +71,11 @@ export struct SettingsView {
           'Capsules are made by rules and the on-device model only.')
           .fontSize($r('sys.float.Caption_M'))
           .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+          .padding({ left: 4, right: 4 })
+        Text(LIMITS_TEXT)
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_secondary'))
           .width('100%')
           .padding({ left: 4, right: 4 })
 
