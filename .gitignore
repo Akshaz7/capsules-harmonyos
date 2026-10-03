@@ -22,3 +22,6 @@ entry/src/main/resources/rawfile/config.local.json
 
 # Local reference material
 /reference/
+
+# push-model.sh model download cache
+.cache/
