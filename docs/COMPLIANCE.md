@@ -55,7 +55,7 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 | Item | Status | Notes and owner |
 | --- | --- | --- |
 | Tool versions | ✅ | DevEco Studio 6.1.1, SDK API 24 (min API 20), `devecocli` 1.3.4, Node 18+ for the eval |
-| Unit tests | ✅ | 148 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
+| Unit tests | ✅ | 156 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
 | On-device model | ✅ | URL, tag and sha256 in `docs/THIRD_PARTY.md`; `scripts/push-model.sh` |
 | Rebuilding `libcactus_engine.so` | ⚠️ | The repo has the prebuilt `.so` and `cactus/cactus-ohos.patch`, but the cross-compile commands live only in `cactus-spike/SPIKE_LOG.md`, outside the repo. **T5**: add a `cactus/BUILD.md` or script with the exact CMake/NDK commands. |
 | Untracked `.cache/` folder | ⚠️ | **T1**: add it to `.gitignore` so it is never committed by accident |
