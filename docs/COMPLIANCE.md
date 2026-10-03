@@ -12,7 +12,7 @@ Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing. Updated afte
 | Targets HarmonyOS/OpenHarmony/Oniro | ✅ | `build-profile.json5`: `runtimeOS: HarmonyOS` | – |
 | API 20+, with API 20 as the minimum | ✅ | `compatibleSdkVersion: 6.0.0(20)`, `targetSdkVersion: 6.1.1(24)` | – |
 | Compatible SDK and dev environment | ✅ | DevEco Studio 6.1.1, SDK API 24, hvigor, hdc | – |
-| Runs on an emulator or a compatible device | ✅ emulator / ⚠️ device | Emulator runs are recorded throughout `AI_WORKFLOW.md` | Physical device: no run is recorded in the repo yet. **T1**: once the phones are flashed, add one line to `AI_WORKFLOW.md` (device model, build, what was checked). Calendar alerts with the app closed have never been seen working (they don't fire on the emulator). |
+| Runs on an emulator or a compatible device | ✅ emulator / ⚠️ device | Emulator runs throughout `AI_WORKFLOW.md`. Phone runs on 2ML0124… are recorded in commit messages: create with the on-device model and Claude (`b1dd029`) and Share (`45321fa`). | **T1**: add one `AI_WORKFLOW.md` line for the phone runs (device model, build, what was checked). Calendar alerts with the app closed are still unseen. |
 | Reproducible setup, build and launch instructions | ✅ | README "Setup, build, install, launch" | Fixed: `CLAUDE.md` now points to DevEco Signing Configs (T2-7). |
 | Uses or improves a platform capability | ✅ | Calendar Kit, Notification Kit, Form Kit widget, Share Kit, Scan Kit, Core File Kit, Preferences, on-device inference through Node-API | – |
 
@@ -55,7 +55,7 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 | Item | Status | Notes and owner |
 | --- | --- | --- |
 | Tool versions | ✅ | DevEco Studio 6.1.1, SDK API 24 (min API 20), `devecocli` 1.3.4, Node 18+ for the eval |
-| Unit tests | ✅ | 171 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
+| Unit tests | ✅ | 185 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
 | On-device model | ✅ | URL, tag and sha256 in `docs/THIRD_PARTY.md`; `scripts/push-model.sh` |
-| Rebuilding `libcactus_engine.so` | ⚠️ | The repo has the prebuilt `.so` and `cactus/cactus-ohos.patch`, but the cross-compile commands live only in `cactus-spike/SPIKE_LOG.md`, outside the repo. **T5**: add a `cactus/BUILD.md` or script with the exact CMake/NDK commands. |
-| Untracked `.cache/` folder | ⚠️ | **T1**: add it to `.gitignore` so it is never committed by accident |
+| Rebuilding `libcactus_engine.so` | ✅ | Fixed by T5-5 (`755fbc3`): `cactus/BUILD.md` and `cactus/build-engine.sh`; a clean rebuild matches the committed `.so` apart from the build ID |
+| Untracked `.cache/` folder | ✅ | Fixed: ignored in `783a1ee` |

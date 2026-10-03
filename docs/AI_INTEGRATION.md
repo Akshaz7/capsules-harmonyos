@@ -23,7 +23,7 @@ request text (max 500 chars)
   │
   ├─ Rule parser ── match ─────────────────────────────────────────┐
   │                                                                  │
-  ├─ refused-capability words (contacts, SMS, camera, payments…) ──► cloud first
+  ├─ refused actions (send SMS, calls, read contacts, email, websites, payments) or non-English ──► cloud first
   ├─ needs logic? ── yes ─► cloud (if allowed; otherwise needsCloud → app asks)
   │                 no ──► on-device LLM ── valid ─────────────────┤
   │                              └─ rejected / not installed ─► cloud (if allowed)
@@ -44,7 +44,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 **After generation, for every source:** the validator rejects unknown fields, types, actions and permissions, type-checks every expression, rejects computed cycles and enforces size limits. The gatekeeper then shows a consent sheet, where each declared permission can be allowed or denied. Anything that needs a denied permission is drawn as blocked, refused when tapped, and logged.
 
-**Shared text** (from the system share panel) uses the same path. Recipes, bills, workouts and lists are converted without a model (`core/SharedText.ets`, max 2,000 characters). Other text goes to the cloud as a quoted request, under the same consent rules. Requests that mention photos or receipts are no longer refused: they are planned as the capsule they describe. In the app, shared text currently goes through the normal request flow; the dedicated converter isn't wired in yet. **Image input is not available yet** (the vision path is being built).
+**Shared text** (from the system share panel) uses the same path. Recipes, bills, workouts and lists are converted without a model (`core/SharedText.ets`, max 2,000 characters). Other text goes to the cloud as a quoted request, under the same consent rules. Requests that mention photos or receipts are no longer refused: they are planned as the capsule they describe. Non-English requests go to the cloud first, because the rules and on-device templates are English-only. The capsule's text then follows the request's language. In the app, shared text currently goes through the normal request flow; the dedicated converter isn't wired in yet. **Image input is not available yet** (the vision path is being built).
 
 ## Data handling
 
@@ -61,7 +61,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (171, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing and shared text.
+- **Unit tests (185, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing and shared text.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
