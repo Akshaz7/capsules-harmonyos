@@ -3,7 +3,7 @@ import {
   applyWidgetMessage, buildWidgetView, CapsuleState, declaredAction, GateFacts, initialState, parseState,
   parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow,
   BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact,
-  accentFor, displayFor, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
+  accentFor, capsuleForNewWidget, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
 } from '../main/ets/core/WidgetModel';
 import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
 import { StateValues } from '../main/ets/core/CapsuleProgram';
@@ -49,6 +49,10 @@ function denyTimers(action: string): boolean {
 
 function runningIds(state: CapsuleState, now: number): string {
   return state.timers.filter((t: TimerRun) => t.endAt > now).map((t: TimerRun) => t.id).join(',');
+}
+
+function availableExceptGone(id: string): boolean {
+  return id !== 'gone';
 }
 
 function noneRemoved(id: string): boolean {
@@ -362,6 +366,17 @@ export default function widgetModelTest() {
       expect(reloaded.timers[0].endAt).assertEqual(280000);
       applyV0Action(timer, reloaded, 'stopTimer:tea', 110000);
       expect(reloaded.timers[0].endAt).assertEqual(0);
+    });
+
+    it('Add to home screen: a new widget shows the pending capsule, never the latest one', 0, () => {
+      const older: PendingCapsule = { capsuleId: 'count-coffees', at: 1000 };
+      expect(capsuleForNewWidget(older, 5000, availableExceptGone)).assertEqual('count-coffees');
+      expect(capsuleForNewWidget(null, 5000, availableExceptGone)).assertEqual(''); // blank, not "latest"
+      expect(capsuleForNewWidget(older, 1000 + PENDING_TTL_MS + 1, availableExceptGone)).assertEqual(''); // expired
+      const gone: PendingCapsule = { capsuleId: 'gone', at: 1000 };
+      expect(capsuleForNewWidget(gone, 2000, availableExceptGone)).assertEqual(''); // removed meanwhile
+      const future: PendingCapsule = { capsuleId: 'count-coffees', at: 9000 };
+      expect(capsuleForNewWidget(future, 2000, availableExceptGone)).assertEqual(''); // clock went back
     });
   });
 }

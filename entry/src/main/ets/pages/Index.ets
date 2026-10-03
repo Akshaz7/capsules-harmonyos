@@ -48,6 +48,7 @@ import {
   assignCapsuleToWidget, firstBlankWidget, listWidgets, refreshCapsuleWidgets, WidgetInfo
 } from '../widget/WidgetService';
 import { WidgetCapsulePicker } from './WidgetCapsulePicker';
+import { AddToHomeButton } from '../widget/AddToHomeButton'; // PROTECTED: owned by T4
 import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
 import { ShareLaunch, shareLaunch } from './ShareLaunch';
 import {
@@ -2221,7 +2222,9 @@ struct Index {
           if (this.canMakeSmarter(entry)) {
             this.smarterButton(entry)
           }
-          this.routeCard(entry)
+          // PROTECTED: owned by T4. Do not remove or modify. See /tmp/hy-tasks.
+          // Adds exactly this capsule (its id) to the home screen; scripts/check-add-to-home.sh checks this mount.
+          AddToHomeButton({ capsuleId: entry.capsule.id, capsuleName: entry.capsule.name })
           if (this.devicesEnabled && payloadFor(entry.capsule) !== null) {
             DevicePanel({
               devices: this.devices,

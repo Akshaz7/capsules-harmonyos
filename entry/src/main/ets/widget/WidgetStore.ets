@@ -22,7 +22,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule } from '../core/CapsuleTypes';
 import { StateValues } from '../core/CapsuleProgram';
 import { validateCapsuleObject } from '../core/CapsuleValidator';
-import { CapsuleState, initialState, parseState, WidgetBindingFact } from '../core/WidgetModel';
+import { CapsuleState, initialState, parseState, PendingCapsule, WidgetBindingFact } from '../core/WidgetModel';
 
 const DOMAIN = 0x0002;
 const TAG = 'WidgetStore';
@@ -128,6 +128,35 @@ export function allBindings(ctx: common.Context): FormBinding[] {
 }
 
 const SEEN_KEY = 'seen';
+const PENDING_KEY = 'pending';
+
+/** Stores the capsule the next new widget should show (shared with the widget process, flushed now). */
+export function savePending(ctx: common.Context, pending: PendingCapsule): void {
+  try {
+    const prefs = fresh(ctx, WIDGETS);
+    prefs.putSync(PENDING_KEY, JSON.stringify(pending));
+    prefs.flushSync();
+  } catch (e) {
+    hilog.error(DOMAIN, TAG, 'savePending failed: %{public}s', errorText(e));
+  }
+}
+
+/** Reads and clears the pending capsule (it is used once). */
+export function takePending(ctx: common.Context): PendingCapsule | null {
+  try {
+    const prefs = fresh(ctx, WIDGETS);
+    const raw = prefs.getSync(PENDING_KEY, '') as string;
+    if (raw.length === 0) {
+      return null;
+    }
+    prefs.deleteSync(PENDING_KEY);
+    prefs.flushSync();
+    return JSON.parse(raw) as PendingCapsule;
+  } catch (e) {
+    hilog.error(DOMAIN, TAG, 'takePending failed: %{public}s', errorText(e));
+    return null;
+  }
+}
 
 /** Capsule ids the widgets have already seen, or null before the first sync. */
 export function loadSeen(ctx: common.Context): string[] | null {

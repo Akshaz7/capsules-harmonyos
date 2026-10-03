@@ -17,16 +17,15 @@ import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule, Permission } from '../core/CapsuleTypes';
-import { routeCapsule } from '../core/CapsuleRouter';
 import { restoreState } from '../core/CapsuleProgram';
 import {
   applyWidgetMessage, buildWidgetView, declaredAction, emptyView, firstBlank, GateFacts, parseWidgetMessage,
-  pickCapsuleForNewWidget, pickColorTag, pressWidgetButton, planWidgetAssignments, SavedCapsule, stableColorTag, WidgetView, withColor
+  capsuleForNewWidget, pickColorTag, pressWidgetButton, planWidgetAssignments, stableColorTag, WidgetView, withColor
 } from '../core/WidgetModel';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
 import {
   FormBinding, allBindings, getBinding, isFormProcess, loadSeen, loadState, putBinding, saveSeen, saveState,
-  savedCapsules, savedValues
+  savedCapsules, savedValues, savePending, takePending
 } from './WidgetStore';
 
 const DOMAIN = 0x0002;
@@ -128,24 +127,59 @@ export function bindForm(ctx: common.Context, formId: string, wide: boolean): Fo
   return existing;
 }
 
-/** Binds a new widget to the most recent widget-suitable capsule (or none yet). */
+/**
+ * Binds a new widget to the capsule whose "Add to home screen" was tapped (the pending capsule), used once.
+ * Without one the widget starts blank ("Tap to choose a capsule"); it never takes "the latest capsule".
+ */
 export function bindNewForm(ctx: common.Context, formId: string, wide: boolean): FormBinding {
   const capsules = savedCapsules(ctx);
   const gate = freshGate(ctx);
-  // Newest first, so a higher savedAt means more recent.
-  const saved: SavedCapsule[] = capsules.map((c: Capsule, i: number): SavedCapsule => {
-    const s: SavedCapsule = { capsule: c, savedAt: capsules.length - i };
-    return s;
-  });
-  const chosen = pickCapsuleForNewWidget(saved, (id: string) => gate.isRemoved(id));
+  const pending = takePending(ctx);
+  const chosen = capsuleForNewWidget(pending, Date.now(),
+    (id: string) => capsules.some((c: Capsule) => c.id === id) && !gate.isRemoved(id));
   const used = allBindings(ctx).map((b: FormBinding) => colorTagOf(b));
   const binding: FormBinding = {
-    formId: formId, capsuleId: chosen === null ? '' : chosen.id, wide: wide, addedAt: Date.now(),
-    colorTag: pickColorTag(used, formId)
+    formId: formId, capsuleId: chosen, wide: wide, addedAt: Date.now(), colorTag: pickColorTag(used, formId)
   };
+  if (chosen.length > 0) {
+    const seen = loadSeen(ctx) ?? [];
+    if (!seen.includes(chosen)) {
+      saveSeen(ctx, seen.concat([chosen]));
+    }
+  }
   putBinding(ctx, binding);
-  hilog.info(DOMAIN, TAG, 'form %{public}s -> capsule %{public}s', formId, binding.capsuleId);
+  hilog.info(DOMAIN, TAG, 'new form %{public}s -> capsule %{public}s (pending %{public}s)', formId,
+    binding.capsuleId.length > 0 ? binding.capsuleId : '(blank)', pending === null ? 'none' : pending.capsuleId);
   return binding;
+}
+
+/** The capsule the next newly added widget shows (consumed by that widget; expires after 10 minutes). */
+export function setPendingCapsule(ctx: common.Context, capsuleId: string): void {
+  savePending(ctx, { capsuleId: capsuleId, at: Date.now() });
+  hilog.info(DOMAIN, TAG, 'pending capsule for the next new widget: %{public}s', capsuleId);
+}
+
+/** What "Add to home screen" did: already shown, filled a blank widget, opened the add-widget page, or neither. */
+export type AddToHomeResult = 'already' | 'filled' | 'opened' | 'manual';
+
+/**
+ * "Add to home screen" for one capsule (the one open on screen, passed explicitly):
+ *  already on a widget -> 'already'; a blank widget exists -> it shows this capsule ('filled');
+ *  else this capsule becomes pending and the system's add-widget page opens ('opened'), so the widget the
+ *  user adds shows it. 'manual' when that page cannot open (show the long-press steps).
+ */
+export async function addCapsuleToHomeScreen(ctx: common.UIAbilityContext, capsuleId: string):
+  Promise<AddToHomeResult> {
+  const widgets = listWidgets(ctx);
+  if (widgets.some((w: WidgetInfo) => w.capsuleId === capsuleId)) {
+    return 'already';
+  }
+  const blank = firstBlankWidget(ctx);
+  if (blank !== null && await assignCapsuleToWidget(ctx, blank.formId, capsuleId)) {
+    return 'filled';
+  }
+  setPendingCapsule(ctx, capsuleId);
+  return openHarmoniserManager(ctx.abilityInfo.bundleName) ? 'opened' : 'manual';
 }
 
 export async function pushForm(ctx: common.Context, binding: FormBinding): Promise<void> {
@@ -221,7 +255,7 @@ export function firstBlankWidget(ctx: common.Context): WidgetInfo | null {
 /**
  * Shows `capsuleId` on widget `formId` and redraws it immediately; null makes the widget blank again.
  * Returns false (and changes nothing) if the widget does not exist, or the capsule is not saved, was
- * removed, or is not widget-suitable (see routeCapsule).
+ * removed. Every capsule can be shown (one that does not fit the card shows its name and "Open in app").
  */
 export async function assignCapsuleToWidget(ctx: common.Context, formId: string, capsuleId: string | null):
   Promise<boolean> {
@@ -232,7 +266,7 @@ export async function assignCapsuleToWidget(ctx: common.Context, formId: string,
   }
   if (capsuleId !== null) {
     const capsule = savedCapsules(ctx).find((c: Capsule) => c.id === capsuleId);
-    if (capsule === undefined || freshGate(ctx).isRemoved(capsuleId) || !routeCapsule(capsule).widget) {
+    if (capsule === undefined || freshGate(ctx).isRemoved(capsuleId)) {
       hilog.warn(DOMAIN, TAG, 'assign: capsule %{public}s cannot go on a widget', capsuleId);
       return false;
     }
@@ -290,7 +324,7 @@ export async function handleWidgetMessage(ctx: common.Context, formId: string, m
 }
 
 /** Opens the system page where the user can add the Harmoniser widget to the home screen (API 18+). */
-export function openHarmoniserManager(bundleName: string): void {
+export function openHarmoniserManager(bundleName: string): boolean {
   const want: Want = {
     bundleName: bundleName,
     abilityName: FORM_ABILITY,
@@ -302,8 +336,10 @@ export function openHarmoniserManager(bundleName: string): void {
   };
   try {
     formProvider.openFormManager(want);
+    return true;
   } catch (e) {
     const err = e as BusinessError;
     hilog.error(DOMAIN, TAG, 'openFormManager failed: %{public}d %{public}s', err.code, err.message);
+    return false;
   }
 }

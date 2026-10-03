@@ -629,7 +629,8 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
   }
   const route = routeCapsule(capsule);
   if (!route.widget) {
-    const v = baseView('empty', capsule.id, capsule.name, route.reason, wide);
+    // Too big for the card (until T4-19 condenses it): the name and a tap into the app.
+    const v = baseView('empty', capsule.id, capsule.name, 'Tap to open', wide);
     v.icon = capsule.schemaVersion === 1 ? 'logic' : 'blank';
     return v;
   }
@@ -679,6 +680,30 @@ export function pickCapsuleForNewWidget(saved: SavedCapsule[], isRemoved: (capsu
     }
   }
   return best === null ? null : best.capsule;
+}
+
+// ---- "Add to home screen": the capsule the next new widget shows ----
+
+/** Set by the capsule screen's "Add to home screen" right before the system's add-widget page opens. */
+export interface PendingCapsule {
+  capsuleId: string;
+  /** When it was set (ms). */
+  at: number;
+}
+
+/** A pending capsule older than this is ignored (the user left the add-widget page without adding). */
+export const PENDING_TTL_MS: number = 10 * 60 * 1000;
+
+/**
+ * The capsule a newly added widget shows: the pending one if it is recent and still available, else none
+ * ('' = blank, "Tap to choose a capsule"). Never "the latest capsule".
+ */
+export function capsuleForNewWidget(pending: PendingCapsule | null, now: number,
+  isAvailable: (capsuleId: string) => boolean): string {
+  if (pending === null || pending.capsuleId.length === 0 || now - pending.at > PENDING_TTL_MS || now < pending.at) {
+    return '';
+  }
+  return isAvailable(pending.capsuleId) ? pending.capsuleId : '';
 }
 
 // ---- Which widget shows which capsule ----
