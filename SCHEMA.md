@@ -52,6 +52,7 @@ Button (v1): { type, label, action?, do?, enabledIf? }   at least one of action 
     { "pop": listVar }                    removes the last item (no-op on an empty list)
     { "reset": var }                      back to its initial value
     "startTimer:<id>" | "startAllTimers" | "increment:<id>" | "reset:<id>" | "notify:<text>"   (v0 actions, same permissions)
+    "pauseTimer:<id>" | "stopTimer:<id>" | "resetTimer:<id>"                                   (timer controls, see below)
   A button press is all-or-nothing: if any step fails, no state changes.
 - enabledIf: bool expression; the button is disabled while it is false.
 
@@ -71,3 +72,10 @@ trigger:
 - "label" (max 60 characters) is how the app names the trigger, e.g. "Morning reset".
 - A trigger whose permission is not listed is invalid. A listed permission the user did not grant is blocked and logged by the gatekeeper when the trigger fires; nothing changes.
 - A trigger never runs while the capsule is removed. Each firing runs its steps once.
+
+# Timer controls (approved by Ash, 2026-10-03)
+Three more actions, usable wherever actions are (a button's "action", a v1 "do" step, a trigger's "do"):
+- "pauseTimer:<id>"  freezes a running timer; "startTimer:<id>" then resumes it from where it paused.
+- "stopTimer:<id>"   stops the timer and puts it back to its full length.
+- "resetTimer:<id>"  puts the timer back to its full length; if it was running it keeps running from there.
+<id> must be a timer. Like every timer action they need "reminders".

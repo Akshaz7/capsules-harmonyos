@@ -24,7 +24,10 @@ component types (v0):
 - number    { type, id, label }
 - button    { type, label, action }
 
-actions: startTimer:<id> | startAllTimers | increment:<id> | reset:<id> | notify:<text>
+actions: startTimer:<id> | pauseTimer:<id> | stopTimer:<id> | resetTimer:<id> | startAllTimers | increment:<id>
+  | reset:<id> | notify:<text>
+  (pauseTimer freezes a running timer and startTimer resumes it; stopTimer stops it and goes back to its full
+  length; resetTimer goes back to the full length and keeps running if it was)
 Rule: any component or action that needs a permission not listed in "permissions" is blocked and logged by the gatekeeper.
 
 ## v1 (needs "schemaVersion": 1)
@@ -84,10 +87,10 @@ ${V1_EXAMPLES.join('\n\n')}
 Rules:
 - Reply with exactly one JSON object and nothing else. No markdown, no comments, no code.
 - Use only the fields and component types above. Every field listed for a component is required.
-- "permissions" must list every permission the capsule needs: timers and startTimer/startAllTimers need "reminders",
+- "permissions" must list every permission the capsule needs: timers and every timer action (startTimer, pauseTimer, stopTimer, resetTimer, startAllTimers) need "reminders",
   counters with source "motion" need "motion", notify:<text> needs "notifications". List nothing else.
 - Ids are short lowercase-kebab-case and unique. Actions must refer to existing ids
-  (startTimer -> a timer, increment -> a counter).
+  (startTimer, pauseTimer, stopTimer, resetTimer -> a timer; increment -> a counter).
 - Timer minutes are positive numbers. Checklists have at least one item.
 - Every countdown is a "timer" component with its minutes. Expressions have no clock or current time, so never
   build a countdown, elapsed time or progress from state or computed values.

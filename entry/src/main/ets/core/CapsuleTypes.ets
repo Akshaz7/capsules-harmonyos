@@ -7,7 +7,8 @@ export type ComponentType = 'text' | 'timer' | 'counter' | 'checklist' | 'number
 
 export type CounterSource = 'manual' | 'motion';
 
-// One of: startTimer:<id> | startAllTimers | increment:<id> | reset:<id> | notify:<text>
+// One of: startTimer:<id> | pauseTimer:<id> | stopTimer:<id> | resetTimer:<id> | startAllTimers | increment:<id>
+// | reset:<id> | notify:<text>
 export type Action = string;
 
 export interface TextComponent {
@@ -149,7 +150,11 @@ export const MAX_SCHEMA_VERSION: number = 1;
 
 export const COUNTER_SOURCES: string[] = ['manual', 'motion'];
 
-export type ActionKind = 'startTimer' | 'startAllTimers' | 'increment' | 'reset' | 'notify';
+export type ActionKind = 'startTimer' | 'pauseTimer' | 'stopTimer' | 'resetTimer' | 'startAllTimers' | 'increment' |
+  'reset' | 'notify';
+
+/** Actions that control one timer: their target must be a timer, and they need "reminders". */
+export const TIMER_ACTIONS: string[] = ['startTimer', 'pauseTimer', 'stopTimer', 'resetTimer'];
 
 // A parsed Action. `arg` is the target id (or the text for notify); empty for startAllTimers.
 export interface ParsedAction {

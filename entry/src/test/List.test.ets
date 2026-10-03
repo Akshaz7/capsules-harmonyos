@@ -9,6 +9,7 @@ import exprTest from './Expr.test';
 import capsuleV1Test from './CapsuleV1.test';
 import sharedTextTest from './SharedText.test';
 import triggersTest from './Triggers.test';
+import timerActionsTest from './TimerActions.test';
 import sharingTest from './Sharing.test';
 import createTextTest from './CreateText.test';
 
@@ -24,6 +25,7 @@ export default function testsuite() {
   capsuleV1Test();
   sharedTextTest();
   triggersTest();
+  timerActionsTest();
   sharingTest();
   createTextTest();
 }

@@ -28,6 +28,7 @@ import {
   StateVar,
   StepObject,
   TextComponent,
+  TIMER_ACTIONS,
   Trigger,
   TriggerKind,
   TRIGGER_KINDS,
@@ -127,7 +128,7 @@ export function parseAction(action: string): ParsedAction | null {
   if (arg.trim().length === 0) {
     return null;
   }
-  if (head === 'startTimer' || head === 'increment' || head === 'reset' || head === 'notify') {
+  if (TIMER_ACTIONS.includes(head) || head === 'increment' || head === 'reset' || head === 'notify') {
     return { kind: head as ActionKind, arg: arg };
   }
   return null;
@@ -152,9 +153,9 @@ export function permissionForComponent(c: CapsuleComponent): Permission | null {
   return null;
 }
 
-/** Permission an action needs, or null. Starting timers needs reminders; notify needs notifications. */
+/** Permission an action needs, or null. Timer actions need reminders; notify needs notifications. */
 export function permissionForAction(a: ParsedAction): Permission | null {
-  if (a.kind === 'startTimer' || a.kind === 'startAllTimers') {
+  if (TIMER_ACTIONS.includes(a.kind) || a.kind === 'startAllTimers') {
     return 'reminders';
   }
   if (a.kind === 'notify') {
@@ -163,7 +164,9 @@ export function permissionForAction(a: ParsedAction): Permission | null {
   return null;
 }
 
-const ACTIONS_HINT: string = '(allowed: startTimer:<id>, startAllTimers, increment:<id>, reset:<id>, notify:<text>)';
+const ACTIONS_HINT: string =
+  '(allowed: startTimer:<id>, pauseTimer:<id>, stopTimer:<id>, resetTimer:<id>, startAllTimers, increment:<id>, ' +
+  'reset:<id>, notify:<text>)';
 
 /** A component with its JSON path, for checks that run after the structure is known. */
 class Placed {
@@ -773,7 +776,7 @@ function checkAction(ck: Checker, raw: string, path: string, permissions: Permis
   const target = byId.get(action.arg);
   if (target === undefined) {
     ck.add(path, `action "${raw}" refers to id "${action.arg}", which does not exist`);
-  } else if (action.kind === 'startTimer' && target.type !== 'timer') {
+  } else if (TIMER_ACTIONS.includes(action.kind) && target.type !== 'timer') {
     ck.add(path, `action "${raw}" needs a timer, but "${action.arg}" is a ${target.type}`);
   } else if (action.kind === 'increment' && target.type !== 'counter') {
     ck.add(path, `action "${raw}" needs a counter, but "${action.arg}" is a ${target.type}`);

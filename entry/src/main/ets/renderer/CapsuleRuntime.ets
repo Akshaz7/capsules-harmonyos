@@ -45,6 +45,8 @@ export class TimerState {
   @Trace remainingSec: number;
   @Trace running: boolean = false;
   @Trace done: boolean = false;
+  /** Paused by pauseTimer: remainingSec is kept and startTimer resumes from it. */
+  @Trace paused: boolean = false;
 
   constructor(c: TimerComponent) {
     this.timerId = c.id;
@@ -90,6 +92,8 @@ export class NumberState {
 /** Receives timer starts, e.g. to schedule a system reminder. */
 export interface TimerScheduler {
   scheduleTimer(capsuleId: string, t: TimerState): void;
+  /** Cancels the system reminder of one timer (pause, stop, reset). Optional: without it the reminder still fires. */
+  cancelTimer?: (capsuleId: string, t: TimerState) => void;
 }
 
 /** Told when a running timer reaches zero, e.g. to post a notification. */
@@ -313,6 +317,27 @@ export class CapsuleRuntime {
         }
         break;
       }
+      case 'pauseTimer': {
+        const t = this.timer(arg);
+        if (t) {
+          this.pauseTimer(t);
+        }
+        break;
+      }
+      case 'stopTimer': {
+        const t = this.timer(arg);
+        if (t) {
+          this.stopTimer(t);
+        }
+        break;
+      }
+      case 'resetTimer': {
+        const t = this.timer(arg);
+        if (t) {
+          this.resetTimer(t);
+        }
+        break;
+      }
       case 'startAllTimers':
         this.timers.forEach((t: TimerState) => this.startTimer(t));
         break;
@@ -422,16 +447,51 @@ export class CapsuleRuntime {
     }
   }
 
+  /** Starts a timer from its full length, or resumes it after pauseTimer. */
   private startTimer(t: TimerState): void {
     if (t.running) {
       return;
     }
-    t.endAt = Date.now() + Math.round(t.minutes * 60) * 1000;
-    t.remainingSec = Math.round(t.minutes * 60);
+    const seconds = t.paused && t.remainingSec > 0 ? t.remainingSec : Math.round(t.minutes * 60);
+    t.endAt = Date.now() + seconds * 1000;
+    t.remainingSec = seconds;
     t.running = true;
+    t.paused = false;
     t.done = false;
     this.ensureTicking();
     this.scheduler?.scheduleTimer(this.capsule.id, t);
+  }
+
+  /** Freezes a running timer; startTimer resumes it. */
+  private pauseTimer(t: TimerState): void {
+    if (!t.running) {
+      return;
+    }
+    t.remainingSec = Math.max(0, Math.ceil((t.endAt - Date.now()) / 1000));
+    t.running = false;
+    t.paused = t.remainingSec > 0;
+    this.scheduler?.cancelTimer?.(this.capsule.id, t);
+  }
+
+  /** Stops a timer and puts it back to its full length. */
+  private stopTimer(t: TimerState): void {
+    const wasRunning = t.running;
+    t.running = false;
+    t.paused = false;
+    t.done = false;
+    t.remainingSec = Math.round(t.minutes * 60);
+    if (wasRunning) {
+      this.scheduler?.cancelTimer?.(this.capsule.id, t);
+    }
+  }
+
+  /** Puts a timer back to its full length; a running timer keeps running from there. */
+  private resetTimer(t: TimerState): void {
+    const wasRunning = t.running;
+    this.stopTimer(t);
+    if (wasRunning) {
+      this.startTimer(t);
+    }
   }
 
   private ensureTicking(): void {
