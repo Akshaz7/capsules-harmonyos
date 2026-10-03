@@ -24,4 +24,14 @@ $HDC -t 127.0.0.1:5555 install -r entry/build/default/outputs/default/entry-defa
 $HDC -t 127.0.0.1:5555 shell aa start -a EntryAbility -b com.hackyeah.capsules
 ```
 
+Before building the submission .hap, delete entry/src/main/resources/rawfile/config.local.json and rebuild. Never ship a .hap with the key.
+
+To use the AI fallback without the key inside the .hap, keep it in `config.local.json` at the project root (git-ignored, not packed) and push it to the app's files dir after installing. This works on debug builds only, and the core reads this location before `rawfile/`:
+
+```sh
+$HDC -t 127.0.0.1:5555 file send -b com.hackyeah.capsules config.local.json data/storage/el2/base/files/
+```
+
+With no config file anywhere, the app runs rules-only and reports "AI fallback not configured."
+
 `build-profile.json5` has no `signingConfigs`, so hvigor skips signing and outputs an unsigned HAP. The emulator accepts it. A physical device needs signing (`devecocli auth login` then `devecocli signature generate`). Never commit the generated signing material.
