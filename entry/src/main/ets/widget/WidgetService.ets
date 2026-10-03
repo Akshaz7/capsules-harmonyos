@@ -24,7 +24,8 @@ import {
 } from '../core/WidgetModel';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
 import {
-  FormBinding, allBindings, getBinding, loadSeen, loadState, putBinding, saveSeen, saveState, savedCapsules
+  FormBinding, allBindings, getBinding, isFormProcess, loadSeen, loadState, putBinding, saveSeen, saveState,
+  savedCapsules
 } from './WidgetStore';
 
 const DOMAIN = 0x0002;
@@ -45,13 +46,18 @@ export interface WidgetInfo {
   size: WidgetSize;
 }
 
-/** A Gatekeeper reading the latest grants written by the app process. */
+/**
+ * A Gatekeeper with the latest grants. In the form process the app's writes are re-read from disk; in the
+ * app process the cached store already has them (dropping it would lose a grant that is not flushed yet).
+ */
 function freshGate(ctx: common.Context): Gatekeeper {
-  try {
-    const options: preferences.Options = { name: GATE_STORE };
-    preferences.removePreferencesFromCacheSync(ctx, options);
-  } catch (e) {
-    hilog.warn(DOMAIN, TAG, 'could not drop gatekeeper cache: %{public}s', (e as BusinessError).message);
+  if (isFormProcess()) {
+    try {
+      const options: preferences.Options = { name: GATE_STORE };
+      preferences.removePreferencesFromCacheSync(ctx, options);
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'could not drop gatekeeper cache: %{public}s', (e as BusinessError).message);
+    }
   }
   return new Gatekeeper(ctx);
 }
@@ -133,7 +139,11 @@ export function bindNewForm(ctx: common.Context, formId: string, wide: boolean):
 
 export async function pushForm(ctx: common.Context, binding: FormBinding): Promise<void> {
   try {
-    await formProvider.updateForm(binding.formId, bindingData(viewFor(ctx, binding)));
+    const view = viewFor(ctx, binding);
+    await formProvider.updateForm(binding.formId, bindingData(view));
+    hilog.info(DOMAIN, TAG, 'updated form %{public}s: %{public}s %{public}s, %{public}d rows (%{public}s)',
+      binding.formId, view.status, binding.capsuleId.length > 0 ? binding.capsuleId : '(blank)', view.rows.length,
+      isFormProcess() ? 'widget process' : 'app process');
   } catch (e) {
     const err = e as BusinessError;
     hilog.error(DOMAIN, TAG, 'updateForm %{public}s failed: %{public}d %{public}s', binding.formId, err.code,

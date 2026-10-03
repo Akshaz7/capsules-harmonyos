@@ -1,6 +1,12 @@
 /**
- * Preferences storage for the Harmoniser widget. The FormExtensionAbility runs in its own
- * process and preferences are cached per process, so every read drops the cache first.
+ * Preferences storage for the Harmoniser widget. The FormExtensionAbility runs in its own process and
+ * preferences are cached per process:
+ *  - The app's stores ("capsules", "gatekeeper") are written by the app with putSync + an async flush. In
+ *    the app process the cached instance already has those writes, so it is used as is: dropping it would
+ *    re-read the file before the flush and miss a capsule or grant saved a moment ago (seen on phone 1,
+ *    2026-10-03: a new capsule never reached the widget). Only the form process re-reads them from disk.
+ *  - The widget's own stores ("harmoniser_widgets", "capsule_state") are written with flushSync by both
+ *    processes, so every read drops the cache and sees the other process's writes.
  *
  * Reads (never writes) the app's stores:
  *   "capsules"   key "saved" (newest-first Capsule[]) or legacy key "active" (one Capsule)
@@ -29,9 +35,30 @@ const FORM_PREFIX = 'form:';
 /** formId -> capsule ('' = blank) and size; the same shape the core assignment logic uses. */
 export type FormBinding = WidgetBindingFact;
 
+let formProcess: boolean = false;
+
+/** Called once by HarmoniserFormAbility: this process is the widget's, not the app's. */
+export function markFormProcess(): void {
+  formProcess = true;
+}
+
+export function isFormProcess(): boolean {
+  return formProcess;
+}
+
+/** A widget-owned store (always flushed synchronously): re-read from disk. */
 function fresh(ctx: common.Context, name: string): preferences.Preferences {
   const options: preferences.Options = { name: name };
   preferences.removePreferencesFromCacheSync(ctx, options);
+  return preferences.getPreferencesSync(ctx, options);
+}
+
+/** An app-owned store: the cached instance in the app process, a fresh read in the form process. */
+export function appStore(ctx: common.Context, name: string): preferences.Preferences {
+  if (formProcess) {
+    return fresh(ctx, name);
+  }
+  const options: preferences.Options = { name: name };
   return preferences.getPreferencesSync(ctx, options);
 }
 
@@ -42,7 +69,7 @@ function errorText(e: Object): string {
 /** Saved capsules from the app, newest first. Each one is re-validated before use. */
 export function savedCapsules(ctx: common.Context): Capsule[] {
   try {
-    const prefs = fresh(ctx, APP_CAPSULES);
+    const prefs = appStore(ctx, APP_CAPSULES);
     let raw = prefs.getSync(APP_SAVED_KEY, '') as string;
     if (raw.length === 0) {
       const legacy = prefs.getSync(APP_LEGACY_KEY, '') as string;

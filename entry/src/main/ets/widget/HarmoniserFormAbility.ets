@@ -1,11 +1,14 @@
 import { Want } from '@kit.AbilityKit';
 import { formBindingData, FormExtensionAbility, formInfo } from '@kit.FormKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { removeBinding } from './WidgetStore';
+import { markFormProcess, removeBinding } from './WidgetStore';
 import { bindForm, bindingData, handleWidgetMessage, refreshCapsuleWidgets, viewFor } from './WidgetService';
 
 const DOMAIN = 0x0002;
 const TAG = 'HarmoniserForm';
+
+// This module only loads in the widget's own process: read the app's stores from disk here.
+markFormProcess();
 
 /** Provider for the Harmoniser widget: one capsule per widget, 2x2 or 2x4. */
 export default class HarmoniserFormAbility extends FormExtensionAbility {
@@ -31,6 +34,7 @@ export default class HarmoniserFormAbility extends FormExtensionAbility {
   }
 
   onRemoveForm(formId: string): void {
+    hilog.info(DOMAIN, TAG, 'onRemoveForm %{public}s', formId);
     removeBinding(this.context, formId);
   }
 
