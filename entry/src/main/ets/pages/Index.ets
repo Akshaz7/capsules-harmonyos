@@ -193,7 +193,8 @@ struct Index {
   @Local devicesEnabled: boolean = false;
   /** Live line for the capsule last sent to a device; '' when none. */
   @Local deviceStatus: string = '';
-  private deviceCapsuleId: string = '';
+  /** @Local: the panel's status is read only for this capsule, so this must re-render when it changes. */
+  @Local deviceCapsuleId: string = '';
   private deviceId: string = '';
   private deviceVersion: number = 0;
   private devicePoll: number = -1;
@@ -414,6 +415,7 @@ struct Index {
       return;
     }
     const version = await this.relay.send(deviceId, payload);
+    hilog.info(0x0001, 'Index', 'device send -> version %{public}d', version);
     if (version < 0) {
       this.deviceStatus = "Couldn't reach the device. The capsule still works here.";
       return;
