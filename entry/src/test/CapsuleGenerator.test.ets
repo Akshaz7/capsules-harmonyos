@@ -178,6 +178,53 @@ export default function capsuleGeneratorTest() {
       done();
     });
 
+    it('smart: "tennis game tracker" goes to Mistral first, never to the on-device templates', 0,
+      async (done: Function) => {
+        const t = new CountingTransport();
+        const local = onDeviceReturning(LOCAL);
+        const r = await generateCapsuleWith('tennis game tracker', [modelWith(t)], '', local);
+        expect(r.origin).assertEqual('cloud-eu:mistral');
+        expect(local.calls).assertEqual(0);
+        expect(t.calls).assertEqual(1);
+        done();
+      });
+
+    it('smart: says needsCloud instead of a simplified on-device capsule when the cloud is not allowed yet', 0,
+      async (done: Function) => {
+        const t = new CountingTransport();
+        const local = onDeviceReturning(LOCAL);
+        const r = await generateCapsuleWith('tennis game tracker', [modelWith(t)], '', local, { allowCloud: false });
+        expect(r.ok).assertFalse();
+        expect(r.needsCloud).assertTrue();
+        expect(r.error).assertContain('needs Cloud AI (mistral, EU)');
+        expect(local.calls).assertEqual(0);
+        expect(t.calls).assertEqual(0);
+        done();
+      });
+
+    it('smart: plain requests with the cloud not allowed still use on-device, without needsCloud', 0,
+      async (done: Function) => {
+        const t = new CountingTransport();
+        const r = await generateCapsuleWith(PLAIN, [modelWith(t)], '', onDeviceReturning(LOCAL), { allowCloud: false });
+        expect(r.origin).assertEqual('on-device');
+        expect(r.needsCloud).assertUndefined();
+        expect(t.calls).assertEqual(0);
+        done();
+      });
+
+    it('logic requests use on-device as best effort when no usable cloud exists', 0, async (done: Function) => {
+      const none = await generateCapsuleWith('tennis game tracker', [], '', onDeviceReturning(LOCAL),
+        { allowCloud: false });
+      expect(none.origin).assertEqual('on-device');
+      expect(none.needsCloud).assertUndefined();
+      const t = new CountingTransport();
+      const nonEu = await generateCapsuleWith('tennis game tracker', [modelWith(t, 'anthropic')], '',
+        onDeviceReturning(LOCAL), { allowCloud: false });
+      expect(nonEu.origin).assertEqual('on-device');
+      expect(t.calls).assertEqual(0);
+      done();
+    });
+
     it('on-device-only mode never calls the cloud, even for logic requests', 0, async (done: Function) => {
       const t = new CountingTransport();
       const local = onDeviceFailing();
@@ -194,7 +241,7 @@ export default function capsuleGeneratorTest() {
 
     it('does not call the cloud when allowCloud is false', 0, async (done: Function) => {
       const t = new CountingTransport();
-      const r = await generateCapsuleWith(LOGIC, [modelWith(t)], '', null, { allowCloud: false });
+      const r = await generateCapsuleWith(PLAIN, [modelWith(t)], '', null, { allowCloud: false });
       expect(r.ok).assertFalse();
       expect(r.error).assertContain(CLOUD_OFF);
       expect(t.calls).assertEqual(0);
@@ -239,7 +286,10 @@ export default function capsuleGeneratorTest() {
     it('flags maths, scoring, converting, conditions, inputs and lists', 0, () => {
       const logic = ['km to miles converter', 'darts for 3 players', 'quiz me on capitals', 'tip calculator',
         'split the bill between friends', 'tennis scoreboard', 'convert celsius to fahrenheit',
-        'warn me if my budget is over 100', 'shopping list where I type items', 'what is 12 x 7', '20% discount'];
+        'warn me if my budget is over 100', 'shopping list where I type items', 'what is 12 x 7', '20% discount',
+        'tennis game tracker', 'football match score', 'chess game tracker', 'keep track of points in our card game',
+        'cost per person for the trip', 'habit streak for reading', 'how many days in a row did I run',
+        'track my weight and tell me if I gained', 'flashcards for Spanish', 'inches to cm', 'basketball for 2 teams'];
       logic.forEach((r: string) => {
         expect(needsLogic(r) ? r : `missed: ${r}`).assertEqual(r);
       });
@@ -247,8 +297,9 @@ export default function capsuleGeneratorTest() {
 
     it('leaves plain timers, counters and checklists to the device', 0, () => {
       const plain = ['Pomodoro: a 25 minute focus timer and a 5 minute break timer', 'count the glasses of water I drink',
-        'packing list for a beach trip: sunscreen, towel, hat', 'habit streak for reading', 'track my plants',
-        'egg timer 7 minutes'];
+        'packing list for a beach trip: sunscreen, towel, hat', 'track my plants', 'egg timer 7 minutes',
+        'beep when the tea is ready in 4 minutes', 'count push-ups', 'a 2 minute plank timer that notifies me',
+        'morning routine checklist: shower, coffee, emails', 'count my steps while I walk'];
       plain.forEach((r: string) => {
         expect(needsLogic(r) ? `flagged: ${r}` : r).assertEqual(r);
       });

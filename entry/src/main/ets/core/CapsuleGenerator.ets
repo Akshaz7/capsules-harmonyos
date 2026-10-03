@@ -4,9 +4,10 @@
  *
  * Policy (mode "smart", the default):
  *   1. A built-in rule matches: use it. Nothing leaves the device.
- *   2. The request needs schema v1 logic (maths, scoring, converting, conditions, inputs, lists; see
- *      needsLogic) and a cloud provider may be used: ask the cloud first, since the on-device model
- *      only fills v0 slots. If the cloud fails, try on-device.
+ *   2. The request implies logic the on-device templates cannot express (scoring, converters, calculators,
+ *      quizzes, streaks, conditions, inputs, lists; see needsLogic) and a cloud provider may be used: ask
+ *      the cloud first. If the cloud fails, try on-device. If the cloud is configured but this call does
+ *      not allow it (allowCloud false), return needsCloud instead of a simplified on-device capsule.
  *   3. Otherwise the on-device model; if it fails or is ungrounded, the cloud.
  * A cloud provider may be used only if it is in the EU (Mistral), or the caller allows non-EU providers.
  * Mode "on-device-only" never calls the cloud. Only the request text is ever sent to the cloud.
@@ -38,14 +39,26 @@ export interface GenerateOptions {
 }
 
 /**
- * Words and patterns that need schema v1 (state, expressions, inputs, lists), which the on-device
- * slot-filler cannot build: maths, scoring, converting, conditions, inputs and lists.
+ * Requests that imply rules or logic the on-device templates (plain timers, counters, checklists)
+ * cannot express, so smart mode sends them to the cloud first: sports and game scoring, converters,
+ * calculators, quizzes, streaks, conditions ("if", "per", "%", "track ... and tell me"), inputs and lists.
  */
 const LOGIC_PATTERNS: RegExp[] = [
-  /\b(calculat\w*|comput\w*|maths?|sum|total|average|percent\w*|split|tip|tips|bmi|each|per person)\b/i,
-  /\b(scor\w*|scoreboard|points?|darts|tennis|ping ?pong|leaderboard|tally of|quiz\w*)\b/i,
-  /\b(convert\w*|km|kilomet\w*|miles?|celsius|fahrenheit|kg|lbs?|pounds?|currency|exchange rate)\b/i,
-  /\b(if|unless|otherwise|when)\b/i,
+  // calculators and maths
+  /\b(calculat\w*|comput\w*|maths?|sum|total|average|percent\w*|split|tips?|bmi|each|per|budget|discount|tax|interest|loan|price|cost)\b/i,
+  // sports and game scoring
+  /\b(scor\w*|points?|players?|teams?|leaderboard|winner|tennis|darts|golf|bowling|cricket|football|soccer|basketball|volleyball|badminton|squash|padel|ping ?pong|chess|poker|cards|board ?game|match|tally of)\b/i,
+  /\bgames?\b.*\b(track\w*|keep\w*|count\w*|record\w*)\b/i,
+  // converters
+  /\b(convert\w*|km|kilomet\w*|miles?|celsius|fahrenheit|kg|lbs?|pounds?|inch(es)?|cm|feet|litres?|liters?|gallons?|ounces?|currency|exchange rate)\b/i,
+  // quizzes
+  /\b(quiz\w*|trivia|flash ?cards?|test me|guess)\b/i,
+  // streaks and records
+  /\b(streaks?|in a row|consecutive|personal best|record)\b/i,
+  // conditions and feedback
+  /\b(if|unless|otherwise|warn me|alert me)\b/i,
+  /\btrack\w*\b.*\b(tell|show|warn|alert|let) me\b/i,
+  // inputs and lists
   /\b(type|enter|input)\b/i,
   /\b(add (items?|things|it) to|shopping list|to-?do list|list (that|where|of things))\b/i,
   /%|\d\s*[-+*/x×]\s*\d/
@@ -106,8 +119,21 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
       `AI fallback unavailable: ${modelUnavailableReason}` : AI_NOT_CONFIGURED;
   }
 
+  const logic = needsLogic(request);
+  if (logic && mode === 'smart' && options?.allowCloud === false) {
+    // The on-device templates would build a wrong, simplified capsule (e.g. two counters for tennis).
+    // If an EU provider could do it, say so instead, so the app can ask and retry with the cloud.
+    const eu = pickCloud(cloud, allowNonEu);
+    if (eu !== null) {
+      return {
+        ok: false, needsCloud: true, details: [],
+        error: `${NO_RULE_MATCH} This request needs Cloud AI (${eu.providerName}${eu.isEu ? ', EU' : ''}). ${CLOUD_OFF}`
+      };
+    }
+  }
+
   let cloudResult: GenerateResult | null = null;
-  if (chosen !== null && needsLogic(request)) {
+  if (chosen !== null && logic) {
     cloudResult = await chosen.generate(request);
     if (cloudResult.ok) {
       return cloudResult;

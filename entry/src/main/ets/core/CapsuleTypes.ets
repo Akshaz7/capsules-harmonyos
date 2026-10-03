@@ -159,4 +159,10 @@ export interface GenerateResult {
   origin?: CapsuleOrigin;
   error?: string; // one clear message when not ok
   details: string[]; // validator errors behind `error`, if any
+  /**
+   * True when the request needs the cloud (it implies logic the on-device templates cannot express) and
+   * an EU provider is configured, but this call did not allow the cloud (options.allowCloud false). Ask the
+   * user, then retry with the cloud allowed.
+   */
+  needsCloud?: boolean;
 }
