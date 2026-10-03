@@ -2,6 +2,9 @@ import { common } from '@kit.AbilityKit';
 import { curves } from '@kit.ArkUI';
 import {
   Capsule,
+  CapsuleComponent,
+  allComponents,
+  DeviceComponent,
   carryState,
   editCapsule,
   EditResult,
@@ -30,6 +33,13 @@ import { TriggerCard } from './TriggerCard';
 import { formatAt, retimed, triggerTitle, withoutTrigger } from './TriggerText';
 import { NotificationAdapter } from '../adapters/NotificationAdapter';
 import { TimerAdapter } from '../adapters/TimerAdapter';
+import { MotionAdapter, MotionStatus } from '../adapters/MotionAdapter';
+import { BatteryAdapter, BatteryReading } from '../adapters/BatteryAdapter';
+import { WeatherAdapter, WeatherResult } from '../adapters/WeatherAdapter';
+import { batteryDetail, batteryValue, DeviceReadout, emptyReadout } from '../capabilities/DeviceReadout';
+import { CITIES, City, cityName, weatherValue, WEATHER_SOURCE } from '../capabilities/WeatherData';
+import { MotionEvent } from '../capabilities/ShakeDetector';
+import { activeMotionConsumers, MotionConsumer, motionCounterIds } from '../capabilities/MotionConsumers';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
 import {
   ActionGuard,
@@ -146,7 +156,8 @@ function cloudNotice(provider: string): CloudNotice {
 }
 /** What capsules can do, for the "can't do that by design" card. */
 const CAPSULE_ABILITIES = 'timers, counters, checklists, calculations, inputs and lists, reminders, ' +
-  'notifications, vibration and the motion sensor';
+  'notifications, vibration, the motion sensor (shakes while a capsule is open), the battery reading and a ' +
+  'weather reading from Open-Meteo';
 
 /** How often due daily triggers are checked while the app is open. */
 const TRIGGER_CHECK_MS = 30 * 1000;
@@ -268,6 +279,15 @@ struct Index {
   private holdTicks: number = 0;
   @Local entries: CapsuleEntry[] = [];
   @Local openId: string = '';
+  /** Motion: one shared accelerometer subscription; the scope comes from Settings. */
+  private motion: MotionAdapter | undefined = undefined;
+  @Local motionState: MotionStatus = 'unsupported';
+  private motionProbed: boolean = false;
+  private foreground: boolean = false;
+  private battery: BatteryAdapter | undefined = undefined;
+  private weather: WeatherAdapter | undefined = undefined;
+  /** Capsule id whose city picker is open; '' when closed. */
+  @Local cityPickerId: string = '';
   @Local pending: Capsule | undefined = undefined;
   @Local pendingOrigin: string = '';
   /** T3-17: the consent sheet's "Built from a template" line; '' when the capsule was not. */
@@ -314,6 +334,14 @@ struct Index {
     this.notifications = new NotificationAdapter(ctx);
     this.store = new CapsuleStore(ctx);
     this.settings.load(ctx);
+    this.motion = new MotionAdapter();
+    this.motion.probe().then((s: MotionStatus) => {
+      this.motionState = s;
+      this.motionProbed = true;
+      this.syncMotion();
+    });
+    this.battery = new BatteryAdapter();
+    this.weather = new WeatherAdapter();
     this.watchModelStatus();
     if (reduceMotion()) {
       this.placeholderTimer = setInterval(() => {
@@ -572,6 +600,269 @@ struct Index {
     this.toast(r.fired ? `${name} ran` : r.blocked.length > 0 ? `Blocked: ${r.blocked}` : `${name} didn't run`);
   }
 
+  // ---- Motion (schema v1.1 counters with source "motion" and motion triggers) ----
+
+  /**
+   * Reads the battery for the capsule on screen, only while it is allowed and only on open or on return to
+   * the foreground. Nothing is polled in the background. (Weather joins this in the next slice.)
+   */
+  private refreshDeviceReadings(): void {
+    const entry = this.openEntry();
+    const gate = this.gate;
+    const battery = this.battery;
+    if (!entry || !gate || !battery) {
+      return;
+    }
+    this.refreshBattery(entry);
+    this.refreshWeather(entry);
+  }
+
+  /** Reads the battery only for capsules that actually show one, and only while it is allowed. */
+  private refreshBattery(entry: CapsuleEntry): void {
+    const gate = this.gate;
+    const battery = this.battery;
+    if (!gate || !battery) {
+      return;
+    }
+    const showsBattery: boolean = allComponents(entry.capsule.ui).some((c: CapsuleComponent) =>
+      c.type === 'device' && (c as DeviceComponent).bind === 'battery');
+    if (!showsBattery || !gate.isAllowed(entry.capsule, 'battery') || gate.isRemoved(entry.capsule.id)) {
+      return;
+    }
+    const reading: BatteryReading = battery.read();
+    const out: DeviceReadout = emptyReadout();
+    if (reading.state === 'ok') {
+      out.state = 'ok';
+      out.value = batteryValue(reading.soc, reading.charging);
+      out.detail = batteryDetail(reading.charging);
+      out.percent = reading.soc;
+      out.charging = reading.charging;
+    } else {
+      out.state = 'unavailable';
+      out.value = 'Unavailable';
+      out.detail = 'This phone does not report its battery here';
+    }
+    entry.runtime.setDeviceReadout('battery', out);
+  }
+
+  /** The capsule's weather component, if it has one. */
+  private weatherComponent(capsule: Capsule): DeviceComponent | undefined {
+    const hit = allComponents(capsule.ui).find((c: CapsuleComponent) =>
+      c.type === 'device' && (c as DeviceComponent).bind === 'weather');
+    return hit === undefined ? undefined : hit as DeviceComponent;
+  }
+
+  /** The city the capsule names, else the one the user picked for it; '' when none yet. */
+  private weatherCityFor(capsule: Capsule, c: DeviceComponent): string {
+    const named: string = c.city ?? '';
+    if (named.length > 0) {
+      return named;
+    }
+    return this.store?.weatherCity(capsule.id) ?? '';
+  }
+
+  /**
+   * Renders the cached reading and fetches when it is missing or older than 15 minutes. Only the chosen
+   * city's coordinates are sent, never capsule text or state. Nothing is fetched when the capsule is denied.
+   */
+  private refreshWeather(entry: CapsuleEntry): void {
+    const gate = this.gate;
+    const weather = this.weather;
+    if (!gate || !weather) {
+      return;
+    }
+    const c = this.weatherComponent(entry.capsule);
+    if (c === undefined || gate.isRemoved(entry.capsule.id) || !gate.isAllowed(entry.capsule, 'weather')) {
+      return;
+    }
+    const city: string = this.weatherCityFor(entry.capsule, c);
+    if (city.length === 0) {
+      const ask = emptyReadout();
+      ask.state = 'pending';
+      ask.title = 'Weather';
+      ask.value = '—';
+      ask.detail = 'Tap to choose a city';
+      entry.runtime.setDeviceReadout('weather', ask);
+      return;
+    }
+    const now: number = Date.now();
+    const cached: WeatherResult = weather.read(city, now);
+    if (cached.reading !== null) {
+      this.applyWeather(entry, city, cached);
+    } else {
+      const pending = emptyReadout();
+      pending.state = 'pending';
+      pending.title = cityName(city);
+      pending.value = '…';
+      pending.detail = 'Getting the weather…';
+      entry.runtime.setDeviceReadout('weather', pending);
+    }
+    if (cached.state !== 'ok') {
+      weather.refresh(city, now).then((r: WeatherResult) => {
+        const g = this.gate;
+        if (g && !g.isRemoved(entry.capsule.id) && g.isAllowed(entry.capsule, 'weather')) {
+          this.applyWeather(entry, city, r);
+        }
+      });
+    }
+  }
+
+  /** Writes one validated weather result into the capsule's read-only reading. */
+  private applyWeather(entry: CapsuleEntry, cityId: string, result: WeatherResult): void {
+    const out: DeviceReadout = emptyReadout();
+    out.title = cityName(cityId);
+    if (result.reading !== null) {
+      out.value = weatherValue(result.reading);
+      out.detail = `Updated ${this.clockText(result.reading.fetchedAt)}` +
+        (result.state === 'stale' ? ' · stale' : '');
+      out.source = WEATHER_SOURCE;
+      out.weatherCode = result.reading.code;
+      out.state = result.state === 'ok' ? 'ok' : 'stale';
+    } else {
+      out.state = result.state === 'offline' ? 'offline' : 'unavailable';
+      out.value = 'Unavailable';
+      out.detail = result.state === 'offline' ? 'No connection' : 'The weather service did not answer';
+    }
+    entry.runtime.setDeviceReadout('weather', out);
+  }
+
+  private clockText(ms: number): string {
+    const d = new Date(ms);
+    const h: number = d.getHours();
+    const m: number = d.getMinutes();
+    return `${h < 10 ? '0' : ''}${h}:${m < 10 ? '0' : ''}${m}`;
+  }
+
+  private openCityPicker(capsuleId: string): void {
+    this.cityPickerId = capsuleId;
+  }
+
+  /** Stores the picked city for that capsule, then fetches for it. */
+  private chooseCity(cityId: string): void {
+    const capsuleId: string = this.cityPickerId;
+    this.cityPickerId = '';
+    if (capsuleId.length === 0 || !this.store) {
+      return;
+    }
+    this.store.setWeatherCity(capsuleId, cityId);
+    const entry = this.entries.find((e: CapsuleEntry) => e.capsule.id === capsuleId);
+    if (entry !== undefined) {
+      this.refreshWeather(entry);
+    }
+  }
+
+  private cityPickerCurrent(): string {
+    return this.cityPickerId.length > 0 ? (this.store?.weatherCity(this.cityPickerId) ?? '') : '';
+  }
+
+  @Builder
+  citySheet() {
+    Column({ space: 8 }) {
+      Text('Weather city')
+        .fontSize($r('sys.float.Title_M'))
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('sys.color.font_primary'))
+        .width('100%')
+      Text('Only this city\'s coordinates are sent to Open-Meteo. Nothing else leaves the phone.')
+        .fontSize($r('sys.float.Caption_M'))
+        .fontColor($r('sys.color.font_secondary'))
+        .width('100%')
+      List({ space: 0 }) {
+        ForEach(CITIES, (c: City) => {
+          ListItem() {
+            Row({ space: 12 }) {
+              Text(c.name)
+                .fontSize($r('sys.float.Body_L'))
+                .fontColor($r('sys.color.font_primary'))
+                .layoutWeight(1)
+              if (this.cityPickerCurrent() === c.id) {
+                SymbolGlyph($r('sys.symbol.checkmark'))
+                  .fontSize(18)
+                  .fontColor([$r('sys.color.brand')])
+              }
+            }
+            .width('100%')
+            .height(48)
+            .onClick(() => this.chooseCity(c.id))
+          }
+        }, (c: City) => c.id)
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+    .backgroundColor($r('sys.color.background_secondary'))
+  }
+
+  /** The line under a capsule's motion counters: how to count, or why it cannot count here. */
+  private motionNoteFor(capsule: Capsule): string {
+    if (!this.motionProbed || motionCounterIds(capsule).length === 0) {
+      return '';
+    }
+    if (this.motionState === 'available') {
+      return 'Shake the phone to count';
+    }
+    if (this.motionState === 'denied') {
+      return 'Motion access is off in system settings';
+    }
+    if (this.motionState === 'error') {
+      return 'Motion sensor unavailable right now';
+    }
+    return 'Motion sensor unavailable on this device';
+  }
+
+  /** Capsules that may receive shakes now: scope setting, per-capsule grant and the capsule still present. */
+  private motionConsumersNow(): MotionConsumer[] {
+    const gate = this.gate;
+    if (!gate) {
+      return [];
+    }
+    const capsules: Capsule[] = this.entries.map((e: CapsuleEntry) => e.capsule);
+    return activeMotionConsumers(capsules, this.settings.motionScope, this.openId,
+      (c: Capsule) => gate.isAllowed(c, 'motion') && !gate.isRemoved(c.id));
+  }
+
+  /** Keeps exactly one subscription running when there is something to feed and the app is in front. */
+  private syncMotion(): void {
+    const motion = this.motion;
+    if (!motion) {
+      return;
+    }
+    if (this.motionState !== 'available' || !this.foreground || this.motionConsumersNow().length === 0) {
+      motion.stop();
+      return;
+    }
+    motion.start((e: MotionEvent) => this.onMotionEvent(e), (s: MotionStatus) => {
+      this.motionState = s;
+      motion.stop();
+    });
+  }
+
+  /**
+   * One shake event, applied to every active consumer. The motion grant is verified again immediately
+   * before each counter increment and each trigger, so a revoked capsule stops at once.
+   */
+  private onMotionEvent(e: MotionEvent): void {
+    const gate = this.gate;
+    if (!gate) {
+      return;
+    }
+    this.motionConsumersNow().forEach((c: MotionConsumer) => {
+      const entry = this.entries.find((x: CapsuleEntry) => x.capsule.id === c.capsuleId);
+      if (!entry || gate.isRemoved(entry.capsule.id) || !gate.isAllowed(entry.capsule, 'motion')) {
+        return;
+      }
+      if (e.kind === 'shake') {
+        c.counterIds.forEach((id: string) => entry.runtime.dispatch(`increment:${id}`));
+        return;
+      }
+      c.triggerIndices.forEach((i: number) => entry.runtime.fireTrigger(i, new GatekeeperTriggerGuard(gate)));
+    });
+  }
+
   private editTriggerTime(entry: CapsuleEntry, index: number): void {
     const t = (entry.capsule.triggers ?? [])[index];
     if (t === undefined || t.on !== 'time') {
@@ -745,6 +1036,7 @@ struct Index {
 
   aboutToDisappear(): void {
     this.entries.forEach((e: CapsuleEntry) => e.runtime.stop());
+    this.motion?.stop();
     clearInterval(this.statusPoll);
     clearInterval(this.placeholderTimer);
     clearInterval(this.triggerTimer);
@@ -811,10 +1103,19 @@ struct Index {
     if (!ctx) {
       return;
     }
+    this.foreground = true;
     this.entries.forEach((e: CapsuleEntry) => e.runtime.applyState(loadState(ctx, e.capsule)));
     this.loadWidgets(); // the user may have added or removed widgets while away
     this.checkTriggers(); // a time that passed while the app was away fires once now
+    this.syncMotion();
+    this.refreshDeviceReadings(); // a battery read on return to the foreground only
     hilog.info(0x0001, 'Index', 'reloaded widget state for %{public}d capsules', this.entries.length);
+  }
+
+  /** The app left the front: motion is foreground-only, so the subscription stops here. */
+  onPageHide(): void {
+    this.foreground = false;
+    this.motion?.stop();
   }
 
   /** Keeps ids unique across saved capsules so grants and calendar events never collide. */
@@ -994,6 +1295,7 @@ struct Index {
     if (this.consentForEdit) {
       // An edit that asks for new permissions: same capsule id, so the new answers replace the old grants.
       this.gate.decide(capsule, allowed);
+      this.syncMotion(); // an edit can add or drop the motion grant
       this.consentForEdit = false;
       this.pending = undefined;
       this.showSheet = false;
@@ -1001,6 +1303,7 @@ struct Index {
       return;
     }
     this.gate.decide(capsule, allowed);
+    this.syncMotion();
     this.store?.setOrigin(capsule.id, this.pendingOriginRaw);
     if (this.pendingRequest.length > 0) {
       this.store?.setRequest(capsule.id, this.pendingRequest);
@@ -1067,12 +1370,15 @@ struct Index {
     this.getUIContext().animateTo({ curve: OPEN_CURVE }, () => {
       this.openId = id;
     });
+    this.syncMotion(); // the "while a capsule is open" scope starts with this page
+    this.refreshDeviceReadings();
   }
 
   private close(): void {
     this.getUIContext().animateTo({ curve: OPEN_CURVE }, () => {
       this.openId = '';
     });
+    this.syncMotion();
   }
 
   private async undo(entry: CapsuleEntry, replacedNote?: string): Promise<void> {
@@ -1090,6 +1396,7 @@ struct Index {
       refreshCapsuleWidgets(this.ctx, capsule.id);
     }
     this.entries = this.entries.filter((e: CapsuleEntry) => e.capsule.id !== capsule.id);
+    this.syncMotion(); // no consumers left for a removed capsule
     this.message = replacedNote === undefined ? note : '';
   }
 
@@ -1504,7 +1811,8 @@ struct Index {
       SettingsView({
         settings: this.settings,
         cloudStatus: this.cloudConfigured ? '' : this.modelStatus,
-        smartDetail: this.smartModeDetail()
+        smartDetail: this.smartModeDetail(),
+        onMotionScopeChange: () => this.syncMotion()
       })
     }
   }
@@ -1524,20 +1832,24 @@ struct Index {
 
   @Builder
   sheetBody() {
-    Column() {
-      if (this.pending) {
-        ConsentView({
-          capsule: this.pending,
-          origin: this.pendingOrigin,
-          builtFrom: this.pendingBuiltFrom,
-          canBuildFresh: this.pendingBuiltFrom.length > 0 && this.settings.aiMode === 'smart' && this.cloudUsable(),
-          onBuildFresh: () => this.buildFresh(),
-          onDecide: (allowed: Permission[]) => this.decide(allowed),
-          onCancel: () => this.cancelPending()
-        })
+    if (this.cityPickerId.length > 0) {
+      this.citySheet()
+    } else {
+      Column() {
+        if (this.pending) {
+          ConsentView({
+            capsule: this.pending,
+            origin: this.pendingOrigin,
+            builtFrom: this.pendingBuiltFrom,
+            canBuildFresh: this.pendingBuiltFrom.length > 0 && this.settings.aiMode === 'smart' && this.cloudUsable(),
+            onBuildFresh: () => this.buildFresh(),
+            onDecide: (allowed: Permission[]) => this.decide(allowed),
+            onCancel: () => this.cancelPending()
+          })
+        }
       }
+      .width('100%')
     }
-    .width('100%')
   }
 
   @Builder
@@ -2101,7 +2413,8 @@ struct Index {
             settings: this.settings,
             embedded: true,
             cloudStatus: this.cloudConfigured ? '' : this.modelStatus,
-            smartDetail: this.smartModeDetail()
+            smartDetail: this.smartModeDetail(),
+            onMotionScopeChange: () => this.syncMotion()
           })
         }
       }
@@ -2207,7 +2520,11 @@ struct Index {
       Scroll() {
         Column({ space: 16 }) {
           this.originPill(entry.origin)
-          CapsuleView({ runtime: entry.runtime })
+          CapsuleView({
+            runtime: entry.runtime,
+            motionNote: this.motionNoteFor(entry.capsule),
+            onPickCity: () => this.openCityPicker(entry.capsule.id)
+          })
           this.changeCard(entry)
           if ((entry.capsule.triggers ?? []).length > 0) {
             TriggerCard({
@@ -2300,11 +2617,14 @@ struct Index {
       .width('100%')
       .height('100%')
       .backgroundColor($r('sys.color.background_secondary'))
-      .bindSheet(this.showSheet, this.sheetBody(), {
-        height: SheetSize.FIT_CONTENT,
+      // One sheet only: ArkUI keeps the last bindSheet on a node, so the consent sheet and the city picker
+      // must share this single binding (the builder branches on cityPickerId).
+      .bindSheet(this.showSheet || this.cityPickerId.length > 0, this.sheetBody(), {
+        height: this.cityPickerId.length > 0 ? 520 : SheetSize.FIT_CONTENT,
         dragBar: true,
         backgroundColor: $r('sys.color.background_secondary'),
         onDisappear: () => {
+          this.cityPickerId = '';
           if (this.pending) {
             this.cancelPending();
           }

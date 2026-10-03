@@ -1,9 +1,11 @@
+import { common } from '@kit.AbilityKit';
 import {
   ButtonComponent,
   ButtonStep,
   CapsuleComponent,
   ChecklistComponent,
   CounterComponent,
+  DeviceComponent,
   DisplayComponent,
   InputComponent,
   ListComponent,
@@ -14,6 +16,8 @@ import {
   WhenComponent
 } from '../core';
 import { allComponents } from '../core/CapsuleProgram';
+import { DeviceReadout } from '../capabilities/DeviceReadout';
+import { weatherSymbolKey, WEATHER_URL } from '../capabilities/WeatherData';
 import { CapsuleRuntime, ChecklistState, CounterState, formatClock, NumberState, TimerState } from './CapsuleRuntime';
 
 /** True if some button in the capsule increments this counter, so the row needn't show a + icon too. */
@@ -44,11 +48,18 @@ function sectionCard() {
 @ComponentV2
 export struct CapsuleView {
   @Require @Param runtime: CapsuleRuntime;
+  /** One line under motion counters: how to shake, or why it cannot count here. '' hides it. */
+  @Param motionNote: string = '';
+  /** Tapping a weather card asks the page to show its city picker. */
+  @Event onPickCity: () => void = () => {
+  };
 
   build() {
     Column({ space: 12 }) {
       ForEach(this.runtime.capsule.ui, (c: CapsuleComponent) => {
-        CapsuleNode({ runtime: this.runtime, component: c })
+        CapsuleNode({
+          runtime: this.runtime, component: c, motionNote: this.motionNote, onPickCity: this.onPickCity
+        })
       }, (c: CapsuleComponent, i: number) => `${this.runtime.serial}-${i}-${c.type}`)
       if (this.runtime.message.length > 0) {
         Text(this.runtime.message)
@@ -67,6 +78,9 @@ export struct CapsuleView {
 struct CapsuleNode {
   @Require @Param runtime: CapsuleRuntime;
   @Require @Param component: CapsuleComponent;
+  @Param motionNote: string = '';
+  @Event onPickCity: () => void = () => {
+  };
 
   @Builder
   blockedItem(c: CapsuleComponent, reason: string) {
@@ -184,8 +198,138 @@ struct CapsuleNode {
           .fontColor($r('sys.color.font_primary'))
       }
       .width('100%')
+      if (c.source === 'motion' && this.motionNote.length > 0) {
+        Text(this.motionNote)
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+          .padding({ top: 6 })
+      }
     }
     .sectionCard()
+  }
+
+  /** A read-only host reading (battery, weather). The capsule can show it but never write it. */
+  @Builder
+  deviceItem(c: DeviceComponent) {
+    Column({ space: 6 }) {
+      Row({ space: 10 }) {
+        SymbolGlyph(this.deviceSymbol(c))
+          .fontSize(20)
+          .fontColor([$r('sys.color.icon_secondary')])
+        Text(this.deviceTitle(c))
+          .fontSize($r('sys.float.Subtitle_M'))
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+        Text(this.deviceValue(c))
+          .fontSize($r('sys.float.Title_S'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .fontFeature('"tnum" on')
+      }
+      .width('100%')
+      if (this.deviceDetail(c).length > 0) {
+        Text(this.deviceDetail(c))
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+      }
+      if (this.deviceSource(c).length > 0) {
+        Text(this.deviceSource(c))
+          .fontSize($r('sys.float.Caption_S'))
+          .fontColor($r('sys.color.brand'))
+          .width('100%')
+          .onClick(() => this.openWeatherSource())
+      }
+    }
+    .sectionCard()
+    .onClick(() => {
+      if (c.bind === 'weather') {
+        this.onPickCity(); // choose or change the city
+      }
+    })
+  }
+
+  private deviceTitle(c: DeviceComponent): string {
+    const r: DeviceReadout | undefined = this.runtime.deviceReadout(c.bind);
+    if (r !== undefined && r.title.length > 0) {
+      return r.title;
+    }
+    const label: string = c.label ?? '';
+    if (label.length > 0) {
+      return label;
+    }
+    return c.bind === 'weather' ? 'Weather' : 'Battery';
+  }
+
+  private deviceValue(c: DeviceComponent): string {
+    const r: DeviceReadout | undefined = this.runtime.deviceReadout(c.bind);
+    if (r === undefined || r.state === 'pending') {
+      return '…';
+    }
+    return r.value.length > 0 ? r.value : '—';
+  }
+
+  private deviceDetail(c: DeviceComponent): string {
+    const r: DeviceReadout | undefined = this.runtime.deviceReadout(c.bind);
+    return r === undefined ? '' : r.detail;
+  }
+
+  private deviceSource(c: DeviceComponent): string {
+    const r: DeviceReadout | undefined = this.runtime.deviceReadout(c.bind);
+    return r === undefined ? '' : r.source;
+  }
+
+  private openWeatherSource(): void {
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      ctx.openLink(WEATHER_URL).catch(() => {
+      });
+    } catch (e) {
+    }
+  }
+
+  private deviceSymbol(c: DeviceComponent): Resource {
+    const r: DeviceReadout | undefined = this.runtime.deviceReadout(c.bind);
+    if (c.bind === 'weather') {
+      const key: string = r === undefined ? 'cloud' : weatherSymbolKey(r.weatherCode);
+      if (key === 'sun') {
+        return $r('sys.symbol.sun_max');
+      }
+      if (key === 'partly') {
+        return $r('sys.symbol.cloud_and_sun_fill');
+      }
+      if (key === 'snow') {
+        return $r('sys.symbol.cloud_snow');
+      }
+      if (key === 'storm') {
+        return $r('sys.symbol.cloud_heavy_storm');
+      }
+      if (key === 'rain') {
+        return $r('sys.symbol.cloud_fill');
+      }
+      return $r('sys.symbol.cloud');
+    }
+    if (r !== undefined && r.charging) {
+      return $r('sys.symbol.battery_bolt');
+    }
+    const p: number = r === undefined ? -1 : r.percent;
+    if (p >= 90) {
+      return $r('sys.symbol.battery_100percent');
+    }
+    if (p >= 70) {
+      return $r('sys.symbol.battery_80percent');
+    }
+    if (p >= 50) {
+      return $r('sys.symbol.battery_50percent');
+    }
+    if (p >= 30) {
+      return $r('sys.symbol.battery_30percent');
+    }
+    if (p >= 15) {
+      return $r('sys.symbol.battery_15percent');
+    }
+    return $r('sys.symbol.battery_5percent');
   }
 
   @Builder
@@ -324,6 +468,8 @@ struct CapsuleNode {
     } else if (this.component.type === 'counter') {
       this.counterItem(this.component as CounterComponent,
         this.runtime.counter((this.component as CounterComponent).id))
+    } else if (this.component.type === 'device') {
+      this.deviceItem(this.component as DeviceComponent)
     } else if (this.component.type === 'checklist') {
       this.checklistItem(this.component as ChecklistComponent,
         this.runtime.checklist((this.component as ChecklistComponent).id))
@@ -342,7 +488,9 @@ struct CapsuleNode {
       if (this.runtime.shown(this.component as WhenComponent)) {
         Column({ space: 12 }) {
           ForEach((this.component as WhenComponent).show, (child: CapsuleComponent) => {
-            CapsuleNode({ runtime: this.runtime, component: child })
+            CapsuleNode({
+              runtime: this.runtime, component: child, motionNote: this.motionNote, onPickCity: this.onPickCity
+            })
           }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)
         }
         .width('100%')
@@ -351,7 +499,9 @@ struct CapsuleNode {
       Row({ space: 12 }) {
         ForEach((this.component as RowComponent).items, (child: CapsuleComponent) => {
           Column() {
-            CapsuleNode({ runtime: this.runtime, component: child })
+            CapsuleNode({
+              runtime: this.runtime, component: child, motionNote: this.motionNote, onPickCity: this.onPickCity
+            })
           }
           .layoutWeight(1)
         }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)

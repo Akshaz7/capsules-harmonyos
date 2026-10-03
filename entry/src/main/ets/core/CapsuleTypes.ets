@@ -1,9 +1,10 @@
 // Types for Capsule schema v0 and v1 (see SCHEMA.md). Types only, no logic.
 
-export type Permission = 'reminders' | 'notifications' | 'vibration' | 'motion' | 'location' | 'widget';
+export type Permission =
+  'reminders' | 'notifications' | 'vibration' | 'motion' | 'location' | 'widget' | 'battery' | 'weather';
 
 export type ComponentType = 'text' | 'timer' | 'counter' | 'checklist' | 'number' | 'button' |
-  'display' | 'input' | 'list' | 'when' | 'row'; // last five: v1 only
+  'display' | 'input' | 'list' | 'when' | 'row' | 'device'; // last six: v1 only
 
 export type CounterSource = 'manual' | 'motion';
 
@@ -107,9 +108,20 @@ export interface RowComponent {
   items: CapsuleComponent[];
 }
 
+/** A read-only reading from the host; the capsule can never write it. v1 only. */
+export type DeviceBind = 'battery' | 'weather';
+
+export interface DeviceComponent {
+  type: ComponentType; // 'device'
+  bind: DeviceBind;
+  label?: string;
+  /** Weather only: one of the bundled city ids; missing means the user picks one in the app. */
+  city?: string;
+}
+
 export type CapsuleComponent =
   TextComponent | TimerComponent | CounterComponent | ChecklistComponent | NumberComponent | ButtonComponent |
-  DisplayComponent | InputComponent | ListComponent | WhenComponent | RowComponent;
+  DisplayComponent | InputComponent | ListComponent | WhenComponent | RowComponent | DeviceComponent;
 
 export interface Capsule {
   schemaVersion: number; // 0 or 1
@@ -140,11 +152,15 @@ export const MAX_TRIGGER_LABEL: number = 60;
 
 export const SCHEMA_VERSION: number = 0;
 
-export const PERMISSIONS: string[] = ['reminders', 'notifications', 'vibration', 'motion', 'location', 'widget'];
+export const PERMISSIONS: string[] =
+  ['reminders', 'notifications', 'vibration', 'motion', 'location', 'widget', 'battery', 'weather'];
 
 export const COMPONENT_TYPES: string[] = ['text', 'timer', 'counter', 'checklist', 'number', 'button'];
 
-export const V1_COMPONENT_TYPES: string[] = ['display', 'input', 'list', 'when', 'row'];
+export const V1_COMPONENT_TYPES: string[] = ['display', 'input', 'list', 'when', 'row', 'device'];
+
+/** Device readings a capsule may ask for. Unknown binds are rejected by the validator. */
+export const DEVICE_BINDS: string[] = ['battery', 'weather'];
 
 export const MAX_SCHEMA_VERSION: number = 1;
 

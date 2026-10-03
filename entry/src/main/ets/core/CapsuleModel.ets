@@ -5,6 +5,7 @@
 import { Capsule, GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
 import { ChatMessage, cloudOrigin, isEuProvider, ModelProvider, ProviderName } from './ModelProvider';
+import { generatorCapabilitiesText, implementedCapabilityProse } from '../capabilities/CapabilityRegistry';
 
 /** Copy of SCHEMA.md (v0 + v1). Keep in sync with SCHEMA.md, which is the contract. */
 export const SCHEMA_TEXT: string = `# Capsule schema (v0, plus v1 additions)
@@ -84,11 +85,14 @@ ${SCHEMA_TEXT}
 Example v1 capsules:
 ${V1_EXAMPLES.join('\n\n')}
 
+Device capabilities that exist today (use only these, and only the components described here):
+${generatorCapabilitiesText()}
+
 Rules:
 - Reply with exactly one JSON object and nothing else. No markdown, no comments, no code.
 - Use only the fields and component types above. Every field listed for a component is required.
 - "permissions" must list every permission the capsule needs: timers and every timer action (startTimer, pauseTimer, stopTimer, resetTimer, startAllTimers) need "reminders",
-  counters with source "motion" need "motion", notify:<text> needs "notifications". List nothing else.
+  counters with source "motion" need "motion", notify:<text> needs "notifications", and the device readings above need their own permission. List only permissions from this list.
 - Ids are short lowercase-kebab-case and unique. Actions must refer to existing ids
   (startTimer, pauseTimer, stopTimer, resetTimer -> a timer; increment -> a counter).
 - Timer minutes are positive numbers. Checklists have at least one item.
@@ -145,11 +149,13 @@ checklists, number inputs, text, buttons and (schema v1) state, computed values,
 conditional parts. Read the user's request and list what the app must do: what it shows, what the user can enter
 or tap, and every rule or calculation (for example the scoring rules of a game). Be concrete and short.
 Plan only what the user asked for, with the simplest parts that do it: a fixed list to tick off is a checklist,
-counting things is a counter (steps and reps can use the motion sensor), timers are timers (a countdown is
+counting things is a counter (a counter with source "motion" counts shakes while the capsule is open; steps and
+reps are ordinary tap counters), timers are timers (a countdown is
 always a timer with minutes; expressions have no clock, so never plan a countdown in state). Do not add goals,
 confirmations, progress or other extras the user did not ask for.
-Capsules can only use timers and reminders, notifications, vibration, the motion sensor, location and a home
-screen widget. The only things capsules cannot do are these runtime actions: send SMS, make phone calls, read
+Capsules can only use timers and reminders, notifications, vibration and these device capabilities:
+${implementedCapabilityProse()}. They can also live on a home screen widget.
+The only things capsules cannot do are these runtime actions: send SMS, make phone calls, read
 contacts, send email, browse websites and take payments. Refuse only if the app itself would have to do one of
 those. A request that mentions a photo, the camera, a recipe from the internet, a receipt or a file is fine:
 plan the capsule it describes (for example cooking timers, a bill split, a checklist). A reminder to call
