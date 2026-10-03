@@ -6,6 +6,8 @@
 #   ./test_api.sh http://harmoniser.local # the board (or http://<ip shown on its screen>)
 #
 # Takes about 10 seconds. Exits non-zero if any check fails.
+# Needs bash and curl. Every check is a status code or a field that the mock and the board
+# must agree on, so one script proves both.
 # On the board the last step lets a 2 second timer run out: the screen should flash and beep.
 
 BASE=${1:-http://localhost:8080}
@@ -17,19 +19,29 @@ FAILED=0
 STATUS=""
 BODY=""
 
-# call METHOD PATH [JSON]: runs curl, prints the exchange, sets STATUS and BODY.
+# call METHOD PATH [JSON [HEADER]]: runs curl, prints the exchange, sets STATUS and BODY.
+# -4: a .local name otherwise waits for an IPv6 answer that never comes; the board is IPv4 only.
 call() {
-    local method=$1 path=$2 json=${3-}
+    local method=$1 path=$2 json=${3-} header=${4-}
+    local shown=$json
+    [ ${#shown} -le 120 ] || shown="${shown:0:60}...(${#json} bytes)"
     if [ -n "$json" ]; then
-        echo "\$ curl -s -X $method $BASE$path -d '$json'"
-        STATUS=$(curl -s -m 5 -o "$BODY_FILE" -w '%{http_code}' -X "$method" "$BASE$path" \
-            -H 'Content-Type: application/json' -d "$json")
+        echo "\$ curl -s -X $method $BASE$path -d '$shown'${header:+ -H '$header'}"
+        STATUS=$(curl -4 -s -m 5 -o "$BODY_FILE" -w '%{http_code}' -X "$method" "$BASE$path" \
+            -H "${header:-Content-Type: application/json}" -d "$json")
     else
         echo "\$ curl -s -X $method $BASE$path"
-        STATUS=$(curl -s -m 5 -o "$BODY_FILE" -w '%{http_code}' -X "$method" "$BASE$path")
+        STATUS=$(curl -4 -s -m 5 -o "$BODY_FILE" -w '%{http_code}' -X "$method" "$BASE$path")
     fi
     BODY=$(cat "$BODY_FILE")
     echo "$STATUS $BODY"
+}
+
+# repeat TEXT N: TEXT, N times over.
+repeat() {
+    local out="" i
+    for ((i = 0; i < $2; i++)); do out+=$1; done
+    printf '%s' "$out"
 }
 
 # field NAME: value of a top-level field in BODY (the API always answers with flat, compact JSON).
@@ -97,6 +109,18 @@ call POST /capsule '{"type":"counter","label":"Reps","count":41}'
 expect_field count 41
 call POST /capsule '{"type":"counter","label":"abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"}'
 expect_field label abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstu
+# Cut to 47 bytes without splitting a character: 46 letters, then a 2-byte one that does not fit.
+call POST /capsule '{"type":"counter","label":"abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrsté"}'
+expect_field label abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrst
+# Brackets inside a string are not nesting, and an escaped quote does not end the string.
+call POST /capsule '{"type":"counter","label":"[[[[[[[[[[{{{{{{{{{{"}'
+expect_status 200
+expect_field label '[[[[[[[[[[{{{{{{{{{{'
+call POST /capsule '{"type":"counter","label":"a\"[[[[[[[[[[[["}'
+expect_status 200
+call POST /capsule '{"type":"counter","label":"Deep","note":[[[[[[[8]]]]]]]}'
+expect_status 200
+expect_field label Deep
 
 echo
 echo "== Motion mode (experimental)"
@@ -136,6 +160,8 @@ expect_field running false
 expect_field remaining_seconds 540
 call POST /action '{"action":"increment"}'
 expect_status 409
+call POST /action '{"action":"motion_on"}'
+expect_status 409
 call POST /capsule '{"type":"timer","label":"Tea","seconds":180,"running":false}'
 expect_field running false
 expect_field remaining_seconds 180
@@ -166,7 +192,42 @@ call GET /capsule
 expect_status 405
 call POST /state '{}'
 expect_status 405
+call OPTIONS /state
+expect_status 405
+expect_field error 'method not allowed'
+call HEAD /state
+expect_status 405
+
+# JSON nested deeper than 8 levels. 300 levels used to overflow the board's stack and reboot it.
+call POST /capsule "$(repeat '[' 300)"
+expect_status 400
+call POST /action "$(repeat '{"a":' 200)"
+expect_status 400
+call POST /capsule '{"type":"counter","label":"nine","note":[[[[[[[[9]]]]]]]]}'
+expect_status 400
+call POST /action '{"action":"reset","note":[[[[[[[[9]]]]]]]]}'
+expect_status 400
+
+# Labels that are not text: half a surrogate pair, bytes that are not UTF-8, a NUL.
+# (The mock used to drop the connection on the first one, with the type already changed.)
+call POST /capsule '{"type":"counter","label":"\ud83d"}'
+expect_status 400
+call POST /capsule $'{"type":"counter","label":"caf\xc3"}'
+expect_status 400
+call POST /capsule $'{"type":"counter","label":"\xff\xfe"}'
+expect_status 400
+call POST /capsule '{"type":"counter","label":"a\u0000b"}'
+expect_status 400
+
+# Bodies that are refused before they are read.
+call POST /capsule '{"type":"counter","label":"negative length"}' 'Content-Length: -1'
+expect_status 400
+call POST /capsule "{\"type\":\"counter\",\"label\":\"too big\",\"note\":\"$(repeat x 1100)\"}"
+expect_status 413
+
 call GET /state
+expect_status 200
+expect_field type timer
 expect_field label Tea
 expect_field remaining_seconds 180
 
