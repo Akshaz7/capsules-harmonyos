@@ -1,7 +1,7 @@
 import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
-import { initCapsuleModel } from '../core';
+import { initCapsuleModel, initTemplates } from '../core';
 import { takeWidgetWant } from '../pages/WidgetLaunch';
 import { takeShareWant } from '../pages/ShareLaunch';
 
@@ -20,6 +20,10 @@ export default class EntryAbility extends UIAbility {
     // Loads the optional AI fallback config; stays rules-only if missing. Never throws.
     initCapsuleModel(this.context).then((ready: boolean) => {
       hilog.info(DOMAIN, 'testTag', 'initCapsuleModel ready=%{public}s', String(ready));
+    });
+    // Built-in templates (rawfile) and the request cache; core templates work until this loads. Never throws.
+    initTemplates(this.context).then((count: number) => {
+      hilog.info(DOMAIN, 'testTag', 'initTemplates templates=%{public}d', count);
     });
   }
 

@@ -3,7 +3,9 @@
  * Pure logic; the app-facing generateCapsule(request) lives in index.ets.
  *
  * Policy (mode "smart", the default):
+ *   0. The same request made a capsule before (request cache): reuse it.
  *   1. A built-in rule matches: use it. Nothing leaves the device.
+ *   1b. A built-in template explains the request (core/templates): fill it on the phone (origin "template").
  *   2. The request implies logic the on-device templates cannot express (scoring, converters, calculators,
  *      quizzes, streaks, conditions, inputs, lists; see needsLogic) and a cloud provider may be used: ask
  *      the cloud first. If the cloud fails, try on-device. If the cloud is configured but this call does
@@ -13,11 +15,14 @@
  * Mode "on-device-only" never calls the cloud. Option cloudOnly skips rules and on-device (same cloud
  * policy). Only the request text is ever sent to the cloud.
  */
-import { GenerateResult } from './CapsuleTypes';
+import { CapsuleOrigin, GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
 import { parseRequest } from './RuleParser';
 import { CapsuleModel } from './CapsuleModel';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
+import { matchTemplateIn, TemplateLibrary, TemplateMatch } from './templates/TemplateLibrary';
+import { fillUnclearSlots, SlotModel } from './templates/SlotFill';
+import { RequestCache } from './templates/RequestCache';
 import { capsuleFromSharedText, MAX_SHARED_TEXT, SHARED_EMPTY, SHARED_NOT_RECOGNISED, SHARED_TOO_LONG } from './SharedText';
 
 export const NO_RULE_MATCH: string = 'No built-in rule understands this request.';
@@ -31,6 +36,14 @@ export interface CapsuleSource {
 }
 
 export type GenerateMode = 'smart' | 'on-device-only';
+
+/** Local sources tried before the models (all optional): the request cache, then built-in templates. */
+export interface LocalSources {
+  cache?: RequestCache;
+  library?: TemplateLibrary;
+  /** The on-device model, to fill template slots the rules missed. */
+  slotModel?: SlotModel;
+}
 
 export interface GenerateOptions {
   /** "smart" (default): rules, then on-device and cloud as the policy says. "on-device-only": never the cloud. */
@@ -111,7 +124,8 @@ function failure(why: string[]): GenerateResult {
  * config that exists could not be used.
  */
 export async function generateCapsuleWith(request: string, cloud: CapsuleModel[],
-  modelUnavailableReason?: string, onDevice?: CapsuleSource | null, options?: GenerateOptions): Promise<GenerateResult> {
+  modelUnavailableReason?: string, onDevice?: CapsuleSource | null, options?: GenerateOptions,
+  local?: LocalSources): Promise<GenerateResult> {
   if (request.trim().length === 0) {
     return { ok: false, error: 'The request is empty.', details: [] };
   }
@@ -139,6 +153,11 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
     return chosen !== null ? chosen.generate(request) : { ok: false, error: cloudWhy, details: [] };
   }
 
+  const cached = local?.cache !== undefined ? local.cache.get(request) : null;
+  if (cached !== null) {
+    return { ok: true, capsule: cached.capsule, origin: cached.origin as CapsuleOrigin, details: [] };
+  }
+
   const fromRules = parseRequest(request);
   if (fromRules !== null) {
     const v = validateCapsule(JSON.stringify(fromRules));
@@ -146,6 +165,15 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
       return { ok: true, capsule: v.capsule, origin: 'rules', details: [] };
     }
     // A rule produced an invalid capsule (a bug); fall through to the models rather than return it.
+  }
+
+  // A built-in template that explains the whole request: made on the phone, no model, no internet.
+  let template: TemplateMatch | null = local?.library !== undefined ? matchTemplateIn(local.library, request) : null;
+  if (template !== null) {
+    if (template.unfilledSlots.length > 0 && local?.slotModel !== undefined) {
+      template = await fillUnclearSlots(template, request, local.slotModel); // never worse than the rules' values
+    }
+    return { ok: true, capsule: template.capsule, origin: 'template', details: [] };
   }
 
   const logic = cloudFirst(request);

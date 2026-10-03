@@ -171,7 +171,8 @@ export interface ValidationResult {
 /** Cloud origins name the provider; "cloud-eu:" marks providers hosted in the EU. */
 export type CloudOrigin = 'cloud-eu:mistral' | 'cloud:anthropic' | 'cloud:openai';
 
-export type CapsuleOrigin = 'rules' | 'on-device' | CloudOrigin;
+/** 'template': a built-in template filled on the phone (core/templates). */
+export type CapsuleOrigin = 'rules' | 'template' | 'on-device' | CloudOrigin;
 
 export interface GenerateResult {
   ok: boolean;

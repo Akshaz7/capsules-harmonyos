@@ -773,7 +773,8 @@ struct Index {
 
   /** "Make it smarter": offered on rules and on-device capsules when smart mode can use the cloud. */
   private canMakeSmarter(entry: CapsuleEntry): boolean {
-    return (entry.origin === 'rules' || entry.origin === 'on-device') && this.settings.aiMode === 'smart' &&
+    return (entry.origin === 'rules' || entry.origin === 'template' || entry.origin === 'on-device') &&
+      this.settings.aiMode === 'smart' &&
       this.cloudUsable();
   }
 

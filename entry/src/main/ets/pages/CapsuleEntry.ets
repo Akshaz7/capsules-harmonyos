@@ -30,6 +30,8 @@ export function originBadge(origin: string): string {
       return 'Made by rules';
     case 'on-device':
       return 'Made on-device';
+    case 'template':
+      return 'Made on your phone · no internet';
     case 'cloud-eu:mistral':
     case 'cloud': // saved before core named the provider; only Mistral was used then
       return 'Made with Mistral (EU)';

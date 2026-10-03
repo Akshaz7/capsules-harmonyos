@@ -9,6 +9,18 @@ import {
 } from '../main/ets/core/templates/TemplateLibrary';
 import { fillUnclearSlots, parseSlotReply, slotPrompt } from '../main/ets/core/templates/SlotFill';
 import { MemoryStore, normaliseRequest, RequestCache } from '../main/ets/core/templates/RequestCache';
+import { CapsuleSource, generateCapsuleWith, LocalSources } from '../main/ets/core/CapsuleGenerator';
+import { GenerateResult } from '../main/ets/core/CapsuleTypes';
+
+class CountingSource implements CapsuleSource {
+  calls: number = 0;
+
+  async generate(request: string): Promise<GenerateResult> {
+    this.calls++;
+    const r = validateCapsule('{"schemaVersion":0,"id":"x","name":"From device","permissions":[],"ui":[]}');
+    return { ok: true, capsule: r.capsule, origin: 'on-device', details: [] };
+  }
+}
 
 const library = new TemplateLibrary(CORE_TEMPLATES);
 
@@ -156,5 +168,27 @@ export default function templatesTest() {
       expect(new RequestCache(store).get('x') === null).assertTrue();
       expect(new RequestCache(new MemoryStore()).get('anything') === null).assertTrue();
     });
-  });
+    it('routing: cache, then rules, then a template, before the on-device model', 0, async () => {
+      const device = new CountingSource();
+      const cache = new RequestCache(new MemoryStore());
+      const local: LocalSources = { cache: cache, library: library };
+      const t = await generateCapsuleWith('tennis scoreboard me vs Sam', [], '', device, undefined, local);
+      expect(t.origin).assertEqual('template');
+      expect(t.capsule?.name).assertEqual('Tennis: Me vs Sam');
+      expect(device.calls).assertEqual(0);
+      const rules = await generateCapsuleWith('count my squats', [], '', device, undefined, local);
+      expect(rules.origin).assertEqual('rules');
+      const other = await generateCapsuleWith('my grandma knitting patterns', [], '', device, undefined, local);
+      expect(other.origin).assertEqual('on-device');
+      expect(device.calls).assertEqual(1);
+      await cache.put('my grandma knitting patterns', other.capsule as Capsule, 'on-device');
+      const again = await generateCapsuleWith('My grandma knitting patterns!', [], '', device, undefined, local);
+      expect(again.origin).assertEqual('on-device');
+      expect(device.calls).assertEqual(1); // served from the cache
+      const smarter = await generateCapsuleWith('my grandma knitting patterns', [], '', device, { cloudOnly: true }, local);
+      expect(smarter.ok).assertFalse(); // "Make it smarter" skips the cache (no cloud configured here)
+      const plain = await generateCapsuleWith('tennis scoreboard me vs Sam', [], '', device);
+      expect(plain.origin).assertEqual('on-device'); // without local sources nothing changes
+    });
+});
 }

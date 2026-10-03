@@ -25,6 +25,7 @@ import {
   createProvider, HttpResponse, HttpTransport, isEuProvider, ModelConfig, ModelConfigResult, parseModelConfig, ProviderName,
   parseModelConfigs
 } from './ModelProvider';
+import { getRequestCache, getTemplateLibrary } from './templates';
 import { CactusProvider, OnDeviceStatus } from './providers/CactusProvider';
 
 export * from './CapsuleTypes';
@@ -44,6 +45,8 @@ export {
   SHARED_TOO_LONG
 } from './SharedText';
 export { OnDeviceStatus } from './providers/CactusProvider';
+export { initTemplates, matchTemplate, getTemplateLibrary, getRequestCache, TEMPLATE_BADGE, TEMPLATE_ORIGIN
+} from './templates';
 export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';
 export { StateValues, EvalResult, ApplyResult, DISPLAY_ERROR, initialState, restoreState, evaluate, computedValues,
   renderTemplate, isShown, isEnabled, listItems, inputText, applyActions, setInput, allComponents } from './CapsuleProgram';
@@ -200,13 +203,30 @@ class LazyOnDevice implements CapsuleSource {
 
 const lazyOnDevice: LazyOnDevice = new LazyOnDevice();
 
+/** The on-device model fills template slots the rules missed; throws when it is not ready. */
+async function onDeviceSlots(prompt: string): Promise<string> {
+  await onDevice.whenInitialised();
+  if (!onDevice.isReady()) {
+    throw new Error(onDevice.getStatus().message);
+  }
+  return onDevice.completePrompt(prompt, 120);
+}
+
 /**
- * Routes a request: rules, then on-device and the cloud as the policy in CapsuleGenerator.ets says
- * (mode "smart" by default; the cloud only with EU providers unless options.allowNonEu).
- * Returns a validated capsule or a clear error. Only the request text is sent to a cloud provider.
+ * Routes a request: the request cache, rules, built-in templates, then on-device and the cloud as the policy
+ * in CapsuleGenerator.ets says (mode "smart" by default; the cloud only with EU providers unless
+ * options.allowNonEu). Returns a validated capsule or a clear error. Only the request text is sent to a cloud
+ * provider. Model-made capsules are cached for the same request; "Make it smarter" (cloudOnly) skips the cache
+ * and replaces the cached capsule.
  */
 export async function generateCapsule(request: string, options?: GenerateOptions): Promise<GenerateResult> {
-  return generateCapsuleWith(request, models, modelError, lazyOnDevice, options);
+  const cache = getRequestCache();
+  const r = await generateCapsuleWith(request, models, modelError, lazyOnDevice, options,
+    { cache: cache, library: getTemplateLibrary(), slotModel: onDeviceSlots });
+  if (r.ok && r.capsule !== undefined && r.origin !== undefined && r.origin !== 'rules' && r.origin !== 'template') {
+    cache.put(request, r.capsule, r.origin); // async; a failed write only means it is made again next time
+  }
+  return r;
 }
 
 /**

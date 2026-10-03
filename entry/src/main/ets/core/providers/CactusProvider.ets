@@ -611,6 +611,14 @@ export class CactusProvider implements CapsuleSource {
     }
   }
 
+  /** One raw engine call for template slot filling (core/templates/SlotFill.ets). Throws if not ready. */
+  async completePrompt(prompt: string, maxTokens: number): Promise<string> {
+    if (!this.status.ready) {
+      throw new Error(this.status.message);
+    }
+    return this.run(prompt, maxTokens);
+  }
+
   /** One engine call; returns the reply text or throws an Error with a user-facing message. */
   private async run(prompt: string, maxTokens: number): Promise<string> {
     let engine: EngineResponse;
