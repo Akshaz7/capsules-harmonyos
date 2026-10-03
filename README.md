@@ -91,15 +91,30 @@ Measured on the HarmonyOS emulator. It runs on the host's Apple M4 Pro cores, so
 
 ## AI evaluation
 
-`scripts/eval-providers.mjs` runs requests through each configured cloud provider, using the app's own prompt, validator and v1 interpreter. It checks both that the capsule is valid and that it does the right thing. The prompt was tuned on 15 requests and then locked. The 5 held-out requests were written afterwards and never used for tuning.
+`scripts/eval-providers.mjs` runs requests through each configured cloud provider, using the app's own prompt, validator and v1 interpreter. It checks both that the capsule is valid and that it does the right thing. There are three sets:
+- **Tuning (15 requests):** used to develop the prompt.
+- **Held-out (5):** written after the first prompt was locked, and never used for tuning.
+- **Refusal (2):** nonsense, and a request for capabilities capsules don't have, which should be refused.
+
+**Current pipeline** (two-step plan, capsule, self-check, with refusals; commit `4375cc3`). These are the final numbers, with network failures re-run:
 
 | Set | Mistral `ministral-14b-latest` (EU) | Anthropic `claude-sonnet-5-5` |
 | --- | --- | --- |
-| Tuning set (15) | 15/15 on the final run (earlier runs ranged from 12 to 14) | 15/15 |
-| Held-out set (5) | 3/5 | 5/5 |
-| Hard logic requests (4): tennis scoreboard, darts for 3 players, quiz on capitals, reading streak | **2/4** | **4/4** |
+| Tuning (15) | 14/15 | 14/15 |
+| Held-out (5) | 4/5 | 5/5 |
+| Refusal (2) | 2/2 | 2/2 |
 
-On the hard requests, Ministral built the tennis scoreboard and darts correctly. The quiz and the habit streak failed both attempts: the model used step types and functions the schema doesn't have. The validator rejected both, so no wrong capsule reached the user, but those requests fail. Claude was correct on all four, and faster on the tennis scoreboard (12 s against 22 s). We still default to Mistral because it is hosted in the EU. That is a deliberate privacy-over-accuracy trade-off. Claude is available only if you turn on **Allow non-EU providers**. These are small samples, and the numbers are indicative, not a benchmark.
+The prompt has changed since the held-out set was written: the two-step pipeline was added, and the plan prompt was adjusted after the eval caught Claude running out of output tokens and plans over-building simple apps. The held-out requests still weren't used to tune it, but read 4/5 and 5/5 with that in mind.
+
+**Hard logic requests** (tennis scoreboard, darts for 3 players, quiz on capitals, reading streak), measured on the earlier single-step prompt:
+
+| | Mistral `ministral-14b-latest` (EU) | Anthropic `claude-sonnet-5-5` |
+| --- | --- | --- |
+| Hard logic (4) | **2/4** | **4/4** |
+
+Ministral built the tennis scoreboard and darts correctly. The quiz and the habit streak failed both attempts: the model used step types and functions the schema doesn't have. The validator rejected both, so no wrong capsule reached the user, but those requests fail. Claude was correct on all four, and faster on the tennis scoreboard (12 s against 22 s). This set hasn't been re-run on the current pipeline.
+
+We still default to Mistral because it is hosted in the EU. That is a deliberate privacy-over-accuracy trade-off. Claude is available only if you turn on **Allow non-EU providers**. These are small samples, and the numbers are indicative, not a benchmark.
 
 ## Setup, build, install, launch
 
@@ -178,10 +193,10 @@ tail -1 entry/.test/default/intermediates/test/coverage_data/test_result.txt
 | Schema v1 (state, computed values, safe expressions, new components) | **Real.** Validator, interpreter, renderer and router are unit-tested, including a full tennis scoreboard (15/30/40, deuce, advantage, games) and a live bill split. On the emulator, `demo tennis` (deuce, "Advantage P1", Reset enabled only after a point) and `demo bill split` (inputs update "Each pays") render and work. Mistral built a v1 Reading Log in the app. |
 | On-device rule parser | **Real.** Unit-tested, and every rule's output is checked against the validator. |
 | On-device LLM (Cactus + LFM2-VL-450M) | **Real, partly verified.** On the emulator the engine loads (`cactus_init ok in 310.7 ms`) and decodes at 92–113 tokens/s. On a 15-request eval on the emulator, using the app's provider code, it got 9/15 correct, and the full chain with rules got 11/15. It is not yet demonstrated through the main screen. Performance on a real phone has not been measured, and offline use was not strictly tested (emulator airplane mode doesn't cut its network). |
-| Cloud LLM (model call, validate, one corrective retry) | **Real.** In the app on the emulator, a request the on-device model couldn't build showed the notice, **OK** sent it to Mistral, and Mistral returned a valid v1 capsule. Eval with the app's locked prompt and validator: on the tuning set (15), Mistral `ministral-14b-latest` 15/15 and Anthropic `claude-sonnet-5-5` 15/15. On the held-out set (5, never used for tuning), Mistral 3/5 and Anthropic 5/5; the validator rejected both Mistral failures. Anthropic has not been exercised in the app. |
+| Cloud LLM (model call, validate, one corrective retry) | **Real.** In the app on the emulator, a request the on-device model couldn't build showed the notice, **OK** sent it to Mistral, and Mistral returned a valid v1 capsule. "Make it smarter" rebuilt a capsule with Claude. Eval on the current two-step pipeline: Mistral 14/15 tuning, 4/5 held-out and 2/2 refusals; Claude 14/15, 5/5 and 2/2 (see [AI evaluation](#ai-evaluation)). |
 | Typing a request in the app | **Real.** Text box, then **Create**, then `generateCapsule`, then the consent sheet, then the saved grid. Checked on the emulator: the checklist, `3 timers …` and `pasta 9 min, sauce 15 min, bread 6 min` requests were made by rules. |
 | Origin badges, AI mode setting, per-provider cloud notice | **Real.** Each cloud provider has its own badge: "Made with Mistral (EU)", "Made with Claude" or "Made with OpenAI". The per-provider notice (`bef3b2b`) is in code, but its commit doesn't record an emulator check. |
-| Refusing unsupported or nonsense requests | **Implemented and unit-tested; eval has a refusal set.** The "can't do … by design" card has no recorded emulator check. **Known mismatch:** the card's list of what capsules can use includes vibration and the motion sensor, but neither is built yet (see below). |
+| Refusing unsupported or nonsense requests | **Implemented and unit-tested; both providers refused 2/2 in the eval.** The "can't do … by design" card has no recorded emulator check. **Known mismatch:** the card's list of what capsules can use includes vibration and the motion sensor, but neither is built yet (see below). |
 | v1 number and text inputs | **Real.** Checked on the emulator: typing replaces the value (bill split, km to miles, quiz topic) |
 | Make it smarter (cloud rebuild) | **Real.** On the emulator, a rules-made quiz capsule was rebuilt with Claude (non-EU allowed on that device). The consent sheet showed "Made with Claude", and **Run** replaced the old capsule. The `cloudOnly` follow-up (`58839bf`), for requests that match a built-in rule, is unit-tested; its commit doesn't record an emulator check. |
 | Renderer, v0 components (text, timer, counter, checklist, number, button) | **Real.** Draws the generated capsule |
