@@ -76,6 +76,26 @@ static bool absent_or_null(const cJSON *item)
     return !item || cJSON_IsNull(item);
 }
 
+#define HW_PREFIX "harmoniser-wrist:"
+
+void relay_hw_id(const uint8_t secret[RELAY_HW_SECRET_BYTES], const uint8_t mac[6], relay_sha256_fn sha256,
+                 char out[RELAY_HW_ID_CHARS + 1])
+{
+    static const char HEX[] = "0123456789abcdef";
+    uint8_t input[sizeof(HW_PREFIX) - 1 + RELAY_HW_SECRET_BYTES + 6];
+    uint8_t digest[32];
+    memcpy(input, HW_PREFIX, sizeof(HW_PREFIX) - 1);
+    memcpy(input + sizeof(HW_PREFIX) - 1, secret, RELAY_HW_SECRET_BYTES);
+    memcpy(input + sizeof(HW_PREFIX) - 1 + RELAY_HW_SECRET_BYTES, mac, 6);
+    sha256(input, sizeof(input), digest);
+    for (int i = 0; i < RELAY_HW_ID_CHARS / 2; i++) {
+        out[i * 2] = HEX[digest[i] >> 4];
+        out[i * 2 + 1] = HEX[digest[i] & 0x0F];
+    }
+    out[RELAY_HW_ID_CHARS] = '\0';
+    memset(input, 0, sizeof(input));  // the secret was in there
+}
+
 char *relay_register_body(const char *hw, const char *fw)
 {
     cJSON *root = cJSON_CreateObject();

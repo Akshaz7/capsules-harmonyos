@@ -34,6 +34,18 @@ typedef struct {
     char pair_url[RELAY_PAIR_URL_MAX + 1];  // what the QR code holds; empty: the relay gave none
 } relay_credentials_t;
 
+#define RELAY_HW_SECRET_BYTES 16   // random, made on the board, never leaves it
+#define RELAY_HW_ID_CHARS 32       // hex digits: 128 bits of the digest
+
+// SHA-256 of `len` bytes into 32 bytes of `digest`. relay.c passes mbedTLS's.
+typedef void (*relay_sha256_fn)(const uint8_t *data, size_t len, uint8_t digest[32]);
+
+// The `hw` the board registers under: the first RELAY_HW_ID_CHARS hex digits of
+// SHA-256("harmoniser-wrist:" || secret || mac). The MAC is visible to anyone in radio range;
+// the secret is what keeps somebody else from working `hw` out and registering as this board.
+void relay_hw_id(const uint8_t secret[RELAY_HW_SECRET_BYTES], const uint8_t mac[6], relay_sha256_fn sha256,
+                 char out[RELAY_HW_ID_CHARS + 1]);
+
 // The body for POST /api/devices/register. Free with cJSON_free(). NULL if memory ran out.
 char *relay_register_body(const char *hw, const char *fw);
 

@@ -10,6 +10,7 @@
 #include "check.h"
 #include "motion.h"
 #include "relay_sync.h"
+#include "sha256.h"
 #include "stubs.h"
 
 static bool s_motion_sensor = true;
@@ -238,6 +239,66 @@ static void test_text_ok(void)
     CHECK(relay_text_ok("a-b", 8, "-"));
     CHECK(!relay_text_ok("a-b", 8, ""));
     CHECK(!relay_text_ok("a\xc3\xa9", 8, "-"));
+}
+
+// ---- the hardware id ----
+
+static void hex(const uint8_t *bytes, size_t len, char *out)
+{
+    for (size_t i = 0; i < len; i++) {
+        sprintf(out + i * 2, "%02x", bytes[i]);
+    }
+}
+
+static void test_the_test_sha256(void)  // the standard vectors, and lengths around the padding edge
+{
+    uint8_t digest[32];
+    char text[65];
+    test_sha256((const uint8_t *)"", 0, digest);
+    hex(digest, 32, text);
+    CHECK_STR(text, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    test_sha256((const uint8_t *)"abc", 3, digest);
+    hex(digest, 32, text);
+    CHECK_STR(text, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    uint8_t many[119];
+    memset(many, 'a', sizeof(many));
+    test_sha256(many, 56, digest);
+    hex(digest, 32, text);
+    CHECK_STR(text, "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a");
+    test_sha256(many, 119, digest);
+    hex(digest, 32, text);
+    CHECK_STR(text, "31eba51c313a5c08226adf18d4a359cfdfd8d2e816b13f4af952f7ea6584dcfb");
+}
+
+static void test_hw_id(void)
+{
+    uint8_t secret[RELAY_HW_SECRET_BYTES], mac[6] = { 0x02, 0x00, 0x00, 0xaa, 0xbb, 0xcc };
+    for (int i = 0; i < RELAY_HW_SECRET_BYTES; i++) {
+        secret[i] = (uint8_t)i;
+    }
+    char hw[RELAY_HW_ID_CHARS + 2];
+    hw[RELAY_HW_ID_CHARS + 1] = 'x';
+    relay_hw_id(secret, mac, test_sha256, hw);
+    // python3: hashlib.sha256(b"harmoniser-wrist:" + bytes(range(16)) + bytes.fromhex("020000aabbcc")).hexdigest()[:32]
+    CHECK_STR(hw, "cbdaec96a58866ae9612f87569b77a37");
+    CHECK_INT(hw[RELAY_HW_ID_CHARS + 1], 'x');  // nothing written past the terminator
+    CHECK_INT(strlen(hw), 32);                  // 128 bits
+    CHECK(relay_text_ok(hw, 64, ""));           // what the relay accepts: 1 to 64 of A-Z a-z 0-9 _ -
+    CHECK_INT(strspn(hw, "0123456789abcdef"), RELAY_HW_ID_CHARS);
+
+    char again[RELAY_HW_ID_CHARS + 1], other[RELAY_HW_ID_CHARS + 1];
+    relay_hw_id(secret, mac, test_sha256, again);
+    CHECK_STR(again, hw);  // the same board is the same device after a restart
+    // Every bit of the secret counts: the MAC alone, which anyone nearby can see, gives nothing.
+    for (int byte = 0; byte < RELAY_HW_SECRET_BYTES; byte++) {
+        secret[byte] ^= 0x01;
+        relay_hw_id(secret, mac, test_sha256, other);
+        CHECK(strcmp(other, hw) != 0);
+        secret[byte] ^= 0x01;
+    }
+    mac[5] ^= 0x01;
+    relay_hw_id(secret, mac, test_sha256, other);
+    CHECK(strcmp(other, hw) != 0);
 }
 
 // ---- polling ----
@@ -782,6 +843,8 @@ int main(void)
     test_parse_register();
     test_register_lengths();
     test_text_ok();
+    test_the_test_sha256();
+    test_hw_id();
     test_code_ok();
     test_pair_url();
     test_take_pairing();

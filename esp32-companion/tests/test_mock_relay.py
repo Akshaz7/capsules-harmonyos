@@ -124,6 +124,13 @@ class Registration(RelayCase):
         answer = self.poll(second)
         self.assertEqual((answer["claimed"], answer["capsule"]), (False, None))  # has to be claimed again
 
+    def test_hw_as_the_firmware_sends_it_and_at_the_backends_limits(self) -> None:
+        # The same rule as the backend's HW_PATTERN: 1 to 64 of A-Z a-z 0-9 _ -.
+        for hw in ("0123456789abcdef" * 2, "f" * 64, "A", "a_b-C9"):
+            with self.subTest(hw=hw):
+                self.assertEqual(self.request("POST", "/api/devices/register",
+                                              {"hw": hw, "kind": "wrist", "fw": "1"})[0], 201)
+
     def test_two_boards_get_two_devices(self) -> None:
         one, two = self.register("board-one"), self.register("board-two")
         self.assertNotEqual(one["id"], two["id"])
@@ -135,6 +142,7 @@ class Registration(RelayCase):
             ({"hw": "", "kind": "wrist", "fw": "1"}, mock_relay.ERR_BAD_HW),
             ({"hw": "aa:bb:cc:dd:ee:ff", "kind": "wrist", "fw": "1"}, mock_relay.ERR_BAD_HW),  # a raw MAC
             ({"hw": "x" * 65, "kind": "wrist", "fw": "1"}, mock_relay.ERR_BAD_HW),
+            ({"hw": "a" * 31 + "é", "kind": "wrist", "fw": "1"}, mock_relay.ERR_BAD_HW),
             ({"hw": "abc", "fw": "1"}, mock_relay.ERR_BAD_KIND),
             ({"hw": "abc", "kind": "wrist"}, mock_relay.ERR_BAD_FW),
             ({"hw": "abc", "kind": "wrist", "fw": 1}, mock_relay.ERR_BAD_FW),

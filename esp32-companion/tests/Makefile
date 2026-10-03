@@ -46,9 +46,9 @@ $(BIN)/test_http_api: test_http_api.c ../main/http_api.c ../main/capsule_json.c 
 		stubs/stubs.c stubs/fake_httpd.c $(BIN)/cJSON.o -lm
 
 RELAY_SOURCES := ../main/relay_sync.c ../main/capsule_json.c ../main/capsule.c ../main/validate.c
-$(BIN)/test_relay: test_relay.c $(RELAY_SOURCES) stubs/stubs.c $(BIN)/cJSON.o $(HEADERS)
+$(BIN)/test_relay: test_relay.c $(RELAY_SOURCES) stubs/stubs.c stubs/sha256.c $(BIN)/cJSON.o $(HEADERS)
 	@mkdir -p $(BIN)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_relay.c $(RELAY_SOURCES) stubs/stubs.c $(BIN)/cJSON.o -lm
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_relay.c $(RELAY_SOURCES) stubs/stubs.c stubs/sha256.c $(BIN)/cJSON.o -lm
 
 clean:
 	rm -rf $(BIN)

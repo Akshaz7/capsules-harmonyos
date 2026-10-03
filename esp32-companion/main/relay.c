@@ -10,6 +10,7 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_random.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -35,8 +36,6 @@ static const char *TAG = "relay";
 #define REQUEST_TIMEOUT_MS 10000  // also covers the whole TCP and TLS connect: a cold start, a busy network
 #define BASE_URL_MAX 160
 #define NVS_NAMESPACE "relay"
-#define HW_SALT "harmoniser-wrist:"
-#define HW_ID_BYTES 8
 
 static portMUX_TYPE s_status_lock = portMUX_INITIALIZER_UNLOCKED;
 static relay_status_t s_status;
@@ -126,7 +125,8 @@ static void forget_credentials(void)
     memset(&s_credentials, 0, sizeof(s_credentials));
     nvs_handle_t nvs;
     if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs) == ESP_OK) {
-        nvs_erase_all(nvs);
+        nvs_erase_key(nvs, "id");  // not the whole namespace: the hardware secret stays
+        nvs_erase_key(nvs, "token");
         nvs_commit(nvs);
         nvs_close(nvs);
     }
@@ -265,23 +265,53 @@ static relay_outcome_t outcome_of(int status, int ok_from, int ok_to, const char
 
 // ---- the three exchanges ----
 
-// A stable id for this board: a salted hash of its MAC address rather than the address itself.
-static void hardware_id(char out[HW_ID_BYTES * 2 + 1])
+static void sha256(const uint8_t *data, size_t len, uint8_t digest[32])
 {
-    uint8_t input[sizeof(HW_SALT) - 1 + 6];
-    uint8_t digest[32];
-    memcpy(input, HW_SALT, sizeof(HW_SALT) - 1);
-    esp_read_mac(input + sizeof(HW_SALT) - 1, ESP_MAC_WIFI_STA);
-    mbedtls_sha256(input, sizeof(input), digest, 0);
-    for (int i = 0; i < HW_ID_BYTES; i++) {
-        sprintf(out + i * 2, "%02x", digest[i]);
+    mbedtls_sha256(data, len, digest, 0);
+}
+
+// The id this board registers under. The MAC can be read off the air, and registering a
+// known id again takes the device from its owner, so the id also depends on 16 random
+// bytes that are made here once, kept in NVS and never sent or logged. Erasing NVS makes
+// the board a new device to the relay. False if the secret cannot be kept: registering
+// under an id that changes with every boot would only litter the relay with devices.
+// Only called with Wi-Fi up, which is what makes esp_fill_random() truly random.
+static bool hardware_id(char out[RELAY_HW_ID_CHARS + 1])
+{
+    uint8_t secret[RELAY_HW_SECRET_BYTES];
+    uint8_t mac[6];
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs);
+    if (err == ESP_OK) {
+        size_t len = sizeof(secret);
+        if (nvs_get_blob(nvs, "secret", secret, &len) != ESP_OK || len != sizeof(secret)) {
+            esp_fill_random(secret, sizeof(secret));
+            err = nvs_set_blob(nvs, "secret", secret, sizeof(secret));
+            err = err == ESP_OK ? nvs_commit(nvs) : err;
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "made this board's hardware secret");
+            }
+        }
+        nvs_close(nvs);
     }
+    if (err == ESP_OK) {
+        err = esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    }
+    if (err == ESP_OK) {
+        relay_hw_id(secret, mac, sha256, out);
+    } else {
+        ESP_LOGE(TAG, "no hardware id: %s", esp_err_to_name(err));
+    }
+    memset(secret, 0, sizeof(secret));
+    return err == ESP_OK;
 }
 
 static relay_outcome_t do_register(void)
 {
-    char hw[HW_ID_BYTES * 2 + 1];
-    hardware_id(hw);
+    char hw[RELAY_HW_ID_CHARS + 1];
+    if (!hardware_id(hw)) {
+        return RELAY_OUTCOME_FAILED;
+    }
     char *body = relay_register_body(hw, esp_app_get_description()->version);
     if (!body) {
         return RELAY_OUTCOME_FAILED;
