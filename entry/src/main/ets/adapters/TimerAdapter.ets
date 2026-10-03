@@ -27,6 +27,8 @@ export class TimerAdapter {
     type: calendarManager.CalendarType.LOCAL,
     displayName: 'Harmoniser'
   };
+  /** In-flight schedule() calls by event identifier, so a quick pause/stop waits for the event to exist. */
+  private scheduling: Map<string, Promise<number>> = new Map();
 
   constructor(ctx: common.UIAbilityContext) {
     this.ctx = ctx;
@@ -62,7 +64,19 @@ export class TimerAdapter {
   }
 
   /** Adds an event that reminds at now + seconds. Returns the event id, or -1 on failure. */
-  async schedule(capsuleId: string, timerId: string, label: string, seconds: number): Promise<number> {
+  schedule(capsuleId: string, timerId: string, label: string, seconds: number): Promise<number> {
+    const key = `${ID_PREFIX}${capsuleId}:${timerId}`;
+    const p = this.addTimerEvent(capsuleId, timerId, label, seconds);
+    this.scheduling.set(key, p);
+    p.finally(() => {
+      if (this.scheduling.get(key) === p) {
+        this.scheduling.delete(key);
+      }
+    });
+    return p;
+  }
+
+  private async addTimerEvent(capsuleId: string, timerId: string, label: string, seconds: number): Promise<number> {
     if (!(await this.prepare()) || !this.calendar) {
       hilog.error(DOMAIN, TAG, 'timer %{public}s not scheduled', timerId);
       return -1;
@@ -85,6 +99,34 @@ export class TimerAdapter {
       const err = e as BusinessError;
       hilog.error(DOMAIN, TAG, 'addEvent failed: %{public}d %{public}s', err.code, err.message);
       return -1;
+    }
+  }
+
+  /** Deletes the upcoming reminder of one timer (paused, stopped or reset). Returns how many events. */
+  async cancelTimer(capsuleId: string, timerId: string): Promise<number> {
+    const key = `${ID_PREFIX}${capsuleId}:${timerId}`;
+    await this.scheduling.get(key)?.catch(() => -1);
+    if (!(await this.prepare()) || !this.calendar) {
+      return 0;
+    }
+    try {
+      const now = Date.now();
+      const events = await this.calendar.getEvents();
+      const ids: number[] = [];
+      events.forEach((ev: calendarManager.Event) => {
+        if (ev.id !== undefined && ev.identifier === key && ev.startTime >= now) {
+          ids.push(ev.id);
+        }
+      });
+      if (ids.length > 0) {
+        await this.calendar.deleteEvents(ids);
+      }
+      hilog.info(DOMAIN, TAG, 'cancelled %{public}d events for %{public}s/%{public}s', ids.length, capsuleId, timerId);
+      return ids.length;
+    } catch (e) {
+      const err = e as BusinessError;
+      hilog.error(DOMAIN, TAG, 'cancelTimer failed: %{public}d %{public}s', err.code, err.message);
+      return 0;
     }
   }
 

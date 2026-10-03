@@ -127,8 +127,36 @@ struct CapsuleNode {
       })
         .color($r('sys.color.brand'))
         .width('100%')
+      if (t && (t.running || t.paused)) {
+        // Built-in controls for any running timer (T4-7 actions, so they go through the gatekeeper).
+        Row({ space: 8 }) {
+          this.timerControl(t, false)
+          this.timerControl(t, true)
+        }
+        .width('100%')
+      }
     }
     .sectionCard()
+  }
+
+  /** Pause/Resume (stop = false) or Stop. Reads `t` here so the label follows t.running. */
+  @Builder
+  timerControl(t: TimerState, stop: boolean) {
+    Button({ type: ButtonType.Capsule, buttonStyle: ButtonStyleMode.NORMAL }) {
+      Row({ space: 6 }) {
+        SymbolGlyph(stop ? $r('sys.symbol.stop_circle') : t.running ? $r('sys.symbol.pause') : $r('sys.symbol.play_fill'))
+          .fontSize(16)
+          .fontColor([$r('sys.color.font_emphasize')])
+        Text(stop ? 'Stop' : t.running ? 'Pause' : 'Resume')
+          .fontSize($r('sys.float.Body_M'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_emphasize'))
+      }
+    }
+    .layoutWeight(1)
+    .height(40)
+    .onClick(() => this.runtime.dispatch(
+      `${stop ? 'stopTimer' : t.running ? 'pauseTimer' : 'startTimer'}:${t.timerId}`))
   }
 
   @Builder

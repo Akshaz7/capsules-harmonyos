@@ -111,6 +111,11 @@ class CalendarScheduler implements TimerScheduler {
   scheduleTimer(capsuleId: string, t: TimerState): void {
     this.adapter.schedule(capsuleId, t.timerId, t.label, t.remainingSec);
   }
+
+  /** Paused, stopped or reset: its calendar reminder must not ring. */
+  cancelTimer = (capsuleId: string, t: TimerState): void => {
+    this.adapter.cancelTimer(capsuleId, t.timerId);
+  };
 }
 
 class NotifyOnFinish implements TimerAlert {
