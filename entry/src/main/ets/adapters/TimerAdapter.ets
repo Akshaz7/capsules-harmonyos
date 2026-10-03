@@ -23,7 +23,7 @@ export class TimerAdapter {
   private ctx: common.UIAbilityContext;
   private calendar: calendarManager.Calendar | undefined = undefined;
   private account: calendarManager.CalendarAccount = {
-    name: 'Capsules',
+    name: 'Harmoniser',
     type: calendarManager.CalendarType.LOCAL,
     displayName: 'Harmoniser'
   };
