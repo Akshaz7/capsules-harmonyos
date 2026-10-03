@@ -120,20 +120,17 @@ function stem(word: string): string {
   return word;
 }
 
-function commonPrefix(a: string, b: string): number {
-  let i = 0;
-  while (i < a.length && i < b.length && a.charAt(i) === b.charAt(i)) {
-    i++;
-  }
-  return i;
-}
-
 /** Same word, or the same word in the plural: "scoreboards" = "scoreboard". */
 function similar(a: string, b: string): boolean {
   return a === b || stem(a) === stem(b);
 }
 
 // ---- Search ----
+
+interface Keyword {
+  word: string;
+  weight: number;
+}
 
 class IndexedTemplate {
   template: TemplateEntry;
