@@ -70,6 +70,18 @@ export default function ruleParserTest() {
       expect(parseRequest('split 84 between 0')).assertNull();
     });
 
+    it('makes a checklist from a list of items', 0, () => {
+      const c = parseValid('checklist for leaving home: keys, wallet, charger');
+      expect(c.name).assertEqual('Leaving home');
+      const list = c.ui[0] as ChecklistComponent;
+      expect(list.items.join('|')).assertEqual('Keys|Wallet|Charger');
+      expect((c.ui[1] as ButtonComponent).action).assertEqual('reset:leaving-home');
+      expect((parseValid('packing list: socks; charger and passport').ui[0] as ChecklistComponent).items.length)
+        .assertEqual(3);
+      expect(parseValid('checklist milk, eggs').name).assertEqual('Checklist');
+      expect(parseRequest('checklist for nothing:')).assertNull();
+    });
+
     it('returns null for requests it does not understand', 0, () => {
       expect(parseRequest('')).assertNull();
       expect(parseRequest('plan a trip to Kraków with my friends')).assertNull();

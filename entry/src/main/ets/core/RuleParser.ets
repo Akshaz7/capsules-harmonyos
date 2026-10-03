@@ -8,6 +8,7 @@
  * - schedule: "medication 8am and 8pm", "vitamins at 9:30am, 21:00"
  * - goal:     "water 8 glasses", "drink 8 glasses of water"
  * - split:    "split 84 between 4", "split the bill 120.50 among 3 people"
+ * - checklist: "checklist for leaving home: keys, wallet, charger", "packing list: socks, charger"
  *
  * Note: schema v0 has no time-of-day reminder, so schedules become a checklist of doses.
  */
@@ -220,13 +221,42 @@ function parseSplit(req: string): Capsule | null {
   return capsule(`split-${slug(m[1])}-${people}`, `Split ${formatAmount(total)} between ${people}`, [], ui);
 }
 
+const MAX_CHECKLIST_ITEMS: number = 20;
+
+function parseChecklist(req: string): Capsule | null {
+  // "checklist for leaving home: keys, wallet, charger", "packing list: a, b", "todo: a and b"
+  let m = req.match(
+    /^(?:an?\s+)?(?:check\s*list|to-?do(?:\s+list)?|packing\s+list|shopping\s+list|list)(?:\s+(?:for|of)\s+([^:]+?))?\s*:\s*(.+)$/);
+  if (m === null) {
+    // "checklist keys, wallet, charger" (needs at least one separator)
+    m = req.match(/^()check\s*list\s+(.+(?:,|\band\b).+)$/);
+  }
+  if (m === null) {
+    return null;
+  }
+  const items = m[2].split(/\s*(?:,|;|\band\b|&)\s*/)
+    .map((t: string) => t.trim())
+    .filter((t: string) => t.length > 0)
+    .map((t: string) => capitalize(t));
+  const unique = items.filter((t: string, i: number) => items.indexOf(t) === i);
+  if (unique.length === 0 || unique.length > MAX_CHECKLIST_ITEMS) {
+    return null;
+  }
+  const title = m[1] !== undefined && m[1].trim().length > 0 ? capitalize(m[1].trim()) : 'Checklist';
+  const id = slug(title);
+  const list: ChecklistComponent = { type: 'checklist', id: id, items: unique };
+  return capsule(`checklist-${id}`, title, [], [list, button('Reset', `reset:${id}`)]);
+}
+
 /** Returns a capsule for a recognised request, or null. Output is meant to pass the validator. */
 export function parseRequest(request: string): Capsule | null {
   const req = normalize(request);
   if (req.length === 0) {
     return null;
   }
-  const rules: ((r: string) => Capsule | null)[] = [parseTimers, parseSplit, parseCounter, parseSchedule, parseGoal];
+  const rules: ((r: string) => Capsule | null)[] = [
+    parseTimers, parseSplit, parseChecklist, parseCounter, parseSchedule, parseGoal
+  ];
   for (const rule of rules) {
     const result = rule(req);
     if (result !== null) {
