@@ -18,6 +18,7 @@ import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { ImportResult, MAX_SHARE_BYTES, prepareImport } from './CapsuleShare';
+import { pairCodeFromQr } from '../adapters/DeviceRelay';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'ImportFlow';
@@ -27,6 +28,8 @@ const SCAN_CANCELLED: number = 1000500002;
 export interface ImportOutcome {
   cancelled: boolean;
   result?: ImportResult;
+  /** The scan was a device's pairing QR (https://<host>/pair?code=...): pair it instead of importing. */
+  pairCode?: string;
 }
 
 /**
@@ -84,6 +87,10 @@ export async function scanAndPrepare(context: common.UIAbilityContext): Promise<
   };
   try {
     const scanned: scanBarcode.ScanResult = await scanBarcode.startScanForResult(context, options);
+    const code: string = pairCodeFromQr(scanned.originalValue);
+    if (code.length > 0) {
+      return { cancelled: false, pairCode: code };
+    }
     return { cancelled: false, result: prepareImport(scanned.originalValue) };
   } catch (e) {
     const err = e as BusinessError;

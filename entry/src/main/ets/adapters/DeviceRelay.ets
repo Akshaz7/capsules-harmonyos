@@ -386,28 +386,37 @@ export class SimulatedDeviceRelay implements DeviceRelay {
   }
 }
 
+function readDevicesConfig(ctx: common.Context): Record<string, Object> | undefined {
+  const dirs: string[] = [ctx.getApplicationContext().filesDir, ctx.filesDir];
+  for (const dir of dirs) {
+    const path = `${dir}/config.local.json`;
+    try {
+      if (fileIo.accessSync(path)) {
+        const o = JSON.parse(fileIo.readTextSync(path)) as Record<string, Object>;
+        return o['devices'] as Record<string, Object> | undefined;
+      }
+    } catch (e) {
+      // unreadable: try the next location
+    }
+  }
+  return undefined;
+}
+
 /**
  * The relay base URL from the app's config.local.json ({"devices": {"relayBaseUrl": "https://..."}}), or ''.
  * Only https, or http to this machine for the local mock. Never hard-coded, never committed.
  */
 export function loadRelayBaseUrl(ctx: common.Context): string {
-  const dirs: string[] = [ctx.getApplicationContext().filesDir, ctx.filesDir];
-  for (const dir of dirs) {
-    const path = `${dir}/config.local.json`;
-    try {
-      if (!fileIo.accessSync(path)) {
-        continue;
-      }
-      const o = JSON.parse(fileIo.readTextSync(path)) as Record<string, Object>;
-      const devices = o['devices'] as Record<string, Object> | undefined;
-      const base = devices !== undefined && typeof devices['relayBaseUrl'] === 'string' ?
-        (devices['relayBaseUrl'] as string).trim() : '';
-      return isAllowedRelayUrl(base) ? base : '';
-    } catch (e) {
-      // unreadable: try the next location
-    }
-  }
-  return '';
+  const devices = readDevicesConfig(ctx);
+  const base = devices !== undefined && typeof devices['relayBaseUrl'] === 'string' ?
+    (devices['relayBaseUrl'] as string).trim() : '';
+  return isAllowedRelayUrl(base) ? base : '';
+}
+
+/** Dev only: {"devices": {"simulate": true}} shows the panel with the labelled in-app simulation. */
+export function relaySimulationEnabled(ctx: common.Context): boolean {
+  const devices = readDevicesConfig(ctx);
+  return devices !== undefined && devices['simulate'] === true;
 }
 
 /** https anywhere; plain http only to localhost / 127.0.0.1 / 10.0.2.2 (the local mock). */

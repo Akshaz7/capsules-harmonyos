@@ -16,6 +16,9 @@ export struct SharingBar {
   @Param showImport: boolean = true;
   /** Import only, as a small round icon button (e.g. in a header). Errors show as a toast. */
   @Param compact: boolean = false;
+  /** A scanned device pairing QR: the page pairs that device. */
+  @Event onPairCode: (code: string) => void = () => {
+  };
   @Event onImported: (payload: PreparedImport) => void = () => {
   };
   @Local message: string = '';
@@ -84,6 +87,10 @@ export struct SharingBar {
   }
 
   private handle(outcome: ImportOutcome): void {
+    if (outcome.pairCode !== undefined) {
+      this.onPairCode(outcome.pairCode);
+      return;
+    }
     if (outcome.cancelled || outcome.result === undefined) {
       return;
     }

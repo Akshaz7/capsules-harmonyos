@@ -47,7 +47,15 @@ import {
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
-import { PreparedImport, SharingBar } from '../sharing';
+import { PreparedImport, SharingBar, scanAndPrepare } from '../sharing';
+import {
+  DeviceRelay, DeviceState, HttpDeviceRelay, isOffline, isStaleState, loadRelayBaseUrl, normalizePairCode, PairedDevice, payloadFor,
+  relaySimulationEnabled, SimulatedDeviceRelay
+} from '../adapters/DeviceRelay';
+import { deviceName, DeviceStore } from '../adapters/DeviceStore';
+import { getInstallToken } from '../adapters/InstallToken';
+import { formatClock } from '../renderer/CapsuleRuntime';
+import { DevicePanel } from './DevicePanel';
 
 const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
@@ -110,6 +118,9 @@ const CAPSULE_ABILITIES = 'timers, counters, checklists, calculations, inputs an
 /** How often due daily triggers are checked while the app is open. */
 const TRIGGER_CHECK_MS = 30 * 1000;
 
+/** How often a device's state is read back while its capsule is on screen. */
+const DEVICE_POLL_MS = 2000;
+
 const FAILED_MESSAGE =
   "I couldn't build that offline. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
 
@@ -169,6 +180,19 @@ struct Index {
   private statusPoll: number = -1;
   private placeholderTimer: number = -1;
   private triggerTimer: number = -1;
+  /** "Show on another device": the relay (or its labelled simulation) and the paired devices. */
+  private relay: DeviceRelay = new SimulatedDeviceRelay();
+  private deviceStore: DeviceStore | undefined = undefined;
+  @Local devices: PairedDevice[] = [];
+  @Local relaySimulated: boolean = true;
+  /** The panel only shows with a relay configured (or the dev simulation flag): never a fake device on phones. */
+  @Local devicesEnabled: boolean = false;
+  /** Live line for the capsule last sent to a device; '' when none. */
+  @Local deviceStatus: string = '';
+  private deviceCapsuleId: string = '';
+  private deviceId: string = '';
+  private deviceVersion: number = 0;
+  private devicePoll: number = -1;
   /** Time of the last trigger check; the trigger cards re-read "Next: ..." from it. */
   @Local triggerNow: number = Date.now();
   @Local placeholderIndex: number = 0;
@@ -236,6 +260,124 @@ struct Index {
     }
     this.checkTriggers();
     this.triggerTimer = setInterval(() => this.checkTriggers(), TRIGGER_CHECK_MS);
+    this.deviceStore = new DeviceStore(ctx);
+    this.devices = this.deviceStore.all();
+    const base = loadRelayBaseUrl(ctx);
+    this.relay = base.length > 0 ? new HttpDeviceRelay(base, getInstallToken(ctx)) : new SimulatedDeviceRelay();
+    this.relaySimulated = this.relay.simulated;
+    this.devicesEnabled = base.length > 0 || relaySimulationEnabled(ctx);
+  }
+
+  // ---- Show on another device (T3-15) ----
+
+  private async pairScan(): Promise<void> {
+    if (!this.ctx) {
+      return;
+    }
+    const outcome = await scanAndPrepare(this.ctx);
+    if (outcome.pairCode !== undefined) {
+      await this.claimDevice(outcome.pairCode);
+    } else if (!outcome.cancelled) {
+      this.toast("That isn't a device's pairing code");
+    }
+  }
+
+  private async claimDevice(text: string): Promise<void> {
+    const code = normalizePairCode(text);
+    if (code.length === 0) {
+      this.toast('Type the three words shown on the device');
+      return;
+    }
+    const r = await this.relay.claim(code);
+    if (r.device !== undefined && this.deviceStore) {
+      this.devices = this.deviceStore.add(r.device);
+      this.toast(`Paired with ${deviceName(r.device)}`);
+    } else {
+      this.toast(r.error ?? "Couldn't pair that device");
+    }
+  }
+
+  private unpairDevice(id: string): void {
+    this.relay.unpair(id); // best effort: forget it here whatever the relay says
+    if (this.deviceStore) {
+      this.devices = this.deviceStore.remove(id);
+    }
+    if (this.deviceId === id) {
+      this.stopDevicePoll();
+    }
+  }
+
+  /** Asks every time (until the "devices" permission lands, T4-13), logs the answer, then sends. */
+  private showOnDevice(entry: CapsuleEntry, deviceId: string): void {
+    const counter = entry.runtime.counters.length > 0 ? entry.runtime.counters[0].value : undefined;
+    const payload = payloadFor(entry.capsule, counter);
+    const device = this.devices.find((d: PairedDevice) => d.id === deviceId);
+    if (payload === null || device === undefined) {
+      return;
+    }
+    const name = deviceName(device);
+    const number = payload.type === 'timer' ? `${payload.seconds} seconds` : `the count ${payload.count}`;
+    const what = `${payload.type} "${payload.label}", ${number}`;
+    this.getUIContext().showAlertDialog({
+      title: `Show "${entry.capsule.name}" on ${name}?`,
+      message: `Only this leaves your phone: ${what}.${this.relaySimulated ? ' (Simulated: nothing is sent.)' : ''}`,
+      primaryButton: { value: "Don't send", action: () => {
+        this.gate?.logDeviceSend(entry.capsule.id, false, `refused: show on ${name}`);
+      } },
+      secondaryButton: { value: 'Send', action: () => {
+        this.gate?.logDeviceSend(entry.capsule.id, true, `sent to ${name}: ${what}`);
+        this.sendToDevice(entry, deviceId);
+      } }
+    });
+  }
+
+  private async sendToDevice(entry: CapsuleEntry, deviceId: string): Promise<void> {
+    const counter = entry.runtime.counters.length > 0 ? entry.runtime.counters[0].value : undefined;
+    const payload = payloadFor(entry.capsule, counter);
+    if (payload === null) {
+      return;
+    }
+    const version = await this.relay.send(deviceId, payload);
+    if (version < 0) {
+      this.deviceStatus = "Couldn't reach the device. The capsule still works here.";
+      return;
+    }
+    this.deviceCapsuleId = entry.capsule.id;
+    this.deviceId = deviceId;
+    this.deviceVersion = version;
+    this.deviceStatus = 'Sent. Waiting for the device...';
+    clearInterval(this.devicePoll);
+    this.devicePoll = setInterval(() => this.pollDevice(), DEVICE_POLL_MS);
+  }
+
+  private async pollDevice(): Promise<void> {
+    if (this.openId !== this.deviceCapsuleId) {
+      this.stopDevicePoll(); // only while that capsule is on screen
+      return;
+    }
+    const device = this.devices.find((d: PairedDevice) => d.id === this.deviceId);
+    const s: DeviceState | null = await this.relay.state(this.deviceId);
+    if (s === null) {
+      this.deviceStatus = 'The device is not answering. The capsule still works here.';
+      return;
+    }
+    if (isStaleState(s, this.deviceVersion)) {
+      return;
+    }
+    const name = device !== undefined ? deviceName(device) : 'Device';
+    if (isOffline(s)) {
+      this.deviceStatus = `${name} is offline`;
+      return;
+    }
+    const value = s.type === 'timer' ? (s.done ? 'done' : formatClock(s.remaining_seconds)) : `${s.count}`;
+    this.deviceStatus = `On ${name}: ${s.label} ${value}`;
+  }
+
+  private stopDevicePoll(): void {
+    clearInterval(this.devicePoll);
+    this.devicePoll = -1;
+    this.deviceStatus = '';
+    this.deviceCapsuleId = '';
   }
 
   /**
@@ -462,6 +604,7 @@ struct Index {
     clearInterval(this.statusPoll);
     clearInterval(this.placeholderTimer);
     clearInterval(this.triggerTimer);
+    clearInterval(this.devicePoll);
   }
 
   // Core initialises the cloud config and the on-device model async; they may finish after the first render.
@@ -1185,6 +1328,7 @@ struct Index {
             SharingBar({
               showShare: false,
               compact: true,
+              onPairCode: (code: string) => this.claimDevice(code), // a scanned device pairing QR
               onImported: (prepared: PreparedImport) => this.handleImported(prepared)
             })
             this.iconButton($r('sys.symbol.gearshape'), () => this.nav.pushPath({ name: SETTINGS_PAGE }))
@@ -1368,6 +1512,17 @@ struct Index {
             this.smarterButton(entry)
           }
           this.routeCard(entry)
+          if (this.devicesEnabled && payloadFor(entry.capsule) !== null) {
+            DevicePanel({
+              devices: this.devices,
+              simulated: this.relaySimulated,
+              status: this.deviceCapsuleId === entry.capsule.id ? this.deviceStatus : '',
+              onPairScan: () => this.pairScan(),
+              onPairPhrase: (phrase: string) => this.claimDevice(phrase),
+              onShow: (id: string) => this.showOnDevice(entry, id),
+              onUnpair: (id: string) => this.unpairDevice(id)
+            })
+          }
           // Share only: importing lives on the home screen.
           SharingBar({ capsule: entry.capsule, showImport: false })
           Button() {

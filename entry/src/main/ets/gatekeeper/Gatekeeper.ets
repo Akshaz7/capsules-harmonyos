@@ -114,6 +114,12 @@ export class Gatekeeper {
     return false;
   }
 
+  /** Logs a "Show on another device" send ('allow') or a refusal ('blocked'): every send is on the record. */
+  logDeviceSend(capsuleId: string, sent: boolean, detail: string): void {
+    this.add(capsuleId, sent ? 'allow' : 'blocked', detail);
+    this.save();
+  }
+
   /** Forgets the capsule's grants and marks it removed. */
   forget(capsuleId: string, detail: string): void {
     this.remove(`grants:${capsuleId}`);
