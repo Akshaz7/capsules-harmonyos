@@ -2,6 +2,8 @@
 
 Checked against the official [`hackathon_challenge.md`](https://github.com/onirodeveloper/hackyeah2026-challenge/blob/main/hackathon_challenge.md) on 2026-10-03 at about 20:00, at commit `a9d853e` (main, local). Owners: **Ash** (team lead), **T1** (coordination, builds, phones), **T2** (docs), **T3** (app UI), **T4** (core), **T5** (Cactus).
 
+> **Update, 2026-10-04 02:00 CEST (checked against `547d27b` by reading; nothing run):** this audit describes Saturday 20:00 and several rows below are out of date. Since then: the commits were pushed; `AI_WORKFLOW.md` no longer has template placeholders and now has its "AI feature disclosure" section; `HACKATHON_BRIEF.md` is filled in; motion (shake) counters and triggers, a battery reading and a weather reading were added, so the two "motion sensor" rows under "Evaluation risks" now concern **vibration** only (`CAPSULE_ABILITIES` in `pages/Index.ets` and the plan prompt in `core/CapsuleModel.ets` still name vibration, which capsules cannot use); the test count is no longer 249 (last recorded run 269; 278 cases counted, not re-run). Still open: the recorded demo, a release built from the submission commit, the `AI_WORKFLOW.md` line for the phone runs, the marketplace-search privacy gap, and screenshots. The model's sha256 is documented but not enforced by `scripts/push-model.sh`.
+
 Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing. Updated after T2-5..T2-7: the AI integration doc, the `AI_WORKFLOW.md` sections and the `CLAUDE.md` signing fix are done; the recorded demo is still missing.
 
 ## Technical requirements

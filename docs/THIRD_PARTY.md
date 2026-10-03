@@ -28,7 +28,7 @@ We wrote the Node-API wrapper in `cactus/src/main/cpp/` (`napi_init.cpp`, `cactu
 | --- | --- |
 | What | 450M-parameter language model in Cactus v2 format, 4-bit (`cq4`), about 480 MB on device |
 | Source | `Cactus-Compute/LFM2-VL-450M`, file `lfm2-vl-450m-cq4.zip`, tag `v2.0` (https://huggingface.co/Cactus-Compute/LFM2-VL-450M). Base model: https://huggingface.co/LiquidAI/LFM2-VL-450M |
-| sha256 of the zip | `b3adcf299df8b0eac1a2224e8c90f910a1a88a719fb6f5211b14c7dc5e892e19` |
+| sha256 of the zip | `b3adcf299df8b0eac1a2224e8c90f910a1a88a719fb6f5211b14c7dc5e892e19`. Documented for manual verification (`shasum -a 256 lfm2-vl-450m-cq4.zip`); `scripts/push-model.sh` downloads the zip but does not check this value. |
 | Where | Not in the repository or the .hap. `scripts/push-model.sh` copies it to the app's files dir (`haps/entry/files/lfm2-vl-450m-cq4`) |
 | Licence | LFM Open License v1.0 (Liquid AI), https://huggingface.co/LiquidAI/LFM2-VL-450M/blob/main/LICENSE |
 
