@@ -96,18 +96,20 @@ export function bindingData(view: WidgetView): formBindingData.FormBindingData {
 
 /**
  * The binding for a widget the launcher (re)adds. The launcher calls onAddForm again with the
- * same formId after an app update, so an existing binding is kept and only its size is updated.
+ * same formId after an app update, so an existing binding (blank or not, with its addedAt) is kept
+ * and only its size is updated.
  */
 export function bindForm(ctx: common.Context, formId: string, wide: boolean): FormBinding {
   const existing = getBinding(ctx, formId);
-  if (existing === null || existing.capsuleId.length === 0) {
+  if (existing === null) {
     return bindNewForm(ctx, formId, wide);
   }
   if (existing.wide !== wide) {
     existing.wide = wide;
     putBinding(ctx, existing);
   }
-  hilog.info(DOMAIN, TAG, 'form %{public}s keeps capsule %{public}s', formId, existing.capsuleId);
+  hilog.info(DOMAIN, TAG, 'form %{public}s keeps %{public}s', formId,
+    existing.capsuleId.length > 0 ? existing.capsuleId : '(blank)');
   return existing;
 }
 
