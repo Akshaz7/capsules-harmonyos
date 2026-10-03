@@ -34,7 +34,7 @@ We started from the HackYeah Hackathon Template: an empty ArkTS project, `AGENTS
 - the gatekeeper, widgets, sharing and triggers
 - the template library
 - the ESP32 wrist companion
-- the unit tests (last recorded runs: 249, then 269 on the capabilities branch; 278 cases counted at `547d27b`, not re-run) and the provider and photo evals
+- the unit tests (last recorded runs: 249, then 269 on the capabilities branch; 278 cases counted at `bfa70f5`, not re-run) and the provider and photo evals
 
 The commit history shows the progression. AI coding agents were used throughout, and [`AI_WORKFLOW.md`](AI_WORKFLOW.md) logs how.
 
@@ -47,7 +47,7 @@ The commit history shows the progression. AI coding agents were used throughout,
 | Gatekeeper, log, widgets (incl. picker), timer pause/stop | Calendar alerts with the app closed: not seen working |
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
 | Marketplace: browse, install with consent, run (reported by Ash against the live API, which needs a pushed `config.local.json`; over 100 listings, 108 of them example templates) | Marketplace publishing: not tested |
-| Battery and weather readings (emulator) | Capsules that vibrate: not built; the `notify` action does nothing yet; voice input: core only |
+| Battery reading and a weather reading for one bundled city (emulator, per the PR author). A combined request such as "a task list and the weather for Kraków" does not work yet | Capsules that vibrate: not built; the `notify` action does nothing yet; voice input: core only |
 | Editing a capsule ("Change it…", with undo) | Photo → capsule: on-phone OCR path checked on a real phone (10/10 valid, 6/10 correct, offline); Snap button in the app not yet checked |
 | | Wrist companion (an ESP32 board, not a Huawei device, does not run HarmonyOS) works on its own hardware and against the live relay. The app's **Show on another device** panel exists but is hidden without a relay URL in `config.local.json`, and the app has not been run against the live relay |
 

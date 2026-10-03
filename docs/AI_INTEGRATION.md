@@ -72,7 +72,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (last recorded runs: 249 passing, then 269 passing on the capabilities branch; 278 cases counted at `547d27b`, not re-run):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
+- **Unit tests (last recorded runs: 249 passing, then 269 passing on the capabilities branch; 278 cases counted at `bfa70f5`, not re-run):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
@@ -87,7 +87,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 | Photo → capsule, 10 synthetic photos, cloud path only (`scripts/eval-images.mjs`, before OCR was added) | Claude 10/10 valid, 9/10 correct · Mistral 9/10 valid, 5/10 correct · on-device 0/10 (vision blocked) |
 | Photo → capsule, cloud path, Mistral reading options (same 10 photos, host) | `pixtral-12b` reads + `ministral-14b` builds: 8/10 correct on 2026-10-03 (the setup the code uses; model since listed as retired by Mistral, not re-verified) · Ministral alone 5/10 · Pixtral for both 7/10 |
 | Photo → capsule on a real phone, same 10 photos, OCR first (T5-6) | 10/10 valid, 6/10 correct, all built on the phone with no internet, 0.35–1 s per photo. The 4 misses are text-converter issues (bill total, workout read as a recipe, no scoreboard converter), being fixed in T4-18. |
-| On-device speed (emulator, Apple M4 Pro host) | 92–114 tokens/s decode, about 380 MB RSS. Time to first token: 267–386 ms for a 29-token prompt; 1.2–1.6 s for a 350–600-token prompt, which is closer to a real request. Phone speed not measured. |
+| On-device speed (emulator, Apple M4 Pro host) | 92–114 tokens/s decode, about 380 MB RSS. Time to first token: 267–386 ms for a 29-token prompt; 1.2–1.6 s for a 350–600-token prompt. Phone speed not measured. |
 
 Known limitations:
 - **English only.** An English-only gate runs before every tier, so non-English input never reaches a model. Multilingual support was dropped for reliability: Ministral built only 3/5 Polish requests.
