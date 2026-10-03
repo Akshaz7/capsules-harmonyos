@@ -4,6 +4,8 @@ Project instructions are imported below from the canonical `AGENTS.md`.
 
 @./AGENTS.md
 
+SCHEMA.md is the contract. Never change it without asking me.
+
 ## Build and run
 
 Run from the project root (`Capsules/`). Verified 2026-10-03 with devecocli 1.3.4 on the emulator at `127.0.0.1:5555`.
