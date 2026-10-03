@@ -24,7 +24,7 @@ import {
 } from '../renderer/CapsuleRuntime';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
-import { CapsuleEntry, capsuleIcon, originBadge, originIcon, routeHeadline } from './CapsuleEntry';
+import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon, routeHeadline } from './CapsuleEntry';
 import { CapsuleStore } from './CapsuleStore';
 import { ConsentView } from './ConsentView';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -131,6 +131,14 @@ struct Index {
   @Local pending: Capsule | undefined = undefined;
   @Local pendingOrigin: string = '';
   private pendingOriginRaw: string = '';
+  /** The request text behind `pending`; '' for imports. */
+  private pendingRequest: string = '';
+  /** Capsule that `pending` will replace when the user runs it ("Make it smarter"); '' otherwise. */
+  private replacingId: string = '';
+  /** Capsule being rebuilt with the cloud right now; '' when idle. */
+  @Local smarterBusyId: string = '';
+  /** Capsules whose "Add to home screen" how-to is expanded. Open on first view, collapsed after. */
+  @Local hintOpenIds: string[] = [];
   @Local settings: AppSettings = new AppSettings();
   @Local showSheet: boolean = false;
   @Local request: string = '';
@@ -140,6 +148,7 @@ struct Index {
   @Local modelStatus: string = getModelStatus().message;
   @Local cloudConfigured: boolean = getModelStatus().configured;
   @Local euCloud: boolean = getModelStatus().euAvailable;
+  @Local cloudProviders: string[] = getModelStatus().providers;
   @Local onDeviceStatus: string = getOnDeviceStatus().message;
   @Local nav: NavPathStack = new NavPathStack();
 
@@ -177,6 +186,7 @@ struct Index {
       this.modelStatus = status.message;
       this.cloudConfigured = status.configured;
       this.euCloud = status.euAvailable;
+      this.cloudProviders = status.providers;
       this.onDeviceStatus = onDevice.message;
       tries++;
       if ((status.configured && onDevice.ready) || tries >= 20) {
@@ -275,7 +285,9 @@ struct Index {
     if (!result.ok && smart && !this.settings.cloudNoticeAccepted && this.cloudUsable()) {
       // The device couldn't build it and the cloud would be next: ask once before the first cloud request.
       hilog.info(0x0001, 'Index', 'on-device failed (%{public}s); showing the cloud notice', result.error ?? '');
-      this.showCloudNotice(text);
+      this.showCloudNotice(() => this.retryWithCloud(text), () => {
+        this.failed = true;
+      });
       return;
     }
     this.finishCreate(text, result);
@@ -296,7 +308,7 @@ struct Index {
   }
 
   /** One-time notice before the first cloud request. OK retries with the cloud; the other choice switches modes. */
-  private showCloudNotice(text: string): void {
+  private showCloudNotice(onOk: () => void, onDeclined: () => void): void {
     this.getUIContext().showAlertDialog({
       title: 'Use Mistral AI (EU)?',
       message: CLOUD_NOTICE,
@@ -309,20 +321,18 @@ struct Index {
           style: DialogButtonStyle.HIGHLIGHT,
           action: () => {
             this.settings.acceptCloudNotice();
-            this.retryWithCloud(text);
+            onOk();
           }
         },
         {
           value: 'On-device only',
           action: () => {
             this.settings.setAiMode('on-device');
-            this.failed = true;
+            onDeclined();
           }
         }
       ],
-      cancel: () => {
-        this.failed = true;
-      }
+      cancel: () => onDeclined()
     });
   }
 
@@ -343,6 +353,8 @@ struct Index {
     }
     this.pending = this.uniqueCapsule(result.capsule);
     this.pendingOriginRaw = result.origin ?? '';
+    this.pendingRequest = text;
+    this.replacingId = '';
     this.pendingOrigin = originBadge(this.pendingOriginRaw);
     this.showSheet = true;
   }
@@ -354,6 +366,14 @@ struct Index {
     }
     this.gate.decide(capsule, allowed);
     this.store?.setOrigin(capsule.id, this.pendingOriginRaw);
+    if (this.pendingRequest.length > 0) {
+      this.store?.setRequest(capsule.id, this.pendingRequest);
+    }
+    const replaced = this.entries.find((e: CapsuleEntry) => e.capsule.id === this.replacingId);
+    if (replaced) {
+      this.undo(replaced, `Replaced ${replaced.capsule.name} with a version made with Mistral (EU)`);
+    }
+    this.replacingId = '';
     this.store?.add(capsule);
     const entry = this.makeEntry(capsule);
     this.entries = [entry].concat(this.entries);
@@ -383,11 +403,19 @@ struct Index {
   private handleImported(prepared: PreparedImport): void {
     this.pending = this.uniqueCapsule(prepared.capsule);
     this.pendingOriginRaw = IMPORTED_ORIGIN;
+    this.pendingRequest = '';
+    this.replacingId = '';
     this.pendingOrigin = originBadge(this.pendingOriginRaw);
     this.showSheet = true;
   }
 
   private open(id: string): void {
+    // The "Add to home screen" how-to starts open the first time only.
+    const firstView = this.store !== undefined && !this.store.hintSeen(id);
+    if (firstView) {
+      this.store?.setHintSeen(id);
+    }
+    this.hintOpenIds = firstView ? this.hintOpenIds.concat([id]) : this.hintOpenIds.filter((x: string) => x !== id);
     this.getUIContext().animateTo({ curve: OPEN_CURVE }, () => {
       this.openId = id;
     });
@@ -399,14 +427,14 @@ struct Index {
     });
   }
 
-  private async undo(entry: CapsuleEntry): Promise<void> {
+  private async undo(entry: CapsuleEntry, replacedNote?: string): Promise<void> {
     if (!this.gate || !this.timers) {
       return;
     }
     const capsule = entry.capsule;
     entry.runtime.stop();
     const cancelled = await this.timers.cancelForCapsule(capsule.id);
-    const note = `Removed ${capsule.name}; cancelled ${cancelled} calendar reminder(s)`;
+    const note = `${replacedNote ?? `Removed ${capsule.name}`}; cancelled ${cancelled} calendar reminder(s)`;
     this.gate.forget(capsule.id, note);
     this.store?.remove(capsule.id);
     this.close();
@@ -414,7 +442,81 @@ struct Index {
       refreshCapsuleWidgets(this.ctx, capsule.id);
     }
     this.entries = this.entries.filter((e: CapsuleEntry) => e.capsule.id !== capsule.id);
-    this.message = note;
+    this.message = replacedNote === undefined ? note : '';
+  }
+
+  /** "Make it smarter": offered on rules and on-device capsules when smart mode can use the cloud. */
+  private canMakeSmarter(entry: CapsuleEntry): boolean {
+    return (entry.origin === 'rules' || entry.origin === 'on-device') && this.settings.aiMode === 'smart' &&
+      this.cloudUsable();
+  }
+
+  /** Rebuilds a capsule with the cloud from its original request, then asks for consent again. */
+  private makeSmarter(entry: CapsuleEntry): void {
+    if (!this.settings.cloudNoticeAccepted) {
+      this.showCloudNotice(() => this.rebuildWithCloud(entry), () => {
+      });
+      return;
+    }
+    this.rebuildWithCloud(entry);
+  }
+
+  private async rebuildWithCloud(entry: CapsuleEntry): Promise<void> {
+    const saved = this.store?.request(entry.capsule.id) ?? '';
+    const text = saved.length > 0 ? saved : entry.capsule.name;
+    this.smarterBusyId = entry.capsule.id;
+    // TODO(core): pass cloudOnly once GenerateOptions has it; until then a matching rule still answers first.
+    const result = await this.generate(text, true);
+    this.smarterBusyId = '';
+    if (!result.ok || !result.capsule || !isCloudOrigin(result.origin ?? '')) {
+      hilog.error(0x0001, 'Index', 'make smarter failed for "%{private}s": origin %{public}s, %{public}s',
+        text, result.origin ?? '-', result.error ?? '');
+      this.message = "Mistral couldn't improve this one right now.";
+      return;
+    }
+    this.pending = this.uniqueCapsule(result.capsule);
+    this.pendingOriginRaw = result.origin ?? '';
+    this.pendingOrigin = originBadge(this.pendingOriginRaw);
+    this.pendingRequest = text;
+    this.replacingId = entry.capsule.id;
+    this.showSheet = true;
+  }
+
+  private toggleHint(id: string): void {
+    this.hintOpenIds = this.hintOpenIds.includes(id) ? this.hintOpenIds.filter((x: string) => x !== id) :
+      this.hintOpenIds.concat([id]);
+  }
+
+  @Builder
+  smarterButton(entry: CapsuleEntry) {
+    Row({ space: 6 }) {
+      if (this.smarterBusyId === entry.capsule.id) {
+        LoadingProgress()
+          .width(16)
+          .height(16)
+          .color($r('sys.color.brand'))
+      } else {
+        SymbolGlyph($r('sys.symbol.wand_and_stars'))
+          .fontSize(16)
+          .fontColor([$r('sys.color.brand')])
+      }
+      Text(this.smarterBusyId === entry.capsule.id ? `Asking ${this.cloudName()}…` :
+        `Make it smarter with ${this.cloudName()}`)
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.brand'))
+    }
+    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+    .enabled(this.smarterBusyId.length === 0)
+    .onClick(() => this.makeSmarter(entry))
+  }
+
+  /** The cloud provider smart mode will use, as users know it. Core prefers an EU provider. */
+  private cloudName(): string {
+    if (this.euCloud) {
+      return 'Mistral (EU)';
+    }
+    const p = this.cloudProviders.length > 0 ? this.cloudProviders[0] : '';
+    return p === 'anthropic' ? 'Claude' : p === 'openai' ? 'OpenAI' : 'cloud AI';
   }
 
   /** Whether smart mode may use a cloud provider: an EU one, or any one if non-EU providers are allowed. */
@@ -737,16 +839,22 @@ struct Index {
             .fontSize($r('sys.float.Subtitle_M'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('sys.color.font_primary'))
+            .layoutWeight(1)
+          SymbolGlyph(this.hintOpenIds.includes(entry.capsule.id) ? $r('sys.symbol.chevron_up') :
+          $r('sys.symbol.chevron_down'))
+            .fontSize(18)
+            .fontColor([$r('sys.color.icon_secondary')])
         }
-        Text('1. Long-press the Harmoniser app icon on your home screen.\n' +
-          '2. Pick the Harmoniser widget.\n' +
-          '3. Tap "Add to home screen".')
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_secondary'))
-          .lineHeight(22)
-        Text(`${routeHeadline(entry.route)} · ${entry.route.reason}`)
-          .fontSize($r('sys.float.Caption_M'))
-          .fontColor($r('sys.color.font_tertiary'))
+        .width('100%')
+        .onClick(() => this.toggleHint(entry.capsule.id))
+        if (this.hintOpenIds.includes(entry.capsule.id)) {
+          Text('1. Long-press the Harmoniser app icon on your home screen.\n' +
+            '2. Pick the Harmoniser widget.\n' +
+            '3. Tap "Add to home screen".')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_secondary'))
+            .lineHeight(22)
+        }
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
@@ -755,7 +863,7 @@ struct Index {
       .backgroundColor($r('sys.color.comp_background_primary'))
       .border({ width: 1, color: $r('sys.color.brand'), style: BorderStyle.Dashed })
     } else {
-      Text(`${routeHeadline(entry.route)} · ${entry.route.reason}`)
+      Text(routeHeadline(entry.route))
         .fontSize($r('sys.float.Caption_M'))
         .fontColor($r('sys.color.font_tertiary'))
         .width('100%')
@@ -784,11 +892,12 @@ struct Index {
         Column({ space: 16 }) {
           this.originPill(entry.origin)
           CapsuleView({ runtime: entry.runtime })
+          if (this.canMakeSmarter(entry)) {
+            this.smarterButton(entry)
+          }
           this.routeCard(entry)
-          SharingBar({
-            capsule: entry.capsule,
-            onImported: (prepared: PreparedImport) => this.handleImported(prepared)
-          })
+          // Share only: importing lives on the home screen.
+          SharingBar({ capsule: entry.capsule, showImport: false })
           Button() {
             Row({ space: 6 }) {
               SymbolGlyph($r('sys.symbol.trash'))

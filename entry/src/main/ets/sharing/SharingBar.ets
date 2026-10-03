@@ -13,6 +13,7 @@ import { shareCapsule } from './ShareExport';
 export struct SharingBar {
   @Param capsule: Capsule | undefined = undefined;
   @Param showShare: boolean = true;
+  @Param showImport: boolean = true;
   @Event onImported: (payload: PreparedImport) => void = () => {
   };
   @Local message: string = '';
@@ -103,12 +104,14 @@ export struct SharingBar {
               this.share();
             })
         }
-        Button('Import')
-          .layoutWeight(1)
-          .enabled(!this.busy)
-          .onClick(() => {
-            this.chooseImportSource();
-          })
+        if (this.showImport) {
+          Button('Import')
+            .layoutWeight(1)
+            .enabled(!this.busy)
+            .onClick(() => {
+              this.chooseImportSource();
+            })
+        }
       }
       .width('100%')
       if (this.message.length > 0) {

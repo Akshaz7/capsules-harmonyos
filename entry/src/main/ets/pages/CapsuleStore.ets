@@ -41,12 +41,46 @@ export class CapsuleStore {
     return next;
   }
 
-  /** How the capsule was made ('rules', 'on-device' or 'cloud'); '' if unknown. */
+  /** How the capsule was made ('rules', 'on-device', 'cloud-eu:mistral', 'imported', ...); '' if unknown. */
   origin(capsuleId: string): string {
     try {
       return this.prefs.getSync(`origin:${capsuleId}`, '') as string;
     } catch (e) {
       return '';
+    }
+  }
+
+  /** The request text the capsule was made from; '' if unknown (imported or saved before this was kept). */
+  request(capsuleId: string): string {
+    try {
+      return this.prefs.getSync(`request:${capsuleId}`, '') as string;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  setRequest(capsuleId: string, request: string): void {
+    try {
+      this.prefs.putSync(`request:${capsuleId}`, request);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'setRequest failed: %{public}s', (e as BusinessError).message);
+    }
+  }
+
+  /** Whether the "Add to home screen" how-to was already shown for this capsule. */
+  hintSeen(capsuleId: string): boolean {
+    try {
+      return this.prefs.getSync(`hintSeen:${capsuleId}`, false) as boolean;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  setHintSeen(capsuleId: string): void {
+    try {
+      this.prefs.putSync(`hintSeen:${capsuleId}`, true);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'setHintSeen failed: %{public}s', (e as BusinessError).message);
     }
   }
 
@@ -84,6 +118,8 @@ export class CapsuleStore {
     try {
       this.prefs.deleteSync(`origin:${capsuleId}`);
       this.prefs.deleteSync(`values:${capsuleId}`);
+      this.prefs.deleteSync(`request:${capsuleId}`);
+      this.prefs.deleteSync(`hintSeen:${capsuleId}`);
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'delete origin failed: %{public}s', (e as BusinessError).message);
     }
