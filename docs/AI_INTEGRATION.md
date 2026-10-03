@@ -8,7 +8,9 @@ The safety principle behind the whole design: **no model output ever runs as cod
 
 | Tier | Model / service | Where it runs | When it is used | Licence / terms |
 | --- | --- | --- | --- | --- |
-| 0 | **Rule parser** (`core/RuleParser.ets`), no model | On the device | Always first. Timers, counters, goals, schedules, bill splits and checklists. Returns at once on a match. | Our code, Apache-2.0 |
+| 0 | **Request cache**, no model | On the device | First. Reuses a model-made capsule for the same normalised request (200 entries, re-validated). Skipped by "Make it smarter". | Our code, Apache-2.0 |
+| 0 | **Rule parser** (`core/RuleParser.ets`), no model | On the device | Timers, counters, goals, schedules, bill splits, Pomodoro and checklists. Returns at once on a match. | Our code, Apache-2.0 |
+| 0 | **Template library** (`core/templates/`), 108 templates | On the device | After the rules. Fills a matching template by rule; unclear slots go to the on-device model (grounded values only). Badge "Made on your phone · no internet". The templates were generated with Claude ahead of time and validated; no model runs at request time unless a slot is unclear. | Our code, Apache-2.0 |
 | 1 | **LFM2-VL-450M** (Liquid AI), 4-bit `cq4` build, on the **Cactus** engine v2.2.2, which we ported to HarmonyOS (arm64-v8a, Node-API) | On the device. Weights are in the app sandbox (about 480 MB), not in the `.hap`. | Simple requests no rule matches. Skipped if the model isn't installed. | LFM Open License v1.0; Cactus Compute licence (see [`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 | 2 | **Mistral `ministral-14b-latest`** (Mistral AI, EU), JSON output mode | Mistral API (EU) | Requests that need logic (maths, scoring, converters, quizzes, streaks, inputs), or ones tier 1 rejects. **Default cloud provider.** | Mistral API terms |
 | 2 | **Claude `claude-sonnet-5-5`** (Anthropic) | Anthropic API (outside the EU) | Only if **Settings → Advanced → Allow non-EU providers** is on | Anthropic API terms |
@@ -23,7 +25,9 @@ request text (max 500 chars)
   │
   ├─ not English? ── "Harmoniser understands English for now…" (stops here; nothing sent)
   │
-  ├─ Rule parser ── match ─────────────────────────────────────────┐
+  ├─ Request cache ── hit ─────────────────────────────────────────┐
+  ├─ Rule parser ── match ─────────────────────────────────────────┤
+  ├─ Template library ── match (slots by rule / grounded on-device) ┤
   │                                                                  │
   ├─ refused actions (send SMS, calls, read contacts, email, websites, payments) ──► cloud first
   ├─ needs logic? ── yes ─► cloud (if allowed; otherwise needsCloud → app asks)
@@ -63,7 +67,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (195, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing and shared text.
+- **Unit tests (216, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing and shared text.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).

@@ -37,13 +37,13 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 ## 4. Architecture
 
-**Title:** Rules, then on-device, then EU cloud, then validator, then gatekeeper
+**Title:** Cache, rules, templates, then on-device, then EU cloud, then validator, then gatekeeper
 
 - Paste the README's Mermaid diagram (rendered).
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
-- **Smart routing:** a rule match returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
+- **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **195 unit tests**, plus a provider eval with held-out and refusal sets.
+- **216 unit tests**, plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 
@@ -67,7 +67,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Local first:** rules and the on-device model need no network. The **On-device only** mode guarantees nothing leaves the phone.
 - **EU-first cloud:** used automatically only with Mistral (EU). Claude or OpenAI only if you enable non-EU providers. Each provider gets its own consent. Only the request text is sent.
 - **Honest trade-off:** Mistral 14/15 tuning and 4/5 held-out; Claude 14/15 and 5/5. On hard logic requests Claude led 4/4 to 2/4. We default to EU anyway, and the validator catches the failures.
-- **Transparency:** every capsule shows how it was made: rules, on-device, Mistral (EU), Claude, or from someone else.
+- **Transparency:** every capsule shows how it was made: rules, on your phone (template), on-device, Mistral (EU), Claude, or from someone else.
 - **Built openly with AI:** coding agents throughout, with the full log in `AI_WORKFLOW.md`.
 
 *Closing line:* "Rules, on-device AI, an EU-first cloud, and a gatekeeper you control."
