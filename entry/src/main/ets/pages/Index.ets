@@ -1,5 +1,13 @@
 import { common } from '@kit.AbilityKit';
-import { Capsule, GenerateResult, Permission, generateCapsule, getModelStatus } from '../core';
+import { curves } from '@kit.ArkUI';
+import {
+  Capsule,
+  GenerateResult,
+  Permission,
+  generateCapsule,
+  getModelStatus,
+  routeCapsule
+} from '../core';
 import { NotificationAdapter } from '../adapters/NotificationAdapter';
 import { TimerAdapter } from '../adapters/TimerAdapter';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
@@ -11,13 +19,27 @@ import {
   TimerState
 } from '../renderer/CapsuleRuntime';
 import { CapsuleView } from '../renderer/CapsuleView';
+import { CapsuleEntry, capsuleIcon, routeHeadline } from './CapsuleEntry';
 import { CapsuleStore } from './CapsuleStore';
 import { ConsentView } from './ConsentView';
 import { LogView } from './LogView';
 
 const LOG_PAGE = 'log';
+const OPEN_CURVE: ICurve = curves.springMotion(0.45, 0.9);
 
-type Phase = 'create' | 'consent' | 'run';
+interface ExampleChip {
+  label: string;
+  icon: Resource;
+  request: string;
+}
+
+const EXAMPLES: ExampleChip[] = [
+  { label: 'Timers', icon: $r('sys.symbol.timer'), request: 'pasta 9 min, sauce 15 min, bread 6 min' },
+  { label: 'Squats', icon: $r('sys.symbol.dumbbell'), request: 'count my squats' },
+  { label: 'Water', icon: $r('sys.symbol.drop'), request: 'water 8 glasses' },
+  { label: 'Checklist', icon: $r('sys.symbol.checkmark_circle'),
+    request: 'checklist for leaving home: keys, wallet, charger' }
+];
 
 class CalendarScheduler implements TimerScheduler {
   private adapter: TimerAdapter;
@@ -66,15 +88,17 @@ struct Index {
   private timers: TimerAdapter | undefined = undefined;
   private notifications: NotificationAdapter | undefined = undefined;
   private store: CapsuleStore | undefined = undefined;
-  @Local phase: Phase = 'create';
-  @Local capsule: Capsule | undefined = undefined;
-  @Local runtime: CapsuleRuntime | undefined = undefined;
+  private statusPoll: number = -1;
+  @Local entries: CapsuleEntry[] = [];
+  @Local openId: string = '';
+  @Local pending: Capsule | undefined = undefined;
+  @Local pendingOrigin: string = '';
+  @Local showSheet: boolean = false;
   @Local request: string = '';
   @Local busy: boolean = false;
   @Local message: string = '';
-  @Local nav: NavPathStack = new NavPathStack();
   @Local modelStatus: string = getModelStatus().message;
-  private statusPoll: number = -1;
+  @Local nav: NavPathStack = new NavPathStack();
 
   aboutToAppear(): void {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -83,20 +107,15 @@ struct Index {
     this.notifications = new NotificationAdapter(ctx);
     this.store = new CapsuleStore(ctx);
     this.watchModelStatus();
-    // Resume the saved capsule; ask again if its consent was never given.
-    const saved = this.store.load();
-    if (saved) {
-      this.capsule = saved;
-      if (this.gate.hasDecided(saved.id)) {
-        this.startCapsule(saved);
-      } else {
-        this.phase = 'consent';
-      }
-    }
+    // Saved capsules were approved before; ones whose consent was lost get dropped.
+    const gate = this.gate;
+    this.entries = this.store.all()
+      .filter((c: Capsule) => gate.hasDecided(c.id))
+      .map((c: Capsule) => this.makeEntry(c));
   }
 
   aboutToDisappear(): void {
-    this.runtime?.stop();
+    this.entries.forEach((e: CapsuleEntry) => e.runtime.stop());
     clearInterval(this.statusPoll);
   }
 
@@ -113,64 +132,108 @@ struct Index {
     }, 500);
   }
 
+  private openEntry(): CapsuleEntry | undefined {
+    return this.entries.find((e: CapsuleEntry) => e.capsule.id === this.openId);
+  }
+
+  private makeEntry(capsule: Capsule): CapsuleEntry {
+    const rt = new CapsuleRuntime(capsule);
+    if (this.gate) {
+      rt.blockReasons = this.gate.checkComponents(capsule);
+      rt.guard = new GatekeeperGuard(this.gate, capsule);
+      if (this.gate.isAllowed(capsule, 'reminders') && this.timers && this.notifications) {
+        rt.scheduler = new CalendarScheduler(this.timers);
+        rt.alert = new NotifyOnFinish(this.notifications, capsule.name);
+      }
+    }
+    return new CapsuleEntry(capsule, routeCapsule(capsule), rt);
+  }
+
+  /** Keeps ids unique across saved capsules so grants and calendar events never collide. */
+  private uniqueCapsule(capsule: Capsule): Capsule {
+    const taken = this.entries.map((e: CapsuleEntry) => e.capsule.id);
+    let id = capsule.id;
+    let n = 2;
+    while (taken.includes(id)) {
+      id = `${capsule.id}-${n++}`;
+    }
+    const copy: Capsule = {
+      schemaVersion: capsule.schemaVersion,
+      id: id,
+      name: capsule.name,
+      permissions: capsule.permissions,
+      ui: capsule.ui
+    };
+    return copy;
+  }
+
   private async create(): Promise<void> {
     const text = this.request.trim();
     if (text.length === 0 || this.busy) {
       return;
     }
     this.busy = true;
-    this.message = 'Creating…';
+    this.message = '';
     const result: GenerateResult = await generateCapsule(text);
     this.busy = false;
     if (!result.ok || !result.capsule) {
       this.message = result.error ?? 'Could not create a capsule.';
       return;
     }
-    // A new capsule always gets a fresh consent screen.
-    this.capsule = result.capsule;
-    this.store?.save(result.capsule);
-    this.message = result.origin === 'model' ? 'Made by the AI fallback.' : 'Made on-device by the rule parser.';
-    this.phase = 'consent';
-  }
-
-  private startCapsule(capsule: Capsule): void {
-    if (!this.gate || !this.timers || !this.notifications) {
-      return;
-    }
-    const rt = new CapsuleRuntime(capsule);
-    rt.blockReasons = this.gate.checkComponents(capsule);
-    rt.guard = new GatekeeperGuard(this.gate, capsule);
-    if (this.gate.isAllowed(capsule, 'reminders')) {
-      rt.scheduler = new CalendarScheduler(this.timers);
-      rt.alert = new NotifyOnFinish(this.notifications, capsule.name);
-      this.timers.prepare().then(() => this.notifications?.ensureEnabled());
-    }
-    this.runtime = rt;
-    this.phase = 'run';
+    this.pending = this.uniqueCapsule(result.capsule);
+    this.pendingOrigin = result.origin === 'cloud' ? 'Made by the cloud AI fallback' : 'Made on-device';
+    this.showSheet = true;
   }
 
   private decide(allowed: Permission[]): void {
-    if (!this.capsule) {
+    const capsule = this.pending;
+    if (!capsule || !this.gate) {
       return;
     }
-    this.gate?.decide(this.capsule, allowed);
-    this.startCapsule(this.capsule);
+    this.gate.decide(capsule, allowed);
+    this.store?.add(capsule);
+    const entry = this.makeEntry(capsule);
+    this.entries = [entry].concat(this.entries);
+    if (this.gate.isAllowed(capsule, 'reminders')) {
+      this.timers?.prepare().then(() => this.notifications?.ensureEnabled());
+    }
+    this.pending = undefined;
+    this.showSheet = false;
+    this.request = '';
+    this.message = '';
+    setTimeout(() => this.open(capsule.id), 300);
   }
 
-  private async undo(): Promise<void> {
-    if (!this.gate || !this.timers || !this.capsule) {
+  private cancelPending(): void {
+    this.pending = undefined;
+    this.showSheet = false;
+  }
+
+  private open(id: string): void {
+    this.getUIContext().animateTo({ curve: OPEN_CURVE }, () => {
+      this.openId = id;
+    });
+  }
+
+  private close(): void {
+    this.getUIContext().animateTo({ curve: OPEN_CURVE }, () => {
+      this.openId = '';
+    });
+  }
+
+  private async undo(entry: CapsuleEntry): Promise<void> {
+    if (!this.gate || !this.timers) {
       return;
     }
-    const capsule = this.capsule;
-    this.runtime?.stop();
+    const capsule = entry.capsule;
+    entry.runtime.stop();
     const cancelled = await this.timers.cancelForCapsule(capsule.id);
     const note = `Removed ${capsule.name}; cancelled ${cancelled} calendar reminder(s)`;
     this.gate.forget(capsule.id, note);
-    this.store?.remove();
-    this.runtime = undefined;
-    this.capsule = undefined;
+    this.store?.remove(capsule.id);
+    this.close();
+    this.entries = this.entries.filter((e: CapsuleEntry) => e.capsule.id !== capsule.id);
     this.message = note;
-    this.phase = 'create';
   }
 
   @Builder
@@ -181,88 +244,349 @@ struct Index {
   }
 
   @Builder
-  createScreen() {
-    Column({ space: 12 }) {
-      Text('Capsules')
-        .fontSize(24)
-        .fontWeight(FontWeight.Bold)
-        .width('100%')
-      TextArea({ placeholder: 'Describe a tiny app, e.g. "pasta 9 min, sauce 15 min, bread 6 min"', text: this.request })
-        .height(120)
-        .onChange((value: string) => {
-          this.request = value;
-        })
-      Button(this.busy ? 'Creating…' : 'Create')
-        .width('100%')
-        .enabled(!this.busy && this.request.trim().length > 0)
-        .onClick(() => {
-          this.create();
-        })
-      if (this.message.length > 0) {
-        Text(this.message).fontSize(15).width('100%')
-      }
-      Text(this.modelStatus)
-        .fontSize(13)
-        .fontColor(Color.Gray)
-        .width('100%')
-      Button('Log')
-        .width('100%')
-        .type(ButtonType.Normal)
-        .borderRadius(20)
-        .backgroundColor(Color.Gray)
-        .onClick(() => this.nav.pushPath({ name: LOG_PAGE }))
+  iconButton(icon: Resource, action: () => void) {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph(icon)
+        .fontSize(22)
+        .fontColor([$r('sys.color.icon_primary')])
     }
-    .width('100%')
-    .padding(16)
+    .width(40)
+    .height(40)
+    .backgroundColor($r('sys.color.comp_background_tertiary'))
+    .onClick(action)
   }
 
   @Builder
-  runBar() {
-    Row({ space: 8 }) {
-      Button('Log')
-        .layoutWeight(1)
-        .onClick(() => this.nav.pushPath({ name: LOG_PAGE }))
-      Button('Undo')
-        .layoutWeight(1)
-        .backgroundColor(Color.Red)
-        .onClick(() => {
-          this.undo();
+  sheetBody() {
+    Column() {
+      if (this.pending) {
+        ConsentView({
+          capsule: this.pending,
+          origin: this.pendingOrigin,
+          onDecide: (allowed: Permission[]) => this.decide(allowed),
+          onCancel: () => this.cancelPending()
         })
+      }
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 8 })
+  }
+
+  @Builder
+  inputCard() {
+    Column({ space: 12 }) {
+      TextArea({ placeholder: 'Describe a tiny app…', text: this.request })
+        .height(96)
+        .fontSize($r('sys.float.Body_L'))
+        .backgroundColor(Color.Transparent)
+        .padding({ left: 4, right: 4, top: 0, bottom: 0 })
+        .onChange((value: string) => {
+          this.request = value;
+        })
+      Row() {
+        Text(this.modelStatus)
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .layoutWeight(1)
+        Button() {
+          Row({ space: 6 }) {
+            if (this.busy) {
+              LoadingProgress()
+                .width(20)
+                .height(20)
+                .color($r('sys.color.font_on_primary'))
+            }
+            Text(this.busy ? 'Creating' : 'Create')
+              .fontSize($r('sys.float.Body_M'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('sys.color.font_on_primary'))
+          }
+          .padding({ left: 18, right: 18 })
+        }
+        .height(40)
+        .backgroundColor($r('sys.color.brand'))
+        .enabled(!this.busy && this.request.trim().length > 0)
+        .opacity(!this.busy && this.request.trim().length > 0 ? 1 : 0.4)
+        .onClick(() => {
+          this.create();
+        })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(24)
+    .backgroundColor($r('sys.color.comp_background_primary'))
+  }
+
+  @Builder
+  chips() {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(EXAMPLES, (chip: ExampleChip) => {
+        Row({ space: 6 }) {
+          SymbolGlyph(chip.icon)
+            .fontSize(16)
+            .fontColor([$r('sys.color.icon_emphasize')])
+          Text(chip.label)
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_primary'))
+        }
+        .height(36)
+        .padding({ left: 14, right: 14 })
+        .margin({ right: 8, bottom: 8 })
+        .borderRadius(18)
+        .backgroundColor($r('sys.color.comp_background_primary'))
+        .onClick(() => {
+          this.request = chip.request;
+        })
+      }, (chip: ExampleChip) => chip.label)
+    }
+    .width('100%')
+  }
+
+  @Builder
+  card(entry: CapsuleEntry) {
+    Column({ space: 10 }) {
+      Stack() {
+        SymbolGlyph(capsuleIcon(entry.capsule))
+          .fontSize(22)
+          .fontColor([$r('sys.color.icon_emphasize')])
+      }
+      .width(44)
+      .height(44)
+      .borderRadius(22)
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      Text(entry.capsule.name)
+        .fontSize($r('sys.float.Subtitle_M'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_primary'))
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(entry.runtime.summary())
+        .fontSize($r('sys.float.Caption_L'))
+        .fontColor($r('sys.color.font_secondary'))
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+      if (entry.route.widget) {
+        Row({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+            .fontSize(14)
+            .fontColor([$r('sys.color.brand')])
+          Text('Add to home screen')
+            .fontSize($r('sys.float.Caption_M'))
+            .fontColor($r('sys.color.brand'))
+        }
+      } else {
+        Text('In app')
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .height(190)
+    .padding(16)
+    .borderRadius(24)
+    .backgroundColor($r('sys.color.comp_background_primary'))
+    .geometryTransition(entry.capsule.id)
+    .onClick(() => this.open(entry.capsule.id))
+  }
+
+  @Builder
+  home() {
+    Scroll() {
+      Column({ space: 16 }) {
+        Row() {
+          Text('Capsules')
+            .fontSize($r('sys.float.Subtitle_L'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.font_secondary'))
+            .layoutWeight(1)
+          this.iconButton($r('sys.symbol.doc_text'), () => this.nav.pushPath({ name: LOG_PAGE }))
+        }
+        .width('100%')
+        Text('What do you need?')
+          .fontSize(32)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .width('100%')
+        this.inputCard()
+        this.chips()
+        if (this.message.length > 0) {
+          Text(this.message)
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_secondary'))
+            .width('100%')
+        }
+        Row() {
+          Text('Your capsules')
+            .fontSize($r('sys.float.Subtitle_L'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('sys.color.font_primary'))
+            .layoutWeight(1)
+          if (this.entries.length > 0) {
+            Text(`${this.entries.length}`)
+              .fontSize($r('sys.float.Body_M'))
+              .fontColor($r('sys.color.font_tertiary'))
+          }
+        }
+        .width('100%')
+        .margin({ top: 8 })
+        if (this.entries.length === 0) {
+          Text('Capsules you create appear here.')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_tertiary'))
+            .width('100%')
+            .padding({ top: 24, bottom: 24 })
+            .textAlign(TextAlign.Center)
+        } else {
+          Grid() {
+            ForEach(this.entries, (entry: CapsuleEntry) => {
+              GridItem() {
+                this.card(entry)
+              }
+            }, (entry: CapsuleEntry) => entry.capsule.id)
+          }
+          .columnsTemplate('1fr 1fr')
+          .columnsGap(12)
+          .rowsGap(12)
+          .width('100%')
+          .maxCount(2)
+          .layoutDirection(GridDirection.Row)
+        }
+      }
+      .padding({ left: 16, right: 16, top: 8, bottom: 32 })
+      .width('100%')
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.Top)
+    .edgeEffect(EdgeEffect.Spring)
+    .scrollBar(BarState.Off)
+    .transition(TransitionEffect.OPACITY)
+  }
+
+  @Builder
+  routeCard(entry: CapsuleEntry) {
+    if (entry.route.widget) {
+      Column({ space: 10 }) {
+        Row({ space: 10 }) {
+          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+            .fontSize(22)
+            .fontColor([$r('sys.color.brand')])
+          Text('Add to home screen')
+            .fontSize($r('sys.float.Subtitle_M'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.font_primary'))
+        }
+        Text('1. Long-press the Capsules app icon on your home screen.\n' +
+          '2. Pick the Capsules widget.\n' +
+          '3. Tap "Add to home screen".')
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_secondary'))
+          .lineHeight(22)
+        Text(`${routeHeadline(entry.route)} · ${entry.route.reason}`)
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding(16)
+      .borderRadius(20)
+      .backgroundColor($r('sys.color.comp_background_primary'))
+      .border({ width: 1, color: $r('sys.color.brand'), style: BorderStyle.Dashed })
+    } else {
+      Text(`${routeHeadline(entry.route)} · ${entry.route.reason}`)
+        .fontSize($r('sys.float.Caption_M'))
+        .fontColor($r('sys.color.font_tertiary'))
+        .width('100%')
+        .padding({ left: 4, right: 4 })
+    }
+  }
+
+  @Builder
+  detail(entry: CapsuleEntry) {
+    Column() {
+      Row({ space: 12 }) {
+        this.iconButton($r('sys.symbol.chevron_left'), () => this.close())
+        Text(entry.capsule.name)
+          .fontSize($r('sys.float.Title_S'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        this.iconButton($r('sys.symbol.doc_text'), () => this.nav.pushPath({ name: LOG_PAGE }))
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+
+      Scroll() {
+        Column({ space: 16 }) {
+          CapsuleView({ runtime: entry.runtime })
+          this.routeCard(entry)
+          Button() {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.trash'))
+                .fontSize(18)
+                .fontColor([$r('sys.color.warning')])
+              Text('Remove capsule')
+                .fontSize($r('sys.float.Body_L'))
+                .fontColor($r('sys.color.warning'))
+            }
+          }
+          .width('100%')
+          .height(48)
+          .margin({ top: 8 })
+          .backgroundColor($r('sys.color.comp_background_tertiary'))
+          .onClick(() => {
+            this.undo(entry);
+          })
+          Text('Removes the capsule, its permissions and its calendar events.')
+            .fontSize($r('sys.float.Caption_M'))
+            .fontColor($r('sys.color.font_tertiary'))
+        }
+        .padding({ left: 16, right: 16, top: 8, bottom: 32 })
+        .width('100%')
+      }
+      .layoutWeight(1)
+      .align(Alignment.Top)
+      .edgeEffect(EdgeEffect.Spring)
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor($r('sys.color.background_secondary'))
+    .geometryTransition(entry.capsule.id)
+    .transition(TransitionEffect.OPACITY)
   }
 
   build() {
     Navigation(this.nav) {
-      Scroll() {
-        Column() {
-          if (this.phase === 'consent' && this.capsule) {
-            if (this.message.length > 0) {
-              Text(this.message)
-                .fontSize(13)
-                .fontColor(Color.Gray)
-                .width('100%')
-                .padding({ left: 16, right: 16, top: 8 })
-            }
-            ConsentView({
-              capsule: this.capsule,
-              onDecide: (allowed: Permission[]) => this.decide(allowed)
-            })
-          } else if (this.phase === 'run' && this.runtime) {
-            this.runBar()
-            CapsuleView({ runtime: this.runtime })
-          } else {
-            this.createScreen()
+      Stack() {
+        if (this.openEntry()) {
+          this.detail(this.openEntry() as CapsuleEntry)
+        } else {
+          this.home()
+        }
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('sys.color.background_secondary'))
+      .bindSheet(this.showSheet, this.sheetBody(), {
+        height: SheetSize.FIT_CONTENT,
+        dragBar: true,
+        backgroundColor: $r('sys.color.background_secondary'),
+        onDisappear: () => {
+          if (this.pending) {
+            this.cancelPending();
           }
         }
-        .width('100%')
-      }
-      .height('100%')
-      .width('100%')
-      .align(Alignment.Top)
+      })
     }
     .hideTitleBar(true)
+    .backgroundColor($r('sys.color.background_secondary'))
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .mode(NavigationMode.Stack)
     .navDestination(this.pageMap)
   }

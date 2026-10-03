@@ -1,9 +1,35 @@
-import { GateLog, LogEntry } from '../gatekeeper/Gatekeeper';
+import { GateLog, LogEntry, LogKind } from '../gatekeeper/Gatekeeper';
 
 function formatTime(ms: number): string {
   const d = new Date(ms);
   const pad = (n: number): string => (n < 10 ? `0${n}` : `${n}`);
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function kindColor(kind: LogKind): ResourceColor {
+  switch (kind) {
+    case 'allow':
+      return $r('sys.color.confirm');
+    case 'blocked':
+      return $r('sys.color.warning');
+    case 'deny':
+      return $r('sys.color.alert');
+    default:
+      return $r('sys.color.font_secondary');
+  }
+}
+
+function kindIcon(kind: LogKind): Resource {
+  switch (kind) {
+    case 'allow':
+      return $r('sys.symbol.checkmark_circle');
+    case 'blocked':
+      return $r('sys.symbol.lock');
+    case 'deny':
+      return $r('sys.symbol.xmark');
+    default:
+      return $r('sys.symbol.trash');
+  }
 }
 
 /** Gatekeeper log, newest first. */
@@ -13,24 +39,46 @@ export struct LogView {
 
   build() {
     NavDestination() {
-      List({ space: 8 }) {
-        ForEach(this.log.entries, (e: LogEntry) => {
-          ListItem() {
-            Column({ space: 2 }) {
-              Text(`${formatTime(e.time)}  ${e.kind.toUpperCase()}  ${e.capsuleId}`)
-                .fontSize(12)
-                .fontColor(Color.Gray)
-              Text(e.detail).fontSize(15)
+      if (this.log.entries.length === 0) {
+        Text('Nothing logged yet.')
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 48 })
+      } else {
+        List({ space: 8 }) {
+          ForEach(this.log.entries, (e: LogEntry) => {
+            ListItem() {
+              Row({ space: 12 }) {
+                SymbolGlyph(kindIcon(e.kind))
+                  .fontSize(20)
+                  .fontColor([kindColor(e.kind)])
+                Column({ space: 2 }) {
+                  Text(e.detail)
+                    .fontSize($r('sys.float.Body_M'))
+                    .fontColor($r('sys.color.font_primary'))
+                  Text(`${formatTime(e.time)} · ${e.capsuleId}`)
+                    .fontSize($r('sys.float.Caption_M'))
+                    .fontColor($r('sys.color.font_tertiary'))
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+              }
+              .width('100%')
+              .padding(14)
+              .borderRadius(16)
+              .backgroundColor($r('sys.color.comp_background_primary'))
             }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-          }
-        }, (e: LogEntry, i: number) => `${e.time}-${i}-${e.detail}`)
+          }, (e: LogEntry, i: number) => `${e.time}-${i}-${e.detail}`)
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 16, right: 16, bottom: 16 })
+        .scrollBar(BarState.Off)
       }
-      .width('100%')
-      .height('100%')
-      .padding(16)
     }
     .title('Gatekeeper log')
+    .backgroundColor($r('sys.color.background_secondary'))
   }
 }

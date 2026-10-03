@@ -11,6 +11,13 @@ import {
 const DOMAIN = 0x0001;
 const TAG = 'CapsuleRuntime';
 
+/** m:ss */
+export function formatClock(total: number): string {
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
 @ObservedV2
 export class TimerState {
   timerId: string;
@@ -32,10 +39,12 @@ export class TimerState {
 @ObservedV2
 export class CounterState {
   counterId: string;
+  label: string;
   @Trace value: number = 0;
 
   constructor(c: CounterComponent) {
     this.counterId = c.id;
+    this.label = c.label;
   }
 }
 
@@ -123,6 +132,26 @@ export class CapsuleRuntime {
 
   numberField(numberId: string): NumberState | undefined {
     return this.numbers.find((n: NumberState) => n.numberId === numberId);
+  }
+
+  /** One-line live state for cards: time left, counts, items ticked. */
+  summary(): string {
+    const parts: string[] = [];
+    const running = this.timers.filter((t: TimerState) => t.running);
+    if (running.length > 0) {
+      const next = running.reduce((a: TimerState, b: TimerState) => a.remainingSec <= b.remainingSec ? a : b);
+      parts.push(`${next.label} ${formatClock(next.remainingSec)} left`);
+    } else if (this.timers.length > 0) {
+      const done = this.timers.filter((t: TimerState) => t.done).length;
+      parts.push(done > 0 ? `${done}/${this.timers.length} timers done` :
+        `${this.timers.length} timer${this.timers.length > 1 ? 's' : ''} ready`);
+    }
+    this.counters.forEach((c: CounterState) => parts.push(`${c.label} ${c.value}`));
+    this.checklists.forEach((c: ChecklistState) => {
+      const ticked = c.checked.filter((v: boolean) => v).length;
+      parts.push(`${ticked}/${c.checked.length} ticked`);
+    });
+    return parts.length > 0 ? parts.join(' · ') : 'Tap to open';
   }
 
   /** Runs one schema action string, e.g. "startTimer:pasta" or "startAllTimers". */

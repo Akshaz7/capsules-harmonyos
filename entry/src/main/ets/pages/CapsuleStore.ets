@@ -7,9 +7,10 @@ import { Capsule } from '../core';
 const DOMAIN = 0x0001;
 const TAG = 'CapsuleStore';
 const STORE = 'capsules';
-const ACTIVE_KEY = 'active';
+const LIST_KEY = 'saved';
+const LEGACY_ACTIVE_KEY = 'active';
 
-/** Keeps the one active capsule so it survives an app restart. Undo deletes it. */
+/** Saved (approved) capsules, newest first. Survives restarts; Undo removes one. */
 export class CapsuleStore {
   private prefs: preferences.Preferences;
 
@@ -18,27 +19,38 @@ export class CapsuleStore {
     this.prefs = preferences.getPreferencesSync(ctx, options);
   }
 
-  load(): Capsule | undefined {
+  all(): Capsule[] {
     try {
-      const raw = this.prefs.getSync(ACTIVE_KEY, '') as string;
-      return raw.length > 0 ? JSON.parse(raw) as Capsule : undefined;
+      const raw = this.prefs.getSync(LIST_KEY, '') as string;
+      if (raw.length > 0) {
+        return JSON.parse(raw) as Capsule[];
+      }
+      // One-time migration from the single-capsule store.
+      const legacy = this.prefs.getSync(LEGACY_ACTIVE_KEY, '') as string;
+      return legacy.length > 0 ? [JSON.parse(legacy) as Capsule] : [];
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'load failed: %{public}s', (e as BusinessError).message);
-      return undefined;
+      return [];
     }
   }
 
-  save(capsule: Capsule): void {
-    this.write(() => this.prefs.putSync(ACTIVE_KEY, JSON.stringify(capsule)));
+  /** Adds or replaces the capsule with the same id, then puts it first. */
+  add(capsule: Capsule): Capsule[] {
+    const next = [capsule].concat(this.all().filter((c: Capsule) => c.id !== capsule.id));
+    this.write(next);
+    return next;
   }
 
-  remove(): void {
-    this.write(() => this.prefs.deleteSync(ACTIVE_KEY));
+  remove(capsuleId: string): Capsule[] {
+    const next = this.all().filter((c: Capsule) => c.id !== capsuleId);
+    this.write(next);
+    return next;
   }
 
-  private write(op: () => void): void {
+  private write(list: Capsule[]): void {
     try {
-      op();
+      this.prefs.putSync(LIST_KEY, JSON.stringify(list));
+      this.prefs.deleteSync(LEGACY_ACTIVE_KEY);
       this.prefs.flush().catch((e: BusinessError) => {
         hilog.error(DOMAIN, TAG, 'flush failed: %{public}s', e.message);
       });
