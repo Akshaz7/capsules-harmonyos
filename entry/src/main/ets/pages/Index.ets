@@ -69,6 +69,7 @@ import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
 import { HomeHero } from './HomeHero';
+import { MiniPreview } from './MiniPreview';
 import { reduceMotion, springCurve, successTick } from './Motion';
 import { BUILT_FROM_TEMPLATE } from './CapsuleEntry';
 import { copyToCache, pickPhoto, removeSnap, SNAP_HINT, SNAP_NEEDS_CLOUD, takePhoto } from './SnapPhoto';
@@ -1867,19 +1868,26 @@ struct Index {
   home() {
     Scroll() {
       Column({ space: 16 }) {
-        Text('Harmoniser')
-          .fontSize($r('sys.float.Subtitle_L'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
-        HomeHero()
+        Row({ space: 8 }) {
+          Image($r('app.media.harmoniser_mark'))
+            .width(28)
+            .height(28)
+          Text('Harmoniser')
+            .fontSize(20)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('sys.color.font_primary'))
+        }
+        .width('100%')
+        .height(44)
+        Column({ space: 4 }) {
+          HomeHero()
+          Text('Tiny apps, made by asking.')
+            .fontSize($r('sys.float.Body_L'))
+            .fontColor($r('sys.color.font_secondary'))
+            .width('100%')
+        }
         this.inputCard()
         this.statusRow()
-        Text('Tiny apps, made by asking.')
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
-          .padding({ left: 4 })
         if (this.snapNeedsCloud) {
           this.snapCloudNote()
         } else if (this.languageFailed) {
@@ -1894,6 +1902,7 @@ struct Index {
             .fontColor($r('sys.color.font_secondary'))
             .width('100%')
         }
+        this.recentSection()
       }
       .padding({ left: 16, right: 16, top: 8, bottom: 120 }) // room for the floating tab bar
       .width('100%')
@@ -1903,7 +1912,64 @@ struct Index {
     .align(Alignment.Top)
     .edgeEffect(EdgeEffect.Spring)
     .scrollBar(BarState.Off)
+    // One soft, static pale-blue wash at the top that fades into the system background.
+    .linearGradient({ direction: GradientDirection.Bottom,
+      colors: [[$r('app.color.hero_top'), 0], [$r('sys.color.background_secondary'), 0.35]] })
     .transition(TransitionEffect.OPACITY)
+  }
+
+  /** Home "Recent": the four newest capsules as live mini widgets; "See all" opens the Capsules tab. */
+  @Builder
+  recentSection() {
+    Column({ space: 12 }) {
+      Row() {
+        Text('Recent')
+          .fontSize($r('sys.float.Subtitle_L'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+        if (this.entries.length > 0) {
+          Text('See all')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.brand'))
+            .fontWeight(FontWeight.Medium)
+            .onClick(() => this.selectTab(TAB_CAPSULES))
+        }
+      }
+      .width('100%')
+      if (this.entries.length === 0) {
+        Text('Your capsules will appear here')
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+      } else {
+        Grid() {
+          ForEach(this.entries.slice(0, 4), (entry: CapsuleEntry) => {
+            GridItem() {
+              Column({ space: 8 }) {
+                MiniPreview({ runtime: entry.runtime })
+                Text(entry.capsule.name)
+                  .fontSize($r('sys.float.Body_M'))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('sys.color.font_primary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }
+              .onClick(() => this.open(entry.capsule.id))
+            }
+          }, (entry: CapsuleEntry) => `${entry.capsule.id}-${entry.runtime.serial}`)
+        }
+        .columnsTemplate('1fr 1fr')
+        .columnsGap(12)
+        .rowsGap(16)
+        .width('100%')
+        .maxCount(2)
+        .layoutDirection(GridDirection.Row)
+      }
+    }
+    .width('100%')
+    .margin({ top: 8 })
   }
 
   /** UI-2: the Capsules tab (live previews come with UI-3). */
