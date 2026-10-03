@@ -15,6 +15,7 @@
  */
 import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
 import { complete, initModel } from 'cactus';
 import {
   Capsule,
@@ -27,6 +28,8 @@ import {
 } from '../CapsuleTypes';
 import { validateCapsule } from '../CapsuleValidator';
 import { CapsuleSource } from '../CapsuleGenerator';
+import { IMAGE_NOT_READABLE, IMAGE_TOO_LARGE, IMAGE_UNSUPPORTED, ImageInput, imageMime, MAX_IMAGE_BYTES,
+  OnDeviceImageReader } from './CloudVision';
 
 export const ON_DEVICE_MODEL_DIR: string = 'lfm2-vl-450m-cq4';
 export const ON_DEVICE_READY: string = 'On-device AI ready';
@@ -37,6 +40,17 @@ export const ON_DEVICE_FAILED: string = 'On-device model failed to load';
 const MAX_ATTEMPTS: number = 2;
 const MAX_TOKENS: number = 160;
 const MAX_REQUEST_LENGTH: number = 500;
+/**
+ * Off: with Cactus v2.2.2 and the LFM2-VL-450M v2.0 weights an image prompt never returns (emulator: >7 min at
+ * ~350% CPU even for a 448x159 photo; macOS Metal build: stuck in the vision prefill). Text works. A stuck call
+ * would hold the engine and block text requests too, so photos skip the on-device model until this is fixed.
+ * The image plumbing (napi imagePath, readImage) stays so turning this on is a one-line change.
+ */
+export const ON_DEVICE_VISION: boolean = false;
+export const ON_DEVICE_VISION_OFF: string = 'On-device photo reading is not available yet.';
+/** What LFM2-VL is asked to do with a photo; its reply goes through the shared-text converters and slot-filling. */
+const IMAGE_PROMPT: string = 'Transcribe all the text in this image exactly, line by line.';
+const IMAGE_MAX_TOKENS: number = 256;
 
 export interface OnDeviceStatus {
   ready: boolean;
@@ -562,7 +576,7 @@ function buildFromReply(reply: string, request: string, kind?: string): BuildRes
 // ---- Provider ----
 
 /** On-device capsule source. Construct once; call init() before generate(). */
-export class CactusProvider implements CapsuleSource {
+export class CactusProvider implements CapsuleSource, OnDeviceImageReader {
   private status: OnDeviceStatus = { ready: false, message: ON_DEVICE_NOT_INSTALLED };
   private initPromise: Promise<boolean> | null = null;
   /** Raw model replies and rejection reasons from the last generate() call, for logs and evals. */
@@ -620,10 +634,10 @@ export class CactusProvider implements CapsuleSource {
   }
 
   /** One engine call; returns the reply text or throws an Error with a user-facing message. */
-  private async run(prompt: string, maxTokens: number): Promise<string> {
+  private async run(prompt: string, maxTokens: number, imagePath?: string): Promise<string> {
     let engine: EngineResponse;
     try {
-      engine = JSON.parse(await complete(prompt, undefined, maxTokens)) as EngineResponse;
+      engine = JSON.parse(await complete(prompt, undefined, maxTokens, undefined, imagePath)) as EngineResponse;
     } catch (e) {
       throw new Error('The on-device model failed to run.');
     }
@@ -631,6 +645,20 @@ export class CactusProvider implements CapsuleSource {
       throw new Error(`The on-device model failed: ${engine.error ?? 'unknown error'}`);
     }
     return engine.response ?? '';
+  }
+
+  /** Reads a photo (a file path the app can open) to text with the vision model. Throws if not ready. */
+  async readImage(imagePath: string): Promise<string> {
+    if (!ON_DEVICE_VISION) {
+      throw new Error(ON_DEVICE_VISION_OFF);
+    }
+    if (!this.status.ready) {
+      throw new Error(this.status.message);
+    }
+    this.lastTrace = [];
+    const text = await this.run(IMAGE_PROMPT, IMAGE_MAX_TOKENS, imagePath);
+    this.lastTrace.push(`image: ${text}`);
+    return text;
   }
 
   /** Slot-filling + deterministic build + validateCapsule, with one example-free retry. */
@@ -696,4 +724,40 @@ export class CactusProvider implements CapsuleSource {
       details: details
     };
   }
+}
+
+/**
+ * Opens a photo for generateCapsuleFromImage: checks the type (JPEG, PNG, WebP by extension) and size (max 5 MB).
+ * Returns an ImageInput, or a user-facing error string.
+ */
+export function loadImage(imagePath: string): ImageInput | string {
+  const mime = imageMime(imagePath);
+  if (mime.length === 0) {
+    return IMAGE_UNSUPPORTED;
+  }
+  let size = 0;
+  try {
+    size = fileIo.statSync(imagePath).size;
+  } catch (e) {
+    return IMAGE_NOT_READABLE;
+  }
+  if (size <= 0) {
+    return IMAGE_NOT_READABLE;
+  }
+  if (size > MAX_IMAGE_BYTES) {
+    return IMAGE_TOO_LARGE;
+  }
+  const image: ImageInput = {
+    path: imagePath, mime: mime, readBase64: (): string => {
+      const file = fileIo.openSync(imagePath, fileIo.OpenMode.READ_ONLY);
+      try {
+        const buf = new ArrayBuffer(size);
+        const n = fileIo.readSync(file.fd, buf);
+        return new util.Base64Helper().encodeToStringSync(new Uint8Array(buf, 0, n));
+      } finally {
+        fileIo.closeSync(file);
+      }
+    }
+  };
+  return image;
 }

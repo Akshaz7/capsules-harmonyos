@@ -1,7 +1,8 @@
 // Node-API wrapper around the Cactus C FFI.
 //   initModel(path: string): Promise<boolean>
-//   complete(prompt: string, system?: string, maxTokens?: number, toolsJson?: string): Promise<string>
+//   complete(prompt: string, system?: string, maxTokens?: number, toolsJson?: string, imagePath?: string): Promise<string>
 //       toolsJson: OpenAI-style tools array; when given, force_tools is on (output constrained to a tool call)
+//       imagePath: an image file the app can read (jpg/png); passed to vision models (LFM2-VL) with the prompt
 //       (resolves to the raw Cactus response JSON)
 //   freeModel(): void
 // initModel and complete run on the libuv worker pool via napi_async_work.
@@ -128,6 +129,7 @@ struct CompleteWork {
     std::string system;
     int32_t maxTokens = kDefaultMaxTokens;
     std::string tools;
+    std::string image;
     std::string result;
 };
 
@@ -142,7 +144,11 @@ void CompleteExecute(napi_env, void* data) {
     if (!w->system.empty()) {
         messages += "{\"role\":\"system\",\"content\":\"" + JsonEscape(w->system) + "\"},";
     }
-    messages += "{\"role\":\"user\",\"content\":\"" + JsonEscape(w->prompt) + "\"}]";
+    messages += "{\"role\":\"user\",\"content\":\"" + JsonEscape(w->prompt) + "\"";
+    if (!w->image.empty()) {
+        messages += ",\"images\":[\"" + JsonEscape(w->image) + "\"]";
+    }
+    messages += "}]";
     std::string options = "{\"max_tokens\":" + std::to_string(w->maxTokens) +
                           ",\"temperature\":0.0,\"auto_handoff\":false" +
                           (w->tools.empty() ? std::string() : std::string(",\"force_tools\":true,\"tool_rag_top_k\":0")) +
@@ -172,8 +178,8 @@ void CompleteComplete(napi_env env, napi_status, void* data) {
 }
 
 napi_value Complete(napi_env env, napi_callback_info info) {
-    size_t argc = 4;
-    napi_value args[4] = {nullptr, nullptr, nullptr, nullptr};
+    size_t argc = 5;
+    napi_value args[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
     if (argc < 1) {
         napi_throw_type_error(env, nullptr, "complete(prompt: string) requires a prompt");
@@ -191,6 +197,9 @@ napi_value Complete(napi_env env, napi_callback_info info) {
     }
     if (argc >= 4 && napi_typeof(env, args[3], &type) == napi_ok && type == napi_string) {
         w->tools = GetString(env, args[3]);
+    }
+    if (argc >= 5 && napi_typeof(env, args[4], &type) == napi_ok && type == napi_string) {
+        w->image = GetString(env, args[4]);
     }
     napi_value promise;
     napi_create_promise(env, &w->deferred, &promise);

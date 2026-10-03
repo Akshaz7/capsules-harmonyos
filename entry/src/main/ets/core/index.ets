@@ -26,7 +26,8 @@ import {
   parseModelConfigs
 } from './ModelProvider';
 import { getRequestCache, getTemplateLibrary } from './templates';
-import { CactusProvider, OnDeviceStatus } from './providers/CactusProvider';
+import { CactusProvider, loadImage, OnDeviceStatus } from './providers/CactusProvider';
+import { generateFromImageWith } from './providers/CloudVision';
 
 export * from './CapsuleTypes';
 export { validateCapsule, validateCapsuleObject, parseAction, permissionForAction, permissionForComponent,
@@ -47,6 +48,8 @@ export {
 export { OnDeviceStatus } from './providers/CactusProvider';
 export { initTemplates, matchTemplate, getTemplateLibrary, getRequestCache, TEMPLATE_BADGE, TEMPLATE_ORIGIN
 } from './templates';
+export { IMAGE_NOT_READABLE, IMAGE_NOT_UNDERSTOOD, IMAGE_TOO_LARGE, IMAGE_UNSUPPORTED, MAX_IMAGE_BYTES
+} from './providers/CloudVision';
 export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';
 export { StateValues, EvalResult, ApplyResult, DISPLAY_ERROR, initialState, restoreState, evaluate, computedValues,
   renderTemplate, isShown, isEnabled, listItems, inputText, applyActions, setInput, allComponents } from './CapsuleProgram';
@@ -93,6 +96,8 @@ export interface ModelStatus {
 }
 
 let models: CapsuleModel[] = [];
+let modelConfigs: ModelConfig[] = []; // same order as models; the photo path needs them to send images
+let cloudTransport: HttpTransport | null = null;
 let modelError: string = 'initCapsuleModel() has not been called';
 let status: ModelStatus = {
   configured: false, source: 'none', message: AI_NOT_CONFIGURED, providers: [], euAvailable: false, provider: 'none'
@@ -140,6 +145,8 @@ export async function loadModelConfig(context: common.Context): Promise<ModelCon
 export async function initCapsuleModel(context: common.Context): Promise<boolean> {
   onDevice.init(context); // loads the on-device model in the background; never throws
   models = [];
+  modelConfigs = [];
+  cloudTransport = null;
   const found = await readConfigText(context);
   if (found === null) {
     modelError = '';
@@ -161,6 +168,8 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
   const ordered: ModelConfig[] = [chosen].concat(loaded.configs.filter((c: ModelConfig) => c !== chosen));
   const transport = new NetworkTransport();
   models = ordered.map((c: ModelConfig) => new CapsuleModel(createProvider(c, transport)));
+  modelConfigs = ordered;
+  cloudTransport = transport;
   modelError = '';
   const names = ordered.map((c: ModelConfig) => c.provider as string);
   const eu = ordered.some((c: ModelConfig) => isEuProvider(c.provider));
@@ -238,4 +247,20 @@ export async function generateCapsule(request: string, options?: GenerateOptions
  */
 export async function generateCapsuleFromSharedText(text: string, options?: GenerateOptions): Promise<GenerateResult> {
   return generateFromSharedTextWith(text, models, options);
+}
+
+/**
+ * Photo -> capsule. `imagePath`: a JPEG, PNG or WebP file in the app sandbox (max 5 MB), e.g. a camera or
+ * picker photo copied into context.cacheDir. The on-device model reads it first; if that fails, the photo is sent
+ * to the cloud provider under the same policy as generateCapsule: never in mode "on-device-only", and with
+ * allowCloud false the result has needsCloud true (ask the user, then retry with allowCloud true).
+ * The result is validated like any capsule; nothing is saved here.
+ */
+export async function generateCapsuleFromImage(imagePath: string, options?: GenerateOptions): Promise<GenerateResult> {
+  const image = loadImage(imagePath);
+  if (typeof image === 'string') {
+    const failed: GenerateResult = { ok: false, error: image, details: [] };
+    return failed;
+  }
+  return generateFromImageWith(image, onDevice, models, modelConfigs, cloudTransport, options);
 }
