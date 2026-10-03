@@ -7,6 +7,7 @@ import {
   Capsule,
   CapsuleComponent,
   ButtonComponent,
+  ButtonStep,
   ParsedAction,
   Permission,
   parseAction,
@@ -128,7 +129,20 @@ export class Gatekeeper {
       return this.missing(capsule, p);
     }
     if (c.type === 'button') {
-      return this.actionBlockReason(capsule, (c as ButtonComponent).action);
+      // A v1 button may have no action ('') and run v0 actions as plain-string do-steps instead.
+      const b = c as ButtonComponent;
+      const actions: string[] = b.action.length > 0 ? [b.action] : [];
+      (b.do ?? []).forEach((step: ButtonStep) => {
+        if (typeof step === 'string') {
+          actions.push(step as string);
+        }
+      });
+      for (const action of actions) {
+        const reason = this.actionBlockReason(capsule, action);
+        if (reason.length > 0) {
+          return reason;
+        }
+      }
     }
     return '';
   }
