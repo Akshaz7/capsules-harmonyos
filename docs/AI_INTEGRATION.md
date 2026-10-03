@@ -63,7 +63,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (190, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing and shared text.
+- **Unit tests (195, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing and shared text.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
@@ -83,5 +83,5 @@ Known limitations:
 - **EU default trades accuracy for privacy:** Mistral is weaker than Claude on hard logic requests.
 - **The on-device model** handles only simple requests, and got 9 of 15 right in the eval. Phone performance hasn't been measured, and offline use wasn't strictly tested, because emulator airplane mode doesn't cut its network.
 - **Requests are capped at 500 characters**; shared text at 2,000.
-- **Not built:** vibration and motion counting. Schema v1.1 triggers have tested firing logic in core, but the app doesn't schedule or fire them yet.
+- **Not built:** vibration and motion counting. Daily time triggers fire only while the app is open, and motion triggers don't fire at all.
 - **Model weights** must be pushed separately (debug builds). A store build would need an in-app download.
