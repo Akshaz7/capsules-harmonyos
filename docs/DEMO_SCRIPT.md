@@ -36,9 +36,19 @@ Use English only: Harmoniser rejects other languages by design. Leave out anythi
 
 If the live API fails, the screen falls back to the shipped examples with a note. Either re-record later, or keep the take and caption it: "Built-in examples; live marketplace offline". Don't present the fallback as the live marketplace.
 
+## 60-second capability demo (real phone)
+
+1. Create `count my shakes` and allow **Motion sensor** — "The sensor only listens while the capsule is open. Nothing is recorded."
+2. Shake the phone: the count climbs. Stop shaking: it stops.
+3. Open Settings → Motion and switch the scope, or deny motion for the capsule and shake again: nothing moves, and the block is in the log.
+4. Create `phone battery`: the card shows the level and charging state, read on the phone.
+5. Create `weather in Kraków`: the card shows the city's weather with "Updated HH:MM" and "Weather data by Open-Meteo.com"; tap the link for the source. Airplane mode shows the offline state instead of a fake value.
+
+On a device without an accelerometer (the default emulator), the motion capsule says "Motion sensor unavailable on this device" — that is the honest state; never imply a count happened.
+
 ## What not to claim
 
-- Capsules that vibrate, and automatic motion/step counting: not built. Voice input: not in the app yet.
+- Capsules that vibrate: not built. Motion counts **shakes** while a capsule is open, never steps or reps; say that on camera. Voice input: not in the app yet.
 - Calendar alerts firing with the app closed: not seen working.
 - On-device accuracy beyond the eval (9/15 correct).
 - Publishing to the marketplace (not tested).
