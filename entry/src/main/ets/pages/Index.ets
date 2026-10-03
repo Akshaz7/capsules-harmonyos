@@ -294,12 +294,13 @@ struct Index {
   }
 
   /** Rules, then the on-device model, then the cloud model only when `allowCloud`. Never throws. */
-  private async generate(text: string, allowCloud: boolean): Promise<GenerateResult> {
+  private async generate(text: string, allowCloud: boolean, cloudOnly: boolean = false): Promise<GenerateResult> {
     try {
       return await generateCapsule(text, {
         mode: this.settings.aiMode === 'on-device' ? 'on-device-only' : 'smart',
         allowNonEu: this.settings.allowNonEu,
-        allowCloud: allowCloud
+        allowCloud: allowCloud,
+        cloudOnly: cloudOnly
       });
     } catch (e) {
       const failed: GenerateResult = { ok: false, error: `generateCapsule threw: ${(e as Error).message}`, details: [] };
@@ -465,8 +466,8 @@ struct Index {
     const saved = this.store?.request(entry.capsule.id) ?? '';
     const text = saved.length > 0 ? saved : entry.capsule.name;
     this.smarterBusyId = entry.capsule.id;
-    // TODO(core): pass cloudOnly once GenerateOptions has it; until then a matching rule still answers first.
-    const result = await this.generate(text, true);
+    // Cloud only: a matching rule or the on-device model would just rebuild the same capsule.
+    const result = await this.generate(text, true, true);
     this.smarterBusyId = '';
     if (!result.ok || !result.capsule || !isCloudOrigin(result.origin ?? '')) {
       hilog.error(0x0001, 'Index', 'make smarter failed for "%{private}s": origin %{public}s, %{public}s',
