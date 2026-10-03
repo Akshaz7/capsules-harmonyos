@@ -46,7 +46,7 @@ The commit history shows the progression. AI coding agents were used throughout,
 | v1 capsules (tennis scoreboard, converter, bill split) | Daily triggers fire only while the app is open; motion triggers don't fire |
 | Gatekeeper, log, widgets (incl. picker), timer pause/stop | Calendar alerts with the app closed: not seen working |
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
-| Marketplace: browse, install with consent, run (live API) | Marketplace publishing: not tested; template catalogue being re-seeded |
+| Marketplace: browse, install with consent, run (live API, 108 templates listed) | Marketplace publishing: not tested |
 | | Vibration and motion counting: not built |
 | | Photo → capsule and capsule editing: in core and unit-tested, not in the app yet |
 | | Wrist companion works on its own hardware; not connected to the app |

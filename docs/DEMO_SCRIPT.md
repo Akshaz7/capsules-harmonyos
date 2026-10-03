@@ -1,6 +1,6 @@
 # Demo script (90 seconds)
 
-One take of about 90 seconds. Most of it is on the **emulator**, the default the judges expect, with one clearly labelled **real-phone** segment. Every step shows something that is built and has been seen working. **The marketplace is in (Ash, 2026-10-03):** the live API (`harmoniser-web.vercel.app`) answered with 5 example listings on 2026-10-03, and Ash reports browse, Install, the "From the marketplace" consent and Run working against it. The **template catalogue is being re-seeded** (`/api/capsules?tag=template` returns nothing yet), so don't show template listings in the marketplace.
+One take of about 90 seconds. Most of it is on the **emulator**, the default the judges expect, with one clearly labelled **real-phone** segment. Every step shows something that is built and has been seen working. **The marketplace is in (Ash, 2026-10-03):** the live API (`harmoniser-web.vercel.app`) answered with 5 example listings on 2026-10-03, and Ash reports browse, Install, the "From the marketplace" consent and Run working against it. The **template catalogue is live too**: `/api/capsules?tag=template` returned all 108 templates on 2026-10-03 (T1 note, re-checked). Beat 5 still installs Squat counter, the listing Ash checked.
 
 Use English only: Harmoniser rejects other languages by design. Leave out anything that isn't built or hasn't been seen working: vibration, motion counting, calendar alerts with the app closed, and scanning a capsule QR code (no device check yet). The P1 fixes have landed (timer Pause/Stop, Share on the phone, non-English requests), so they can be shown if time allows, but the 90 seconds below don't need them.
 
@@ -41,4 +41,4 @@ If the live API fails, the screen falls back to the shipped examples with a note
 - Vibration and automatic motion/step counting: not built.
 - Calendar alerts firing with the app closed: not seen working.
 - On-device accuracy beyond the eval (9/15 correct).
-- Publishing to the marketplace (not tested), or template listings in the marketplace (catalogue being re-seeded).
+- Publishing to the marketplace (not tested).
