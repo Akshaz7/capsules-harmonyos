@@ -3,7 +3,7 @@
  * Returns null when no rule matches, so the caller can fall back to the model.
  *
  * Supported shapes (case-insensitive):
- * - timers:   "3 timers pasta 9 sauce 15 bread 6", "timer eggs 7"
+ * - timers:   "3 timers pasta 9 sauce 15 bread 6", "timer eggs 7", "pasta 9 min, sauce 15 min, bread 6 min"
  * - counter:  "count my squats", "count coffees", "pushup counter"
  * - schedule: "medication 8am and 8pm", "vitamins at 9:30am, 21:00"
  * - goal:     "water 8 glasses", "drink 8 glasses of water"
@@ -89,39 +89,64 @@ function button(label: string, action: string): ButtonComponent {
 class TimerSpec {
   label: string = '';
   minutes: number = 0;
+  hasUnit: boolean = false;
 }
 
-function parseTimers(req: string): Capsule | null {
-  const m = req.match(/^(?:(\d+)\s+)?timers?\b[:\s,]*(.+)$/);
-  if (m === null) {
-    return null;
-  }
-  const expected = m[1] !== undefined ? parseInt(m[1], 10) : -1;
-  const tokens = m[2].split(/[\s,]+/).filter((t: string) => t.length > 0 && t !== 'and' && t !== '&');
+const MINUTE_UNIT: RegExp = /^(m|min|mins|minute|minutes)$/;
+
+/**
+ * Reads "label number [unit]" pairs, e.g. "pasta 9 min, sauce 15 min and bread 6".
+ * Returns null if anything is left over or a number has no label.
+ */
+function timerSpecs(text: string): TimerSpec[] | null {
+  const tokens = text.split(/[\s,;]+/).filter((t: string) => t.length > 0 && t !== 'and' && t !== '&');
   const specs: TimerSpec[] = [];
   let words: string[] = [];
   for (const token of tokens) {
-    const num = token.match(/^(\d+(?:\.\d+)?)(?:m|min|mins|minutes?)?$/);
+    const num = token.match(/^(\d+(?:\.\d+)?)(m|min|mins|minutes?)?$/);
     if (num !== null) {
+      if (words.length > 0 && words[words.length - 1] === 'for') {
+        words.pop(); // "pasta for 9 min"
+      }
       if (words.length === 0) {
         return null;
       }
       const spec = new TimerSpec();
       spec.label = capitalize(words.join(' '));
       spec.minutes = parseFloat(num[1]);
+      spec.hasUnit = num[2] !== undefined;
       if (spec.minutes <= 0) {
         return null;
       }
       specs.push(spec);
       words = [];
-    } else if (/^(m|min|mins|minutes?|for)$/.test(token) && words.length === 0) {
-      continue; // unit after a number, or "for"
+    } else if (MINUTE_UNIT.test(token) && words.length === 0 && specs.length > 0) {
+      specs[specs.length - 1].hasUnit = true; // unit after the number
     } else {
       words.push(token);
     }
   }
-  if (words.length > 0 || specs.length === 0 || (expected >= 0 && expected !== specs.length)) {
-    return null;
+  return words.length > 0 || specs.length === 0 ? null : specs;
+}
+
+/**
+ * Timers. With a "timer(s)" keyword ("3 timers pasta 9 sauce 15", "timers: eggs 7") units are
+ * optional and a leading count must match. Without it ("pasta 9 min, sauce 15 min") every
+ * number needs a minute unit, so goals like "water 8 glasses" are left to their own rule.
+ */
+function parseTimers(req: string): Capsule | null {
+  const m = req.match(/^(?:(\d+)\s+)?timers?\b[:\s,]*(.+)$/);
+  let specs: TimerSpec[] | null;
+  if (m !== null) {
+    specs = timerSpecs(m[2]);
+    if (specs === null || (m[1] !== undefined && parseInt(m[1], 10) !== specs.length)) {
+      return null;
+    }
+  } else {
+    specs = timerSpecs(req);
+    if (specs === null || specs.some((t: TimerSpec) => !t.hasUnit)) {
+      return null;
+    }
   }
   const ids = new Ids();
   const ui: CapsuleComponent[] = specs.map((s: TimerSpec): CapsuleComponent => {

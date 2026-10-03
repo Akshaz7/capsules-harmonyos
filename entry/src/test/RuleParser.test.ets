@@ -2,7 +2,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import { parseRequest } from '../main/ets/core/RuleParser';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import {
-  ButtonComponent, Capsule, ChecklistComponent, CounterComponent, TextComponent, TimerComponent
+  ButtonComponent, Capsule, CapsuleComponent, ChecklistComponent, CounterComponent, TextComponent, TimerComponent
 } from '../main/ets/core/CapsuleTypes';
 
 function parseValid(request: string): Capsule {
@@ -11,6 +11,11 @@ function parseValid(request: string): Capsule {
   const v = validateCapsule(JSON.stringify(c));
   expect(v.errors.join('\n')).assertEqual('');
   return c as Capsule;
+}
+
+function timerSummary(c: Capsule): string {
+  return c.ui.filter((x: CapsuleComponent) => x.type === 'timer')
+    .map((x: CapsuleComponent) => `${(x as TimerComponent).label} ${(x as TimerComponent).minutes}`).join('|');
 }
 
 export default function ruleParserTest() {
@@ -30,6 +35,42 @@ export default function ruleParserTest() {
       expect((one.ui[0] as TimerComponent).label).assertEqual('Boiled eggs');
       expect((one.ui[1] as ButtonComponent).action).assertEqual('startTimer:boiled-eggs');
       expect(parseRequest('2 timers pasta 9 sauce 15 bread 6')).assertNull();
+    });
+
+    it('accepts timers with commas and "min" and no keyword (README example)', 0, () => {
+      const c = parseValid('pasta 9 min, sauce 15 min, bread 6 min');
+      expect(timerSummary(c)).assertEqual('Pasta 9|Sauce 15|Bread 6');
+      expect(c.permissions.join(',')).assertEqual('reminders');
+      expect((c.ui[3] as ButtonComponent).action).assertEqual('startAllTimers');
+    });
+
+    it('accepts "mins", "minutes", "m" and units attached to the number', 0, () => {
+      expect(timerSummary(parseValid('pasta 9 mins, sauce 15 minutes, bread 6m'))).assertEqual('Pasta 9|Sauce 15|Bread 6');
+      expect(timerSummary(parseValid('pasta 9min, sauce 15min'))).assertEqual('Pasta 9|Sauce 15');
+    });
+
+    it('accepts "and" between timers', 0, () => {
+      expect(timerSummary(parseValid('pasta 9 min and sauce 15 min'))).assertEqual('Pasta 9|Sauce 15');
+      expect(timerSummary(parseValid('pasta 9 min, sauce 15 min and bread 6 min'))).assertEqual('Pasta 9|Sauce 15|Bread 6');
+    });
+
+    it('accepts an optional "N timers" prefix with any of these phrasings', 0, () => {
+      expect(timerSummary(parseValid('3 timers: pasta 9 min, sauce 15 min, bread 6 min')))
+        .assertEqual('Pasta 9|Sauce 15|Bread 6');
+      expect(timerSummary(parseValid('timers pasta 9, sauce 15 and bread 6'))).assertEqual('Pasta 9|Sauce 15|Bread 6');
+      expect(parseRequest('2 timers pasta 9 min, sauce 15 min, bread 6 min')).assertNull();
+    });
+
+    it('makes a single timer from "label for N minutes"', 0, () => {
+      const c = parseValid('boiled eggs for 7 minutes');
+      expect(timerSummary(c)).assertEqual('Boiled eggs 7');
+      expect((c.ui[1] as ButtonComponent).action).assertEqual('startTimer:boiled-eggs');
+    });
+
+    it('does not treat unit-less numbers as timers without the keyword', 0, () => {
+      expect(parseRequest('pasta 9, sauce 15')).assertNull();
+      expect(parseValid('water 8 glasses').id).assertEqual('goal-water');
+      expect(parseRequest('pasta 9 min, sauce')).assertNull();
     });
 
     it('counts squats with the motion sensor', 0, () => {
