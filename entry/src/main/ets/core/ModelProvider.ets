@@ -70,7 +70,8 @@ const DEFAULT_OPENAI_URL: string = 'https://api.openai.com/v1';
 export const DEFAULT_MISTRAL_MODEL: string = 'mistral-medium-latest';
 const DEFAULT_MISTRAL_URL: string = 'https://api.mistral.ai/v1';
 const DEFAULT_TIMEOUT_MS: number = 30000;
-const MAX_TOKENS: number = 2048;
+/** Room for the reply plus any thinking the model does first (Claude may think before answering). */
+const MAX_TOKENS: number = 8192;
 
 type JsonValue = Object | null | undefined;
 type JsonRecord = Record<string, Object | null>;
@@ -280,7 +281,8 @@ export class AnthropicProvider implements ModelProvider {
       }
     }
     if (parts.length === 0) {
-      throw new Error('Anthropic returned no text');
+      throw new Error(obj['stop_reason'] === 'max_tokens' ? 'Anthropic ran out of output tokens before answering' :
+        'Anthropic returned no text');
     }
     return parts.join('');
   }

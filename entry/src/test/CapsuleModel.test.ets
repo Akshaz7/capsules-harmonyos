@@ -270,6 +270,14 @@ export default function capsuleModelTest() {
       expect(refusalIn('not json')).assertNull();
     });
 
+    it('says when Claude spent all output tokens thinking', 0, async (done: Function) => {
+      const thinking: HttpResponse = { status: 200, body: '{"content":[{"type":"thinking","thinking":""}],"stop_reason":"max_tokens"}' };
+      const r = await new CapsuleModel(createProvider(config('anthropic'), new FakeTransport([thinking])), ONE_PASS)
+        .generate('track my plants');
+      expect(r.error).assertContain('Anthropic ran out of output tokens before answering');
+      done();
+    });
+
     it('works with an OpenAI-compatible provider', 0, async (done: Function) => {
       const t = new FakeTransport([openaiReply(GOOD)]);
       const r = await new CapsuleModel(createProvider(config('openai'), t), ONE_PASS).generate('track my plants');

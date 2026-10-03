@@ -131,6 +131,9 @@ export const PLAN_PROMPT: string = `You plan a "capsule": a tiny phone app built
 checklists, number inputs, text, buttons and (schema v1) state, computed values, displays, inputs, lists and
 conditional parts. Read the user's request and list what the app must do: what it shows, what the user can enter
 or tap, and every rule or calculation (for example the scoring rules of a game). Be concrete and short.
+Plan only what the user asked for, with the simplest parts that do it: a fixed list to tick off is a checklist,
+counting things is a counter (steps and reps can use the motion sensor), timers are timers. Do not add goals,
+confirmations, progress or other extras the user did not ask for.
 Capsules can only use timers and reminders, notifications, vibration, the motion sensor, location and a home
 screen widget. They cannot read or send contacts, SMS, calls, email, internet or web data, files or photos, the
 camera or microphone, payments, other apps or Bluetooth.
