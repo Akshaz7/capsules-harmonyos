@@ -34,12 +34,110 @@ As of 2026-10-03.
 
 Full list in [Tested and not tested](#tested-and-not-tested).
 
+## For the app: sending a capsule to another device
+
+The app does **not** talk to the board directly. It talks to a small cloud relay; devices (this
+board, or a browser tab open at `/device`) fetch their capsule from the relay and report back.
+That way the phone and the device need no shared Wi-Fi and no IP address.
+
+> **Status, 2026-10-03 21:00:** the relay is **not deployed yet**. The routes below are the agreed
+> contract. The firmware's relay client and a local fake relay (`mock_relay.py`) are being built
+> now and will land on a follow-up PR tonight; the real routes go into the marketplace project
+> (`harmoniser-web`) as soon as its scaffold is up. Target: working end to end by 01:00, otherwise
+> the feature is cut from the demo. Until then, develop against the fake.
+
+**Base URL:** `https://harmoniser-web.vercel.app` (planned; a custom domain may replace it). Keep it
+in one constant. Local fake, once pushed: `python3 esp32-companion/mock_relay.py --port 8090`.
+
+**Who you are:** every request from the app carries `Authorization: Bearer <install token>`. There
+are no accounts. The token is the anonymous install token the app gets from the marketplace backend
+on first launch.
+
+### Pairing
+
+A device that is not paired shows a QR code and, under it, a three-word phrase:
+
+- QR text: `https://<host>/pair?code=brave-otter-lamp`
+- Phrase (backup, typed by hand): `brave-otter-lamp`
+
+In the app's QR scanner: if the scanned text is a URL whose path is `/pair` and which has a `code`
+parameter, take the `code` and claim the device; anything else is a capsule import as before. The
+code is three lower-case words; any case, and hyphens or spaces between words, are accepted. It can
+be used once and expires 10 minutes after it was shown, when the device shows a new one.
+
+```sh
+curl -X POST https://harmoniser-web.vercel.app/api/devices/claim \
+  -H "Authorization: Bearer $INSTALL_TOKEN" \
+  -d '{"code":"brave-otter-lamp"}'
+# 200 {"id":"dev_8f3a…","kind":"wrist"}      kind is "wrist" (the board) or "web" (a browser tab)
+# 404 {"error":"…"}  unknown, used or expired code        429 too many attempts
+```
+
+Keep the returned `id`. `GET /api/devices` lists the devices this install has paired.
+
+### Send a capsule
+
+Only timers and counters can be sent, with the same limits as the board's own API below: `label` at
+most 47 bytes of UTF-8, `seconds` 1 to 359999, `count` 0 to 999999.
+
+```sh
+curl -X PUT https://harmoniser-web.vercel.app/api/devices/$ID/capsule \
+  -H "Authorization: Bearer $INSTALL_TOKEN" \
+  -d '{"type":"counter","label":"Pull-ups","count":0}'
+
+curl -X PUT https://harmoniser-web.vercel.app/api/devices/$ID/capsule \
+  -H "Authorization: Bearer $INSTALL_TOKEN" \
+  -d '{"type":"timer","label":"Pasta","seconds":540}'
+# 200 {"version":7}      400 {"error":"…"} if the capsule is not valid
+```
+
+A timer starts as soon as the device receives it. The device picks a new capsule up within about
+two seconds.
+
+Buttons in the app map to actions:
+
+```sh
+curl -X POST https://harmoniser-web.vercel.app/api/devices/$ID/action \
+  -H "Authorization: Bearer $INSTALL_TOKEN" \
+  -d '{"action":"increment"}'       # start | pause | toggle | reset | increment
+```
+
+### Read the state back
+
+```sh
+curl https://harmoniser-web.vercel.app/api/devices/$ID/state \
+  -H "Authorization: Bearer $INSTALL_TOKEN"
+# 200 {"type":"counter","label":"Pull-ups","count":7,"seconds":0,"remaining_seconds":0,
+#      "running":false,"done":false,"motion":false,"version":7,"last_seen_ms_ago":1200}
+```
+
+Poll about every two seconds while the capsule is on screen. A tap on **+** on the device shows up
+as a higher `count`; apply the difference to the app's counter. `version` tells you which capsule
+the device is showing: ignore a state whose `version` is older than the one your last send
+returned. `last_seen_ms_ago` above about 15000 means the device is offline.
+
+`DELETE /api/devices/$ID` unpairs.
+
+### Rules for the app side
+
+- Send only after the user has allowed it in the gatekeeper ("Show on another device"), and log
+  both a send and a refusal.
+- Never wait on the relay: short timeout, every failure ignored, the capsule keeps working on the
+  phone.
+- What leaves the phone is the capsule type, its label and one number. Nothing else.
+
 ## The API
 
 Base URL: `http://<board ip>` (port 80) or `http://harmoniser.local`. The mock listens on
 port 8080. Requests and responses are JSON. No `Content-Type` header is needed.
 
 The board shows one capsule at a time. A new `POST /capsule` replaces the current one.
+
+> **No authentication.** This local API accepts requests from anyone on the same network: any
+> device on that Wi-Fi can replace the capsule, change the count or fetch `/screenshot`. That is
+> acceptable on a phone hotspot for a demo and not on a shared network. It exists for
+> development, for the tests and as an offline fallback; the app should go through the relay
+> above, where every request is tied to a paired install.
 
 ### `POST /capsule`
 
