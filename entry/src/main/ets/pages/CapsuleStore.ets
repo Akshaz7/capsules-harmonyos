@@ -9,6 +9,7 @@ const TAG = 'CapsuleStore';
 const STORE = 'capsules';
 const LIST_KEY = 'saved';
 const LEGACY_ACTIVE_KEY = 'active';
+const TRIGGER_RUNS_KEY = 'triggerRuns';
 
 /** Saved (approved) capsules, newest first. Survives restarts; Undo removes one. */
 export class CapsuleStore {
@@ -39,6 +40,35 @@ export class CapsuleStore {
     const next = [capsule].concat(this.all().filter((c: Capsule) => c.id !== capsule.id));
     this.write(next);
     return next;
+  }
+
+  /** Replaces the saved capsule with the same id, keeping its place in the list. */
+  replace(capsule: Capsule): Capsule[] {
+    const next = this.all().map((c: Capsule) => c.id === capsule.id ? capsule : c);
+    this.write(next);
+    return next;
+  }
+
+  /** When each time trigger last fired (core's triggerKey -> scheduled ms). */
+  triggerRuns(): Record<string, number> {
+    try {
+      const raw = this.prefs.getSync(TRIGGER_RUNS_KEY, '') as string;
+      return raw.length > 0 ? JSON.parse(raw) as Record<string, number> : {};
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'load trigger runs failed: %{public}s', (e as BusinessError).message);
+      return {};
+    }
+  }
+
+  setTriggerRuns(runs: Record<string, number>): void {
+    try {
+      this.prefs.putSync(TRIGGER_RUNS_KEY, JSON.stringify(runs));
+      this.prefs.flush().catch((e: BusinessError) => {
+        hilog.error(DOMAIN, TAG, 'flush failed: %{public}s', e.message);
+      });
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'save trigger runs failed: %{public}s', (e as BusinessError).message);
+    }
   }
 
   /** How the capsule was made ('rules', 'on-device', 'cloud-eu:mistral', 'imported', ...); '' if unknown. */

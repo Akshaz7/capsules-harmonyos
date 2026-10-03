@@ -10,8 +10,15 @@ import {
   routeCapsule,
   BILL_SPLIT_CAPSULE,
   TENNIS_CAPSULE,
+  Trigger,
+  dueTimeTriggers,
+  permissionForTrigger,
+  triggerKey,
   validateCapsule
 } from '../core';
+import { GatekeeperTriggerGuard } from '../widget/TriggerGate';
+import { TriggerCard } from './TriggerCard';
+import { formatAt, retimed, triggerTitle, withoutTrigger } from './TriggerText';
 import { NotificationAdapter } from '../adapters/NotificationAdapter';
 import { TimerAdapter } from '../adapters/TimerAdapter';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
@@ -100,6 +107,9 @@ function cloudNotice(provider: string): CloudNotice {
 const CAPSULE_ABILITIES = 'timers, counters, checklists, calculations, inputs and lists, reminders, ' +
   'notifications, vibration and the motion sensor';
 
+/** How often due daily triggers are checked while the app is open. */
+const TRIGGER_CHECK_MS = 30 * 1000;
+
 const FAILED_MESSAGE =
   "I couldn't build that offline. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
 
@@ -158,6 +168,9 @@ struct Index {
   private ctx: common.UIAbilityContext | undefined = undefined;
   private statusPoll: number = -1;
   private placeholderTimer: number = -1;
+  private triggerTimer: number = -1;
+  /** Time of the last trigger check; the trigger cards re-read "Next: ..." from it. */
+  @Local triggerNow: number = Date.now();
   @Local placeholderIndex: number = 0;
   @Local entries: CapsuleEntry[] = [];
   @Local openId: string = '';
@@ -221,6 +234,125 @@ struct Index {
     if (this.share.seq > 0) {
       setTimeout(() => this.onShared(), 0); // cold start from the share sheet
     }
+    this.checkTriggers();
+    this.triggerTimer = setInterval(() => this.checkTriggers(), TRIGGER_CHECK_MS);
+  }
+
+  /**
+   * Fires daily "time" triggers that are due (schema v1.1) through core and the gatekeeper. Runs while the app
+   * is open; a time missed while it was closed fires once on the next check (core's dueTimeTriggers rule).
+   */
+  private checkTriggers(): void {
+    const gate = this.gate;
+    const store = this.store;
+    this.triggerNow = Date.now();
+    if (!gate || !store) {
+      return;
+    }
+    let runs = store.triggerRuns();
+    const before = JSON.stringify(runs);
+    const guard = new GatekeeperTriggerGuard(gate);
+    this.entries.forEach((e: CapsuleEntry) => {
+      if ((e.capsule.triggers ?? []).length === 0) {
+        return;
+      }
+      const due = dueTimeTriggers(e.capsule, runs, this.triggerNow);
+      runs = due.lastRun;
+      due.indices.forEach((i: number) => {
+        const r = e.runtime.fireTrigger(i, guard);
+        if (r.fired) {
+          this.toast(`${triggerTitle((e.capsule.triggers ?? [])[i])} ran in ${e.capsule.name}`);
+        }
+      });
+    });
+    if (JSON.stringify(runs) !== before) {
+      store.setTriggerRuns(runs);
+    }
+  }
+
+  private triggersAllowed(entry: CapsuleEntry): boolean[] {
+    const gate = this.gate;
+    return (entry.capsule.triggers ?? []).map((t: Trigger) =>
+      gate !== undefined && gate.isAllowed(entry.capsule, permissionForTrigger(t)));
+  }
+
+  private runTriggerNow(entry: CapsuleEntry, index: number): void {
+    if (!this.gate) {
+      return;
+    }
+    const r = entry.runtime.fireTrigger(index, new GatekeeperTriggerGuard(this.gate));
+    const name = triggerTitle((entry.capsule.triggers ?? [])[index]);
+    this.toast(r.fired ? `${name} ran` : r.blocked.length > 0 ? `Blocked: ${r.blocked}` : `${name} didn't run`);
+  }
+
+  private editTriggerTime(entry: CapsuleEntry, index: number): void {
+    const t = (entry.capsule.triggers ?? [])[index];
+    if (t === undefined || t.on !== 'time') {
+      return;
+    }
+    const selected = new Date();
+    const hm = (t.at ?? '08:00').split(':');
+    selected.setHours(parseInt(hm[0], 10), parseInt(hm[1], 10), 0, 0);
+    this.getUIContext().showTimePickerDialog({
+      selected: selected,
+      useMilitaryTime: true,
+      onAccept: (v: TimePickerResult) => {
+        const at = formatAt(v.hour ?? 0, v.minute ?? 0);
+        if (at !== t.at) {
+          this.updateTriggers(retimed(entry.capsule, index, at));
+        }
+      }
+    });
+  }
+
+  private removeTrigger(entry: CapsuleEntry, index: number): void {
+    const name = triggerTitle((entry.capsule.triggers ?? [])[index]);
+    this.getUIContext().showAlertDialog({
+      title: `Remove "${name}"?`,
+      message: 'It will stop running by itself. The rest of the capsule stays.',
+      primaryButton: { value: 'Cancel', action: () => {
+      } },
+      secondaryButton: { value: 'Remove', fontColor: $r('sys.color.warning'), action: () => {
+        this.updateTriggers(withoutTrigger(entry.capsule, index));
+      } }
+    });
+  }
+
+  /**
+   * Saves a capsule whose triggers changed and rebuilds its entry. The edited capsule is validated first.
+   * Its trigger history is cleared, so a changed time starts counting fresh instead of firing at once.
+   */
+  private updateTriggers(updated: Capsule): void {
+    const store = this.store;
+    if (!store) {
+      return;
+    }
+    const v = validateCapsule(JSON.stringify(updated));
+    if (!v.ok || !v.capsule) {
+      hilog.error(0x0001, 'Index', 'edited triggers invalid: %{public}s', v.errors.join('; '));
+      this.toast("That change isn't valid");
+      return;
+    }
+    const capsule = v.capsule;
+    store.replace(capsule);
+    const runs = store.triggerRuns();
+    const prefix = triggerKey(capsule.id, 0).slice(0, -1); // "<id>#", core's key without the index
+    const kept: Record<string, number> = {};
+    Object.keys(runs).filter((k: string) => !k.startsWith(prefix)).forEach((k: string) => {
+      kept[k] = runs[k];
+    });
+    store.setTriggerRuns(kept);
+    // Update the entry in place: the open capsule page holds this object, not a lookup.
+    const entry = this.entries.find((e: CapsuleEntry) => e.capsule.id === capsule.id);
+    if (entry !== undefined) {
+      entry.runtime.stop();
+      const fresh = this.makeEntry(capsule);
+      entry.capsule = fresh.capsule;
+      entry.runtime = fresh.runtime;
+    }
+    hilog.info(0x0001, 'Index', 'triggers of %{public}s updated: %{public}d left', capsule.id,
+      (capsule.triggers ?? []).length);
+    this.checkTriggers();
   }
 
   /** Shared text or a link becomes the request and goes through the normal create + consent flow. */
@@ -329,6 +461,7 @@ struct Index {
     this.entries.forEach((e: CapsuleEntry) => e.runtime.stop());
     clearInterval(this.statusPoll);
     clearInterval(this.placeholderTimer);
+    clearInterval(this.triggerTimer);
   }
 
   // Core initialises the cloud config and the on-device model async; they may finish after the first render.
@@ -393,6 +526,7 @@ struct Index {
     }
     this.entries.forEach((e: CapsuleEntry) => e.runtime.applyState(loadState(ctx, e.capsule)));
     this.loadWidgets(); // the user may have added or removed widgets while away
+    this.checkTriggers(); // a time that passed while the app was away fires once now
     hilog.info(0x0001, 'Index', 'reloaded widget state for %{public}d capsules', this.entries.length);
   }
 
@@ -412,7 +546,8 @@ struct Index {
       ui: capsule.ui,
       // v1: without these the copy's expressions would name values that don't exist.
       state: capsule.state,
-      computed: capsule.computed
+      computed: capsule.computed,
+      triggers: capsule.triggers // v1.1: without this, new and imported capsules lost their triggers
     };
     return copy;
   }
@@ -1218,6 +1353,16 @@ struct Index {
         Column({ space: 16 }) {
           this.originPill(entry.origin)
           CapsuleView({ runtime: entry.runtime })
+          if ((entry.capsule.triggers ?? []).length > 0) {
+            TriggerCard({
+              triggers: entry.capsule.triggers ?? [],
+              allowed: this.triggersAllowed(entry),
+              now: this.triggerNow,
+              onRunNow: (i: number) => this.runTriggerNow(entry, i),
+              onEditTime: (i: number) => this.editTriggerTime(entry, i),
+              onRemove: (i: number) => this.removeTrigger(entry, i)
+            })
+          }
           if (this.canMakeSmarter(entry)) {
             this.smarterButton(entry)
           }

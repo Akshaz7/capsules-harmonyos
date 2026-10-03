@@ -12,6 +12,7 @@ import triggersTest from './Triggers.test';
 import timerActionsTest from './TimerActions.test';
 import sharingTest from './Sharing.test';
 import createTextTest from './CreateText.test';
+import triggerTextTest from './TriggerText.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -28,4 +29,5 @@ export default function testsuite() {
   timerActionsTest();
   sharingTest();
   createTextTest();
+  triggerTextTest();
 }

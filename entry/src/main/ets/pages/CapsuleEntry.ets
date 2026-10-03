@@ -4,7 +4,8 @@ import { CapsuleRuntime } from '../renderer/CapsuleRuntime';
 /** One saved, approved capsule plus its live runtime and widget route. */
 @ObservedV2
 export class CapsuleEntry {
-  readonly capsule: Capsule;
+  /** Traced: editing a capsule's triggers swaps it in place, and an open capsule page must follow. */
+  @Trace capsule: Capsule;
   readonly route: CapsuleRoute;
   readonly origin: string;
   @Trace runtime: CapsuleRuntime;

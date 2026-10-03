@@ -25,6 +25,7 @@ import {
   StateValues
 } from '../core/CapsuleProgram';
 import { CapsuleState, ChecklistTicks, CounterValue, TimerRun } from '../core/WidgetModel';
+import { runTrigger, TriggerGuard, TriggerRun } from '../core/Triggers';
 
 const DOMAIN = 0x0001;
 const TAG = 'CapsuleRuntime';
@@ -260,6 +261,22 @@ export class CapsuleRuntime {
     }
     r.actions.forEach((action: string) => this.run(action));
     this.onChange?.();
+  }
+
+  /**
+   * Runs trigger `index` (schema v1.1) through core: the guard checks its permission and every v0 action
+   * first, then the steps run all-or-nothing, like a button press.
+   */
+  fireTrigger(index: number, guard: TriggerGuard): TriggerRun {
+    const r = runTrigger(this.capsule, this.values, index, guard);
+    if (r.fired) {
+      this.values = r.state;
+      r.actions.forEach((action: string) => this.run(action));
+      this.onChange?.();
+    }
+    hilog.info(DOMAIN, TAG, 'trigger %{public}d of %{public}s: fired=%{public}s %{public}s', index, this.capsule.id,
+      String(r.fired), r.blocked.length > 0 ? r.blocked : r.error);
+    return r;
   }
 
   numberField(numberId: string): NumberState | undefined {
