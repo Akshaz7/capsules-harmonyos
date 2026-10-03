@@ -30,6 +30,7 @@ interface CardView {
   message: string;
   rows: CardRow[];
   wide: boolean;
+  formId?: string;
 }
 
 const MAX_TEXT_TIMER_MS: number = 86399000;
@@ -69,6 +70,24 @@ struct HarmoniserCard {
       abilityName: 'EntryAbility',
       params: { capsuleId: capsuleId, source: 'harmoniser' }
     });
+  }
+
+  /** A blank widget opens the app's capsule picker for this widget. */
+  private chooseCapsule(formId: string): void {
+    postCardAction(this, {
+      action: 'router',
+      abilityName: 'EntryAbility',
+      params: { source: 'harmoniser', action: 'chooseCapsule', formId: formId }
+    });
+  }
+
+  private onTap(): void {
+    const v = parseView(this.viewJson);
+    if (v.capsuleId.length === 0) {
+      this.chooseCapsule(v.formId ?? '');
+    } else {
+      this.openApp(v.capsuleId);
+    }
   }
 
   @Builder
@@ -117,7 +136,7 @@ struct HarmoniserCard {
     .backgroundColor(Color.White)
     .justifyContent(FlexAlign.Start)
     .clip(true)
-    .onClick(() => this.openApp(parseView(this.viewJson).capsuleId))
+    .onClick(() => this.onTap())
   }
 }
 

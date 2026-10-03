@@ -240,6 +240,8 @@ export interface WidgetView {
   message: string;
   rows: WidgetRow[];
   wide: boolean;
+  /** The widget this view is for; a blank widget sends it when tapped, to choose a capsule. */
+  formId?: string;
 }
 
 export interface GateFacts {
@@ -262,9 +264,11 @@ function permitted(p: Permission | null, granted: Permission[]): boolean {
   return p === null || granted.includes(p);
 }
 
+export const BLANK_WIDGET_MESSAGE: string = 'Tap to choose a capsule';
+
 export function emptyView(wide: boolean): WidgetView {
   return {
-    status: 'empty', capsuleId: '', title: 'Harmoniser', message: 'Create a capsule in the app to show it here.',
+    status: 'empty', capsuleId: '', title: 'Harmoniser', message: BLANK_WIDGET_MESSAGE,
     rows: [], wide: wide
   };
 }
@@ -361,4 +365,76 @@ export function pickCapsuleForNewWidget(saved: SavedCapsule[], isRemoved: (capsu
     }
   }
   return best === null ? null : best.capsule;
+}
+
+// ---- Which widget shows which capsule ----
+
+/** One placed widget and the capsule it shows ('' = blank). */
+export interface WidgetBindingFact {
+  formId: string;
+  capsuleId: string;
+  wide: boolean;
+}
+
+export class AssignmentPlan {
+  /** Every binding after the plan, in widget order. */
+  bindings: WidgetBindingFact[] = [];
+  /** formIds whose capsule changed and must be redrawn and saved. */
+  changed: string[] = [];
+  /** Capsule ids seen so far; a saved capsule not in here is new. */
+  seen: string[] = [];
+}
+
+/** Widgets in the order they were added (form ids are increasing numbers). */
+function widgetOrder(a: WidgetBindingFact, b: WidgetBindingFact): number {
+  if (a.formId.length !== b.formId.length) {
+    return a.formId.length - b.formId.length;
+  }
+  return a.formId < b.formId ? -1 : (a.formId > b.formId ? 1 : 0);
+}
+
+/**
+ * Keeps widgets in step with the saved capsules:
+ *  1. A widget whose capsule is no longer saved (or was removed) goes blank ("Tap to choose a capsule").
+ *  2. Each new widget-suitable capsule (not seen before, not shown anywhere) fills the first blank widget,
+ *     oldest new capsule first.
+ * `saved` is newest first. With `seen` null (first run) every saved capsule counts as already seen, so
+ * existing capsules are not pushed onto widgets the user left blank.
+ */
+export function planWidgetAssignments(bindings: WidgetBindingFact[], saved: Capsule[], seen: string[] | null,
+  isRemoved: (capsuleId: string) => boolean): AssignmentPlan {
+  const plan = new AssignmentPlan();
+  const alive = saved.filter((c: Capsule) => !isRemoved(c.id));
+  const aliveIds = alive.map((c: Capsule) => c.id);
+  const known = seen ?? saved.map((c: Capsule) => c.id);
+  const sorted = bindings.slice().sort(widgetOrder);
+  sorted.forEach((b: WidgetBindingFact) => {
+    const next: WidgetBindingFact = { formId: b.formId, capsuleId: b.capsuleId, wide: b.wide };
+    if (next.capsuleId.length > 0 && !aliveIds.includes(next.capsuleId)) {
+      next.capsuleId = '';
+      plan.changed.push(next.formId);
+    }
+    plan.bindings.push(next);
+  });
+  const shown = plan.bindings.map((b: WidgetBindingFact) => b.capsuleId);
+  const fresh = alive.filter((c: Capsule) => !known.includes(c.id) && !shown.includes(c.id) && routeCapsule(c).widget)
+    .reverse(); // oldest new capsule first
+  fresh.forEach((c: Capsule) => {
+    const blank = plan.bindings.find((b: WidgetBindingFact) => b.capsuleId.length === 0);
+    if (blank !== undefined) {
+      blank.capsuleId = c.id;
+      if (!plan.changed.includes(blank.formId)) {
+        plan.changed.push(blank.formId);
+      }
+    }
+  });
+  const all = known.concat(saved.map((c: Capsule) => c.id));
+  plan.seen = all.filter((id: string, i: number) => all.indexOf(id) === i && saved.some((c: Capsule) => c.id === id));
+  return plan;
+}
+
+/** The first blank widget in the order widgets were added, or null. */
+export function firstBlank(bindings: WidgetBindingFact[]): WidgetBindingFact | null {
+  const blank = bindings.slice().sort(widgetOrder).find((b: WidgetBindingFact) => b.capsuleId.length === 0);
+  return blank ?? null;
 }

@@ -1,6 +1,15 @@
 /**
  * Builds and pushes Harmoniser widget content. Used by the FormExtensionAbility, and by the
  * app (refreshCapsuleWidgets) whenever capsule state or the saved capsules change.
+ *
+ * Widget assignment API for the app:
+ *   listWidgets(ctx)                          every placed widget: formId, capsuleId (null = blank), size
+ *   firstBlankWidget(ctx)                     the first blank widget, or null
+ *   assignCapsuleToWidget(ctx, formId, id)    show a capsule on a widget now (null clears it)
+ * refreshCapsuleWidgets also keeps assignments in step: a new widget-suitable capsule fills the first
+ * blank widget, and a widget whose capsule was removed goes back to "Tap to choose a capsule".
+ * A blank widget, when tapped, opens EntryAbility with parameters
+ *   { source: 'harmoniser', action: 'chooseCapsule', formId: '<formId>' }.
  */
 import { common, Want } from '@kit.AbilityKit';
 import { formBindingData, formProvider } from '@kit.FormKit';
@@ -8,18 +17,33 @@ import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule, Permission } from '../core/CapsuleTypes';
+import { routeCapsule } from '../core/CapsuleRouter';
 import {
-  applyWidgetMessage, buildWidgetView, declaredAction, emptyView, GateFacts, parseWidgetMessage,
-  pickCapsuleForNewWidget, SavedCapsule, WidgetView
+  applyWidgetMessage, buildWidgetView, declaredAction, emptyView, firstBlank, GateFacts, parseWidgetMessage,
+  pickCapsuleForNewWidget, planWidgetAssignments, SavedCapsule, WidgetView
 } from '../core/WidgetModel';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
-import { FormBinding, allBindings, getBinding, loadState, putBinding, saveState, savedCapsules } from './WidgetStore';
+import {
+  FormBinding, allBindings, getBinding, loadSeen, loadState, putBinding, saveSeen, saveState, savedCapsules
+} from './WidgetStore';
 
 const DOMAIN = 0x0002;
 const TAG = 'Harmoniser';
 const GATE_STORE = 'gatekeeper';
 export const FORM_NAME = 'harmoniser';
 export const FORM_ABILITY = 'HarmoniserFormAbility';
+/** Want parameters a tapped blank widget sends to EntryAbility. */
+export const WIDGET_SOURCE = 'harmoniser';
+export const CHOOSE_CAPSULE_ACTION = 'chooseCapsule';
+
+export type WidgetSize = '2x2' | '2x4';
+
+export interface WidgetInfo {
+  formId: string;
+  /** null when the widget is blank ("Tap to choose a capsule"). */
+  capsuleId: string | null;
+  size: WidgetSize;
+}
 
 /** A Gatekeeper reading the latest grants written by the app process. */
 function freshGate(ctx: common.Context): Gatekeeper {
@@ -43,6 +67,12 @@ function gateFacts(gate: Gatekeeper, capsule: Capsule, removedFromApp: boolean):
 
 /** The view for one widget, from the latest saved capsules, state and grants. */
 export function viewFor(ctx: common.Context, binding: FormBinding): WidgetView {
+  const v = viewForCapsule(ctx, binding);
+  v.formId = binding.formId;
+  return v;
+}
+
+function viewForCapsule(ctx: common.Context, binding: FormBinding): WidgetView {
   const capsules = savedCapsules(ctx);
   const capsule = capsules.find((c: Capsule) => c.id === binding.capsuleId);
   const gate = freshGate(ctx);
@@ -108,17 +138,86 @@ export async function pushForm(ctx: common.Context, binding: FormBinding): Promi
 }
 
 /**
- * Refreshes every Harmoniser widget (or only those showing `capsuleId`). An empty widget picks
- * up the most recent widget-suitable capsule. Call after capsule state or the saved list changes.
+ * Applies planWidgetAssignments to the stored bindings: blanks widgets whose capsule is gone and puts
+ * new widget-suitable capsules on blank widgets. Returns all bindings and the formIds that changed.
+ */
+function syncAssignments(ctx: common.Context): SyncResult {
+  const gate = freshGate(ctx);
+  const plan = planWidgetAssignments(allBindings(ctx), savedCapsules(ctx), loadSeen(ctx),
+    (id: string) => gate.isRemoved(id));
+  plan.bindings.forEach((b: FormBinding) => {
+    if (plan.changed.includes(b.formId)) {
+      putBinding(ctx, b);
+      hilog.info(DOMAIN, TAG, 'form %{public}s now shows %{public}s', b.formId, b.capsuleId.length > 0 ? b.capsuleId :
+        '(blank)');
+    }
+  });
+  saveSeen(ctx, plan.seen);
+  return { bindings: plan.bindings, changed: plan.changed };
+}
+
+interface SyncResult {
+  bindings: FormBinding[];
+  changed: string[];
+}
+
+/**
+ * Refreshes Harmoniser widgets after capsule state or the saved list changes: first keeps assignments in
+ * step (see syncAssignments), then redraws every widget whose assignment changed plus every widget showing
+ * `capsuleId` (or all widgets when it is omitted).
  */
 export async function refreshCapsuleWidgets(ctx: common.Context, capsuleId?: string): Promise<void> {
-  for (const b of allBindings(ctx)) {
-    if (capsuleId !== undefined && b.capsuleId !== capsuleId) {
-      continue;
+  const sync = syncAssignments(ctx);
+  for (const b of sync.bindings) {
+    if (capsuleId === undefined || b.capsuleId === capsuleId || sync.changed.includes(b.formId)) {
+      await pushForm(ctx, b);
     }
-    const binding = b.capsuleId.length === 0 ? bindNewForm(ctx, b.formId, b.wide) : b;
-    await pushForm(ctx, binding);
   }
+}
+
+function infoOf(b: FormBinding): WidgetInfo {
+  return { formId: b.formId, capsuleId: b.capsuleId.length > 0 ? b.capsuleId : null, size: b.wide ? '2x4' : '2x2' };
+}
+
+/** Every placed Harmoniser widget, in the order they were added, with assignments brought up to date. */
+export function listWidgets(ctx: common.Context): WidgetInfo[] {
+  return syncAssignments(ctx).bindings.map((b: FormBinding) => infoOf(b));
+}
+
+/** The first blank widget (in the order widgets were added), or null if every widget shows a capsule. */
+export function firstBlankWidget(ctx: common.Context): WidgetInfo | null {
+  const blank = firstBlank(syncAssignments(ctx).bindings);
+  return blank === null ? null : infoOf(blank);
+}
+
+/**
+ * Shows `capsuleId` on widget `formId` and redraws it immediately; null makes the widget blank again.
+ * Returns false (and changes nothing) if the widget does not exist, or the capsule is not saved, was
+ * removed, or is not widget-suitable (see routeCapsule).
+ */
+export async function assignCapsuleToWidget(ctx: common.Context, formId: string, capsuleId: string | null):
+  Promise<boolean> {
+  const binding = getBinding(ctx, formId);
+  if (binding === null) {
+    hilog.warn(DOMAIN, TAG, 'assign: no widget %{public}s', formId);
+    return false;
+  }
+  if (capsuleId !== null) {
+    const capsule = savedCapsules(ctx).find((c: Capsule) => c.id === capsuleId);
+    if (capsule === undefined || freshGate(ctx).isRemoved(capsuleId) || !routeCapsule(capsule).widget) {
+      hilog.warn(DOMAIN, TAG, 'assign: capsule %{public}s cannot go on a widget', capsuleId);
+      return false;
+    }
+  }
+  binding.capsuleId = capsuleId ?? '';
+  putBinding(ctx, binding);
+  const seen = loadSeen(ctx) ?? [];
+  if (capsuleId !== null && !seen.includes(capsuleId)) {
+    saveSeen(ctx, seen.concat([capsuleId]));
+  }
+  hilog.info(DOMAIN, TAG, 'assign: form %{public}s -> %{public}s', formId, capsuleId ?? '(blank)');
+  await pushForm(ctx, binding);
+  return true;
 }
 
 /** Handles a tap sent by the card with postCardAction 'message'. */

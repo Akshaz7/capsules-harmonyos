@@ -6,7 +6,7 @@
  *   "capsules"   key "saved" (newest-first Capsule[]) or legacy key "active" (one Capsule)
  *   "gatekeeper" through the Gatekeeper class
  * Owns:
- *   "harmoniser_widgets" key "form:<formId>" -> FormBinding JSON
+ *   "harmoniser_widgets" key "form:<formId>" -> FormBinding JSON, key "seen" -> capsule ids already seen
  *   "capsule_state"      key "state:<capsuleId>" -> CapsuleState JSON
  */
 import { common } from '@kit.AbilityKit';
@@ -15,7 +15,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule } from '../core/CapsuleTypes';
 import { validateCapsuleObject } from '../core/CapsuleValidator';
-import { CapsuleState, initialState, parseState } from '../core/WidgetModel';
+import { CapsuleState, initialState, parseState, WidgetBindingFact } from '../core/WidgetModel';
 
 const DOMAIN = 0x0002;
 const TAG = 'WidgetStore';
@@ -26,11 +26,8 @@ const WIDGETS = 'harmoniser_widgets';
 const STATE = 'capsule_state';
 const FORM_PREFIX = 'form:';
 
-export interface FormBinding {
-  formId: string;
-  capsuleId: string;
-  wide: boolean;
-}
+/** formId -> capsule ('' = blank) and size; the same shape the core assignment logic uses. */
+export type FormBinding = WidgetBindingFact;
 
 function fresh(ctx: common.Context, name: string): preferences.Preferences {
   const options: preferences.Options = { name: name };
@@ -89,6 +86,29 @@ export function allBindings(ctx: common.Context): FormBinding[] {
     hilog.error(DOMAIN, TAG, 'allBindings failed: %{public}s', errorText(e));
   }
   return out;
+}
+
+const SEEN_KEY = 'seen';
+
+/** Capsule ids the widgets have already seen, or null before the first sync. */
+export function loadSeen(ctx: common.Context): string[] | null {
+  try {
+    const raw = fresh(ctx, WIDGETS).getSync(SEEN_KEY, '') as string;
+    return raw.length > 0 ? JSON.parse(raw) as string[] : null;
+  } catch (e) {
+    hilog.error(DOMAIN, TAG, 'loadSeen failed: %{public}s', errorText(e));
+    return null;
+  }
+}
+
+export function saveSeen(ctx: common.Context, seen: string[]): void {
+  try {
+    const prefs = fresh(ctx, WIDGETS);
+    prefs.putSync(SEEN_KEY, JSON.stringify(seen));
+    prefs.flushSync();
+  } catch (e) {
+    hilog.error(DOMAIN, TAG, 'saveSeen failed: %{public}s', errorText(e));
+  }
 }
 
 export function putBinding(ctx: common.Context, binding: FormBinding): void {

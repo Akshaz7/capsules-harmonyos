@@ -1,7 +1,8 @@
 import { describe, it, expect } from '@ohos/hypium';
 import {
   applyWidgetMessage, buildWidgetView, CapsuleState, declaredAction, GateFacts, initialState, parseState,
-  parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow
+  parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow,
+  BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact
 } from '../main/ets/core/WidgetModel';
 import { parseRequest } from '../main/ets/core/RuleParser';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
@@ -25,6 +26,14 @@ function gate(granted: Permission[], decided: boolean, removed: boolean): GateFa
 
 function msg(op: string, id: string, index: number): WidgetMessage {
   return parseWidgetMessage(`{"op":"${op}","id":"${id}","index":${index}}`) as WidgetMessage;
+}
+
+function blank(formId: string): WidgetBindingFact {
+  return { formId: formId, capsuleId: '', wide: false };
+}
+
+function shown(bindings: WidgetBindingFact[]): string {
+  return bindings.map((b: WidgetBindingFact) => `${b.formId}=${b.capsuleId.length > 0 ? b.capsuleId : '-'}`).join(' ');
 }
 
 export default function widgetModelTest() {
@@ -135,6 +144,66 @@ export default function widgetModelTest() {
       expect(pickCapsuleForNewWidget(saved, (id: string) => id === 'schedule-medication')?.id)
         .assertEqual('count-coffees');
       expect(pickCapsuleForNewWidget([], (id: string) => false)).assertNull();
+    });
+  });
+
+  describe('Widget assignment', () => {
+    const never = (id: string): boolean => false;
+
+    it('fills blank widgets with new capsules, oldest new capsule first, in widget order', 0, () => {
+      const coffees = rules('count coffees');
+      const meds = rules('medication 8am and 8pm');
+      // Two blank widgets; nothing seen yet except what existed before.
+      const first = planWidgetAssignments([blank('20'), blank('9')], [coffees], [], never);
+      expect(shown(first.bindings)).assertEqual('9=count-coffees 20=-');
+      expect(first.changed.join()).assertEqual('9');
+      // Second capsule created (saved list is newest first).
+      const second = planWidgetAssignments(first.bindings, [meds, coffees], first.seen, never);
+      expect(shown(second.bindings)).assertEqual('9=count-coffees 20=schedule-medication');
+      expect(second.changed.join()).assertEqual('20');
+      // Nothing new: nothing changes.
+      const again = planWidgetAssignments(second.bindings, [meds, coffees], second.seen, never);
+      expect(again.changed.length).assertEqual(0);
+    });
+
+    it('blanks a widget when its capsule is removed, and keeps it blank', 0, () => {
+      const coffees = rules('count coffees');
+      const meds = rules('medication 8am and 8pm');
+      const bound: WidgetBindingFact[] = [{ formId: '1', capsuleId: 'count-coffees', wide: false },
+        { formId: '2', capsuleId: 'schedule-medication', wide: true }];
+      const gone = planWidgetAssignments(bound, [coffees], ['count-coffees', 'schedule-medication'], never);
+      expect(shown(gone.bindings)).assertEqual('1=count-coffees 2=-');
+      expect(gone.changed.join()).assertEqual('2');
+      expect(gone.seen.join()).assertEqual('count-coffees');
+      expect(gone.bindings[1].wide).assertTrue();
+      // Undo marks a capsule removed while it is still in the saved list: the widget also goes blank.
+      const undone = planWidgetAssignments(bound, [meds, coffees], ['count-coffees', 'schedule-medication'],
+        (id: string) => id === 'count-coffees');
+      expect(shown(undone.bindings)).assertEqual('1=- 2=schedule-medication');
+      // An existing capsule is not pushed back onto the blank widget.
+      const later = planWidgetAssignments(gone.bindings, [coffees], gone.seen, never);
+      expect(later.changed.length).assertEqual(0);
+    });
+
+    it('skips app-only capsules, capsules already shown, and existing capsules on the first run', 0, () => {
+      const water = rules('water 8 glasses'); // v1: app only
+      const coffees = rules('count coffees');
+      const appOnly = planWidgetAssignments([blank('1')], [water], [], never);
+      expect(shown(appOnly.bindings)).assertEqual('1=-');
+      const already = planWidgetAssignments([{ formId: '1', capsuleId: 'count-coffees', wide: false }, blank('2')],
+        [coffees], [], never);
+      expect(shown(already.bindings)).assertEqual('1=count-coffees 2=-');
+      const firstRun = planWidgetAssignments([blank('1')], [coffees], null, never);
+      expect(shown(firstRun.bindings)).assertEqual('1=-');
+      expect(firstRun.seen.join()).assertEqual('count-coffees');
+    });
+
+    it('finds the first blank widget and says "Tap to choose a capsule"', 0, () => {
+      expect(firstBlank([{ formId: '30', capsuleId: 'x', wide: false }, blank('31'), blank('4')])?.formId)
+        .assertEqual('4');
+      expect(firstBlank([{ formId: '1', capsuleId: 'x', wide: false }])).assertNull();
+      expect(emptyView(false).message).assertEqual(BLANK_WIDGET_MESSAGE);
+      expect(BLANK_WIDGET_MESSAGE).assertEqual('Tap to choose a capsule');
     });
   });
 }
