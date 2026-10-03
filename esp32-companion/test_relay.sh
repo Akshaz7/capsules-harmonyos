@@ -5,12 +5,16 @@
 #   ./test_relay.sh                          # http://localhost:8090 (mock_relay.py)
 #   ./test_relay.sh https://example.vercel.app
 #
-# The real backend will want its own login on the user-side routes. Give it as one header:
+# The user-side requests carry "Authorization: Bearer <install token>". The fake takes any
+# token; the script makes one up per run. For a backend that wants a real one:
 #
-#   RELAY_USER_HEADER='Cookie: session=...' ./test_relay.sh https://...
+#   RELAY_INSTALL_TOKEN=... ./test_relay.sh https://...
 #
-# Not covered: a pairing code running out after 10 minutes (tests/test_mock_relay.py does
-# that for the fake). The simulated board registers under a hardware id of its own (RELAY_TEST_HW, default
+# RELAY_OTHER_TOKEN is a second install, used to check that it cannot see the first one's
+# device; set it to empty to skip those checks where a second real token is not at hand.
+#
+# Not covered: a pairing code running out after 10 minutes, and the 429 after too many wrong
+# codes (tests/test_mock_relay.py does both for the fake). The simulated board registers under a hardware id of its own (RELAY_TEST_HW, default
 # "test-relay-sh"), so a real board on the same relay is left alone. Tokens are not printed.
 # Needs bash and curl. Exits non-zero if any check fails.
 
@@ -18,7 +22,8 @@ BASE=${1:-http://localhost:8090}
 BASE=${BASE%/}
 API=$BASE/api/devices
 HW=${RELAY_TEST_HW:-test-relay-sh}
-USER_HEADER=${RELAY_USER_HEADER:-X-Relay-Test: 1}
+INSTALL_TOKEN=${RELAY_INSTALL_TOKEN:-test-relay-sh-$$-$RANDOM}
+OTHER_TOKEN=${RELAY_OTHER_TOKEN-test-relay-sh-other-$$-$RANDOM}
 BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE"' EXIT
 PASSED=0
@@ -27,12 +32,14 @@ STATUS=""
 BODY=""
 
 # call WHO METHOD PATH [JSON]: runs curl, prints the exchange, sets STATUS and BODY.
-# WHO is "user", "none" (no credentials at all) or a device token.
+# WHO is "user", "other" (a second install of the app), "none" (no credentials at all) or a
+# device token.
 call() {
     local who=$1 method=$2 path=$3 json=${4-}
-    local header=$USER_HEADER shown="user"
+    local header shown
     case $who in
-    user) ;;
+    user) header="Authorization: Bearer $INSTALL_TOKEN" shown="app" ;;
+    other) header="Authorization: Bearer $OTHER_TOKEN" shown="another app" ;;
     none) header="X-Relay-Test: 1" shown="nobody" ;;
     *) header="Authorization: Bearer $who" shown="board" ;;
     esac
@@ -94,6 +101,12 @@ if printf '%s' "$CODE" | grep -Eq '^[a-z]{3,5}-[a-z]{3,5}-[a-z]{3,5}$'; then
 else
     bad "code is '$CODE', wanted three lower-case words of 3 to 5 letters joined by hyphens"
 fi
+PAIR_URL=$(field pair_url)
+case $PAIR_URL in
+http://*"/pair?code=$CODE" | https://*"code=$CODE"*) ok "pair_url holds the code ($PAIR_URL)" ;;
+*) bad "pair_url is '$PAIR_URL', wanted an http(s) URL with code=$CODE in it" ;;
+esac
+[ ${#PAIR_URL} -le 200 ] && ok "pair_url is at most 200 bytes" || bad "pair_url is ${#PAIR_URL} bytes, the board takes 200"
 [ -n "$ID" ] && ok "id present" || bad "no id"
 [ ${#TOKEN} -ge 16 ] && ok "token present" || bad "no token"
 
@@ -103,6 +116,7 @@ call "$TOKEN" GET "/$ID/capsule"
 expect_status 200
 expect_field claimed false
 expect_field code "$CODE"
+expect_field pair_url "$PAIR_URL"
 expect_has '"capsule":null'
 expect_has '"action":null'
 BASE_VERSION=$(field version)
@@ -117,6 +131,16 @@ call wrong-token POST "/$ID/state" "${STATE}0}"
 expect_status 401
 
 echo
+echo "== The page behind the QR code"
+echo "\$ [phone] GET $PAIR_URL"
+STATUS=$(curl -s -m 10 -o "$BODY_FILE" -w '%{http_code} %{content_type}' "$PAIR_URL")
+echo "$STATUS"
+case $STATUS in "200 text/html"*) ok "pair_url answers with a web page" ;; *) bad "pair_url gave '$STATUS', wanted 200 text/html" ;; esac
+if grep -q "$CODE" "$BODY_FILE"; then ok "the page shows the code"; else bad "the page does not show the code"; fi
+call "$TOKEN" GET "/$ID/capsule"
+expect_field claimed false
+
+echo
 echo "== Claim"
 call user POST /claim '{"code":"not-the-code"}'
 expect_status 404
@@ -126,12 +150,19 @@ call user POST /claim '{"code":"only-two"}'
 expect_status 400
 # As a person types it: capitals, spaces instead of hyphens.
 TYPED=$(printf '%s' "$CODE" | tr 'a-z-' 'A-Z ')
+call none POST /claim "{\"code\":\"$CODE\"}"
+expect_status 401
 call user POST /claim "{\"code\":\"  $TYPED \"}"
 expect_status 200
 expect_field id "$ID"
+expect_field kind wrist
+call user GET ""
+expect_status 200
+expect_has "\"id\":\"$ID\""
 call "$TOKEN" GET "/$ID/capsule"
 expect_field claimed true
 expect_has '"code":null'
+expect_has '"pair_url":null'
 call user POST /claim "{\"code\":\"$CODE\"}"
 expect_status 404
 
@@ -191,6 +222,28 @@ else
     bad "last_seen_ms_ago is '$SEEN', wanted 0..10000"
 fi
 
+if [ -n "$OTHER_TOKEN" ]; then
+    echo
+    echo "== Another install cannot see or touch the device"
+    call other GET "/$ID/state"
+    expect_status 404
+    call other PUT "/$ID/capsule" '{"type":"counter","label":"Not mine","count":1}'
+    expect_status 404
+    call other POST "/$ID/action" '{"action":"reset"}'
+    expect_status 404
+    call other DELETE "/$ID"
+    expect_status 404
+    call other GET ""
+    expect_status 200
+    case $BODY in *"$ID"*) bad "another install's list has the device" ;; *) ok "another install's list does not have the device" ;; esac
+    call "$TOKEN" GET "/$ID/capsule"
+    expect_field version "$VERSION"
+fi
+call none GET "/$ID/state"
+expect_status 401
+call none PUT "/$ID/capsule" '{"type":"counter","label":"Nobody","count":1}'
+expect_status 401
+
 echo
 echo "== Timer, and a new capsule drops the pending action"
 call user PUT "/$ID/capsule" '{"type":"timer","label":"Pasta","seconds":540}'
@@ -202,6 +255,23 @@ expect_field type timer
 expect_field seconds 540
 expect_has '"action":null'
 expect_field action_seq "$SEQ"
+
+echo
+echo "== Unpair: the board keeps its token and gets a fresh code"
+call user DELETE "/$ID"
+expect_status 204
+call "$TOKEN" GET "/$ID/capsule"
+expect_status 200
+expect_field claimed false
+expect_has '"capsule":null'
+NEW_CODE=$(field code)
+expect_differs code "$NEW_CODE" "$CODE"
+case $(field pair_url) in *"code=$NEW_CODE"*) ok "pair_url holds the new code" ;; *) bad "pair_url is '$(field pair_url)', wanted code=$NEW_CODE in it" ;; esac
+call user GET "/$ID/state"
+expect_status 404
+call user POST /claim "{\"code\":\"$NEW_CODE\"}"
+expect_status 200
+CODE=$NEW_CODE
 
 echo
 echo "== Registering again: same device, new token and code, unclaimed"

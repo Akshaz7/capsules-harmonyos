@@ -4,16 +4,23 @@ the app before the real backend exists. The contract is in RELAY.md.
 
 Device side (the board calls these):
 
-    POST /api/devices/register        {"hw","kind","fw"} -> 201 {"id","token","code"}
-    GET  /api/devices/{id}/capsule    Bearer token -> 200 {"claimed","version","capsule","action_seq","action","code"}
+    POST /api/devices/register        {"hw","kind","fw"} -> 201 {"id","token","code","pair_url"}
+    GET  /api/devices/{id}/capsule    Bearer token -> 200 {"claimed","version","capsule","action_seq","action",
+                                                           "code","pair_url"}
     POST /api/devices/{id}/state      Bearer token, the board's state + "version" -> 204
 
-User side (the app calls these; the real backend adds its own authentication):
+User side (the app calls these, with Authorization: Bearer <install token>; the fake takes
+any non-empty token as an install of the app, and a device belongs to the install that
+claimed it):
 
-    POST /api/devices/claim           {"code":"brave-otter-lamp"} -> 200 {"id"}
-    PUT  /api/devices/{id}/capsule    like the board's POST /capsule -> 200 {"version"}
-    POST /api/devices/{id}/action     {"action":"increment"} -> 200 {"action_seq"}
-    GET  /api/devices/{id}/state      -> 200 last reported state + "last_seen_ms_ago"
+    POST   /api/devices/claim         {"code":"brave-otter-lamp"} -> 200 {"id","kind"}
+    GET    /api/devices               -> 200 {"devices":[{"id","kind","last_seen_ms_ago"}]}
+    PUT    /api/devices/{id}/capsule  like the board's POST /capsule -> 200 {"version"}
+    POST   /api/devices/{id}/action   {"action":"increment"} -> 200 {"action_seq"}
+    GET    /api/devices/{id}/state    -> 200 last reported state + "last_seen_ms_ago"
+    DELETE /api/devices/{id}          unpair -> 204
+    GET  /pair?code=brave-otter-lamp  a small web page with a "Pair this device" button: what the
+                                      QR code on the board opens in a phone's browser
 
 Python 3.8+, standard library only (plus mock_esp32.py next to it, for the capsule rules):
 
@@ -24,12 +31,15 @@ a token gets 401 and registers again. Tokens are never written to the log.
 
 The pairing code is three words from WORDS below ("brave-otter-lamp"). It works once and
 for --code-ttl seconds (default 600); after that the board gets a new one with its next poll.
+pair_url is http://<the Host header of the board's request>/pair?code=<the code>, so it
+points at this fake by the address the board reached it on (--public-url overrides that).
 """
 
 from __future__ import annotations
 
 import argparse
 import hmac
+import html
 import json
 import logging
 import re
@@ -38,7 +48,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import mock_esp32
 from mock_esp32 import ApiError, parse_json_object
@@ -47,6 +57,9 @@ MAX_BODY_BYTES = mock_esp32.MAX_BODY_BYTES
 HW_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,64}")
 CODE_PATTERN = re.compile(r"[a-z]{3,5}(-[a-z]{3,5}){2}")
 CODE_TTL_SECONDS = 600.0
+MAX_FAILED_CLAIMS = 10  # wrong codes one install may send ...
+CLAIM_WINDOW_SECONDS = 60.0  # ... within this time, before it gets 429
+HOST_PATTERN = re.compile(r"[A-Za-z0-9.\-\[\]:]{1,100}")
 ACTIONS = mock_esp32.TIMER_ACTIONS + mock_esp32.COUNTER_ACTIONS
 
 ERR_BAD_HW = "hw must be 1 to 64 letters, digits, _ or -"
@@ -56,7 +69,8 @@ ERR_BAD_CODE = "code must be three words"
 ERR_BAD_STATE = "state must have a type and a numeric version"
 ERR_UNKNOWN_CODE = "no unclaimed device has this code (it works once, for 10 minutes)"
 ERR_UNKNOWN_DEVICE = "no such device"
-ERR_NOT_CLAIMED = "device is not claimed"
+ERR_NO_INSTALL_TOKEN = "Authorization: Bearer <install token> is required"
+ERR_TOO_MANY_CLAIMS = "too many wrong codes, wait a minute"
 ERR_UNAUTHORIZED = "unknown device or token"
 
 # Pairing words: 3 to 5 letters, common, spelled the way they sound, no two that sound alike.
@@ -104,7 +118,9 @@ class Device:
         self.token = ""
         self.code = ""
         self.code_issued = 0.0  # time.monotonic() when the code was made
+        self.pair_url = ""  # the page that claims the device with this code
         self.claimed = False
+        self.owner = ""  # install token of the app that claimed it
         self.version = 0  # goes up with every PUT .../capsule; 0: nothing was ever sent
         self.capsule: Optional[Json] = None
         self.action_seq = 0  # goes up with every POST .../action
@@ -137,15 +153,17 @@ def clean_capsule(body: Json) -> Json:
 class Relay:
     """All devices. Every public method is one route; they raise ApiError."""
 
-    def __init__(self, code_ttl: float = CODE_TTL_SECONDS) -> None:
+    def __init__(self, code_ttl: float = CODE_TTL_SECONDS, public_url: str = "") -> None:
         self.code_ttl = code_ttl
+        self.public_url = public_url.rstrip("/")  # empty: use the Host header of each request
         self.lock = threading.Lock()
         self.by_id: Dict[str, Device] = {}
         self.by_hw: Dict[str, Device] = {}
+        self.failed_claims: Dict[str, List[float]] = {}  # install token -> times of wrong codes
 
     # ---- device side ----
 
-    def register(self, body: Json) -> Json:
+    def register(self, body: Json, host: Optional[str] = None) -> Json:
         hw, kind, fw = body.get("hw"), body.get("kind"), body.get("fw")
         if not isinstance(hw, str) or not HW_PATTERN.fullmatch(hw):
             raise ApiError(400, ERR_BAD_HW)
@@ -163,15 +181,16 @@ class Relay:
             # to be claimed again, and what was queued for the previous owner is dropped.
             device.kind, device.fw = kind, fw
             device.token = secrets.token_urlsafe(32)
-            self._issue_code(device)
+            self._issue_code(device, host)
             device.claimed = False
+            device.owner = ""
             device.capsule = None
             device.action = None
             device.state = None
             device.last_seen = time.monotonic()
-            return {"id": device.id, "token": device.token, "code": device.code}
+            return {"id": device.id, "token": device.token, "code": device.code, "pair_url": device.pair_url}
 
-    def _issue_code(self, device: Device) -> None:
+    def _issue_code(self, device: Device, host: Optional[str]) -> None:
         taken = {other.code for other in self.by_id.values() if not other.claimed}
         while True:
             code = "-".join(secrets.choice(WORDS) for _ in range(3))
@@ -179,6 +198,10 @@ class Relay:
                 break
         device.code = code
         device.code_issued = time.monotonic()
+        base = self.public_url
+        if not base:  # a Host header that is not a plain host[:port] is not echoed into a URL
+            base = "http://" + (host if host and HOST_PATTERN.fullmatch(host) else "localhost")
+        device.pair_url = f"{base}/pair?code={code}"
 
     def _code_expired(self, device: Device) -> bool:
         return time.monotonic() - device.code_issued >= self.code_ttl
@@ -194,14 +217,15 @@ class Relay:
         device.last_seen = time.monotonic()
         return device
 
-    def poll(self, device_id: str, authorization: Optional[str]) -> Json:
+    def poll(self, device_id: str, authorization: Optional[str], host: Optional[str] = None) -> Json:
         with self.lock:
             device = self._device_for(device_id, authorization)
             if not device.claimed and self._code_expired(device):
-                self._issue_code(device)  # the board shows it from now on
+                self._issue_code(device, host)  # the board shows it from now on
             return {
                 "claimed": device.claimed,
                 "code": None if device.claimed else device.code,
+                "pair_url": None if device.claimed else device.pair_url,
                 "version": device.version,
                 "capsule": device.capsule,
                 "action_seq": device.action_seq,
@@ -221,52 +245,176 @@ class Relay:
 
     # ---- user side ----
 
-    def claim(self, body: Json) -> Json:
-        code = body.get("code")
+    @staticmethod
+    def install_token(authorization: Optional[str]) -> str:
+        """Who a user-side request comes from. There are no accounts: any non-empty bearer
+        token is an install of the app, and a device belongs to the install that claimed it."""
+        scheme, _, token = (authorization or "").partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            raise ApiError(401, ERR_NO_INSTALL_TOKEN)
+        return token.strip()
+
+    def _count_failed_claim(self, user: str) -> None:
+        """The lock must be held."""
+        self.failed_claims.setdefault(user, []).append(time.monotonic())
+
+    def claim(self, authorization: Optional[str], read_body: Callable[[], Json]) -> Json:
+        user = self.install_token(authorization)
+        with self.lock:
+            now = time.monotonic()
+            recent = [at for at in self.failed_claims.get(user, []) if now - at < CLAIM_WINDOW_SECONDS]
+            self.failed_claims[user] = recent
+            if len(recent) >= MAX_FAILED_CLAIMS:
+                raise ApiError(429, ERR_TOO_MANY_CLAIMS)
+        code = read_body().get("code")
         if not isinstance(code, str) or len(code) > 64 or not CODE_PATTERN.fullmatch(normalise_code(code)):
+            with self.lock:
+                self._count_failed_claim(user)
             raise ApiError(400, ERR_BAD_CODE)
         code = normalise_code(code)
         with self.lock:
             for device in self.by_id.values():
                 if not device.claimed and device.code == code and not self._code_expired(device):
                     device.claimed = True
-                    return {"id": device.id}
+                    device.owner = user
+                    return {"id": device.id, "kind": device.kind}
+            self._count_failed_claim(user)
         raise ApiError(404, ERR_UNKNOWN_CODE)
 
-    def _claimed(self, device_id: str) -> Device:
-        """The device a user's request is about. The lock must be held."""
+    def _owned(self, device_id: str, user: str) -> Device:
+        """The device a user's request is about. The lock must be held. A device that is
+        someone else's, or nobody's, looks exactly like one that does not exist."""
         device = self.by_id.get(device_id)
-        if device is None:
+        if device is None or not device.claimed or device.owner != user:
             raise ApiError(404, ERR_UNKNOWN_DEVICE)
-        if not device.claimed:
-            raise ApiError(409, ERR_NOT_CLAIMED)
         return device
 
-    def put_capsule(self, device_id: str, body: Json) -> Json:
-        capsule = clean_capsule(body)
+    def list_devices(self, authorization: Optional[str]) -> Json:
+        user = self.install_token(authorization)
         with self.lock:
-            device = self._claimed(device_id)
+            now = time.monotonic()
+            return {"devices": [
+                {"id": device.id, "kind": device.kind, "last_seen_ms_ago": int((now - device.last_seen) * 1000)}
+                for device in self.by_id.values() if device.claimed and device.owner == user
+            ]}
+
+    def put_capsule(self, device_id: str, authorization: Optional[str], read_body: Callable[[], Json]) -> Json:
+        user = self.install_token(authorization)
+        with self.lock:
+            self._owned(device_id, user)  # 404 before the body is looked at
+        capsule = clean_capsule(read_body())
+        with self.lock:
+            device = self._owned(device_id, user)
             device.version += 1
             device.capsule = capsule
             device.action = None  # an action meant for the previous capsule must not hit this one
             return {"version": device.version}
 
-    def post_action(self, device_id: str, body: Json) -> Json:
-        action = body.get("action")
+    def post_action(self, device_id: str, authorization: Optional[str], read_body: Callable[[], Json]) -> Json:
+        user = self.install_token(authorization)
+        with self.lock:
+            self._owned(device_id, user)
+        action = read_body().get("action")
         if action not in ACTIONS:
             raise ApiError(400, mock_esp32.ERR_BAD_ACTION)
         with self.lock:
-            device = self._claimed(device_id)
+            device = self._owned(device_id, user)
             device.action_seq += 1
             device.action = action
             return {"action_seq": device.action_seq}
 
-    def get_state(self, device_id: str) -> Json:
+    def get_state(self, device_id: str, authorization: Optional[str]) -> Json:
+        user = self.install_token(authorization)
         with self.lock:
-            device = self._claimed(device_id)
+            device = self._owned(device_id, user)
             answer = dict(device.state or {})
             answer["last_seen_ms_ago"] = int((time.monotonic() - device.last_seen) * 1000)
             return answer
+
+    def unpair(self, device_id: str, authorization: Optional[str], host: Optional[str]) -> None:
+        """The device keeps its id and token, loses its owner and what was queued for it, and
+        gets a new code: the board shows a fresh QR code after its next poll."""
+        user = self.install_token(authorization)
+        with self.lock:
+            device = self._owned(device_id, user)
+            device.claimed = False
+            device.owner = ""
+            device.capsule = None
+            device.action = None
+            self._issue_code(device, host)
+
+
+PAIR_PAGE = """<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pair your Harmoniser wrist companion</title>
+<style>
+  body {{ font: 1.1rem system-ui, sans-serif; max-width: 26rem; margin: 3rem auto; padding: 0 1rem; text-align: center; }}
+  code {{ display: block; font-size: 1.5rem; margin: 1rem 0; }}
+  button {{ font: inherit; padding: 0.8rem 1.6rem; border: 0; border-radius: 0.6rem; background: #00877a; color: #fff; }}
+  button:disabled {{ background: #9aa0a6; }}
+</style>
+<h1>Harmoniser</h1>
+<p>Pair the wrist companion that shows</p>
+<code id="code" data-code="{code}">{code}</code>
+<button id="pair">Pair this device</button>
+<p id="result" role="status"></p>
+<script>
+  const button = document.getElementById("pair");
+  const result = document.getElementById("result");
+  // The app sends its install token. A browser has none, so it makes one up and keeps it.
+  function installToken() {{
+    let token = null;
+    try {{ token = localStorage.getItem("installToken"); }} catch (error) {{}}
+    if (!token) {{
+      token = "web-" + Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+      try {{ localStorage.setItem("installToken", token); }} catch (error) {{}}
+    }}
+    return token;
+  }}
+  button.addEventListener("click", async () => {{
+    button.disabled = true;
+    result.textContent = "Pairing...";
+    try {{
+      const response = await fetch("/api/devices/claim", {{
+        method: "POST",
+        headers: {{"Content-Type": "application/json", "Authorization": "Bearer " + installToken()}},
+        body: JSON.stringify({{code: document.getElementById("code").dataset.code}}),
+      }});
+      const answer = await response.json();
+      if (response.ok) {{
+        result.textContent = "Paired. The code on the wrist goes away within a few seconds.";
+        return;
+      }}
+      result.textContent = "Not paired: " + answer.error;
+    }} catch (error) {{
+      result.textContent = "Not paired: the relay did not answer.";
+    }}
+    button.disabled = false;
+  }});
+</script>
+</html>
+"""
+
+BAD_PAIR_PAGE = """<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Not a pairing code</title>
+<p>This link has no pairing code in it. Scan the QR code on the wrist companion again,
+or type the three words it shows into the app.</p>
+</html>
+"""
+
+
+def pair_page(query: str) -> Tuple[int, str]:
+    """The page GET /pair answers with: (status, HTML). It does not say whether the code is
+    a live one; the claim does, when the button is pressed."""
+    codes = parse_qs(query).get("code", [])
+    code = normalise_code(codes[0]) if len(codes) == 1 and len(codes[0]) <= 64 else ""
+    if not CODE_PATTERN.fullmatch(code):
+        return 400, BAD_PAIR_PAGE
+    return 200, PAIR_PAGE.format(code=html.escape(code, quote=True))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -277,9 +425,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def _send(self, status: int, payload: Optional[Json]) -> None:
         data = b"" if payload is None else json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
+        self._send_bytes(status, "application/json", data, has_body=payload is not None)
+
+    def _send_bytes(self, status: int, content_type: str, data: bytes, has_body: bool = True) -> None:
         self.send_response(status)
-        if payload is not None:
-            self.send_header("Content-Type", "application/json")
+        if has_body:
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(data)))
         if self.close_connection:
             self.send_header("Connection", "close")
@@ -306,32 +457,48 @@ class Handler(BaseHTTPRequestHandler):
         """Method -> (status on success, handler) for a path below /api/devices/."""
         relay, read = self.relay, self._read_json_object
         authorization = self.headers.get("Authorization")
+        host = self.headers.get("Host")
         if parts == ["register"]:
-            return {"POST": (201, lambda: relay.register(read()))}
+            return {"POST": (201, lambda: relay.register(read(), host))}
         if parts == ["claim"]:
-            return {"POST": (200, lambda: relay.claim(read()))}
+            return {"POST": (200, lambda: relay.claim(authorization, read))}
+        if len(parts) == 1 and parts[0]:
+            return {"DELETE": (204, lambda: relay.unpair(parts[0], authorization, host))}
         if len(parts) != 2:
             return {}
         device_id, leaf = parts
-        if leaf == "capsule":
+        if leaf == "capsule":  # the board reads it, the user writes it
             return {
-                "GET": (200, lambda: relay.poll(device_id, authorization)),
-                "PUT": (200, lambda: relay.put_capsule(device_id, read())),
+                "GET": (200, lambda: relay.poll(device_id, authorization, host)),
+                "PUT": (200, lambda: relay.put_capsule(device_id, authorization, read)),
             }
-        if leaf == "state":
+        if leaf == "state":  # the board writes it, the user reads it
             return {
-                "GET": (200, lambda: relay.get_state(device_id)),
+                "GET": (200, lambda: relay.get_state(device_id, authorization)),
                 "POST": (204, lambda: relay.report(device_id, authorization, read)),
             }
         if leaf == "action":
-            return {"POST": (200, lambda: relay.post_action(device_id, read()))}
+            return {"POST": (200, lambda: relay.post_action(device_id, authorization, read))}
         return {}
 
     def _route(self) -> None:
         self._body_read = False
         try:
-            path = urlsplit(self.path).path
-            routes = self._routes(path[len("/api/devices/"):].split("/")) if path.startswith("/api/devices/") else {}
+            url = urlsplit(self.path)
+            path = url.path
+            if path == "/pair":
+                if self.command != "GET":
+                    raise ApiError(405, "method not allowed")
+                self._drop_unread_body()
+                status, page = pair_page(url.query)
+                self._send_bytes(status, "text/html; charset=utf-8", page.encode())
+                return
+            if path == "/api/devices":
+                routes = {"GET": (200, lambda: self.relay.list_devices(self.headers.get("Authorization")))}
+            elif path.startswith("/api/devices/"):
+                routes = self._routes(path[len("/api/devices/"):].split("/"))
+            else:
+                routes = {}
             if not routes:
                 raise ApiError(404, "not found")
             if self.command not in routes:
@@ -365,6 +532,8 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8090, help="port to listen on (default: 8090)")
     parser.add_argument("--code-ttl", type=float, default=CODE_TTL_SECONDS, metavar="SECONDS",
                         help="how long a pairing code works (default: 600)")
+    parser.add_argument("--public-url", default="", metavar="URL",
+                        help="base of pair_url (default: http://<Host header of the board's request>)")
     parser.add_argument("--quiet-polls", action="store_true",
                         help="do not log the board's polls and reports (one or two lines a second)")
     args = parser.parse_args()
@@ -372,7 +541,7 @@ def main() -> None:
     if args.quiet_polls:
         log.addFilter(lambda record: not _is_device_chatter(record))
 
-    Handler.relay = Relay(args.code_ttl)
+    Handler.relay = Relay(args.code_ttl, args.public_url)
     ThreadingHTTPServer.daemon_threads = True
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     log.info("mock relay listening on http://%s:%d", args.host, args.port)
