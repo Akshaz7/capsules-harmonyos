@@ -1,14 +1,16 @@
-# Capsules
+# Harmoniser
+
+*Tiny apps, made by asking.*
 
 **Describe a tiny app in one sentence and get it running natively on HarmonyOS. The app is plain JSON, checked against a strict schema, and can only use the device features you allow.**
 
-A *capsule* is a small single-purpose app, such as a set of cooking timers, a squat counter or a medication checklist. It is described as JSON under the contract in [`SCHEMA.md`](SCHEMA.md). A capsule contains no code. The app reads it, rejects anything outside the schema, and draws it with native ArkUI components backed by real system services.
+Each app Harmoniser makes is a *capsule*: a small single-purpose app, such as a set of cooking timers, a squat counter or a medication checklist. It is described as JSON under the contract in [`SCHEMA.md`](SCHEMA.md). A capsule contains no code. Harmoniser reads it, rejects anything outside the schema, and draws it with native ArkUI components backed by real system services.
 
 > **Status (2026-10-03, commit `3c9583e`):** the main screen is wired end to end. You type a request and tap **Create**, `generateCapsule` builds the capsule, the gatekeeper asks you to allow or deny each permission, and the renderer draws it. A Log screen and Undo are included. Vibration, the `motion` counter source, the `notify:<text>` action and the notification "Done" action have not been built. See [What's real and what's simulated](#whats-real-and-whats-simulated).
 
 ## Challenge themes
 
-| Theme | How Capsules addresses it |
+| Theme | How Harmoniser addresses it |
 | --- | --- |
 | **Intelligent Experiences** (lead) | Plain-language requests become working mini-apps. An on-device rule parser handles common requests instantly and offline. An LLM fallback handles the rest, and its output is always re-validated against the schema. |
 | **Human-Centric Technology: responsible tech** | Generated apps cannot run code. Each capsule must declare the permissions it needs, and the schema blocks and logs anything it didn't declare. The API key is never packed into the public `.hap`, and with no key the app works rules-only. |
@@ -59,7 +61,7 @@ Timers are saved as system Calendar events. On the emulator the calendar alert d
 
 **You need:** DevEco Studio 6.1.1 or later (HarmonyOS SDK API 24, minimum API 20), [`devecocli`](hackathon-resources/devecocli.md), and a running HarmonyOS phone emulator reachable at `127.0.0.1:5555`.
 
-Run these from the repository root:
+The app's bundle name is `com.hackyeah.capsules`; the repository and bundle keep the original name. Run these from the repository root:
 
 ```sh
 HDC=/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc
@@ -135,7 +137,7 @@ No sensor or device data is currently simulated.
 
 **Cactus and LFM2 are not used.** There is no on-device LLM runtime or bundled model. The only on-device "intelligence" is the rule parser.
 
-Capsules' own licence has not been chosen yet.
+Harmoniser's own licence has not been chosen yet.
 
 AI-assisted development is recorded in [`AI_WORKFLOW.md`](AI_WORKFLOW.md).
 
