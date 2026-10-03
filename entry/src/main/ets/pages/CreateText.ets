@@ -1,4 +1,4 @@
-import { GenerateResult } from '../core';
+import { GenerateResult, UNSUPPORTED_LANGUAGE } from '../core';
 
 /** "a", "a and b", "a, b and c". */
 export function joinWords(words: string[]): string {
@@ -33,12 +33,7 @@ export const LIMITS_TEXT = 'On this phone: timers, counters, checklists. Scorebo
 export const LANGUAGE_MESSAGE = 'Harmoniser understands English for now. Try: ';
 export const LANGUAGE_EXAMPLE = 'timer 10 minutes';
 
-/** The stable code T4-11 returns for non-English requests. */
-export const UNSUPPORTED_LANGUAGE = 'UNSUPPORTED_LANGUAGE';
-
-/** Did core's English-only gate refuse this request? */
+/** Did core's English-only gate (T4-11) refuse this request? */
 export function isUnsupportedLanguage(result: GenerateResult): boolean {
-  // TODO(T3-13): narrow to the exact field once T4-11's DONE line names it.
-  const failure: string = result.failure !== undefined ? String(result.failure) : '';
-  return failure === UNSUPPORTED_LANGUAGE || failure === 'unsupported-language' || result.error === UNSUPPORTED_LANGUAGE;
+  return result.failure === UNSUPPORTED_LANGUAGE;
 }

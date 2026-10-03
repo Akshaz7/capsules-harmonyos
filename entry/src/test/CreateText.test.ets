@@ -1,7 +1,8 @@
 import { describe, it, expect } from '@ohos/hypium';
 import {
-  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, refusalWords, UNSUPPORTED_LANGUAGE
+  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, refusalWords
 } from '../main/ets/pages/CreateText';
+import { UNSUPPORTED_LANGUAGE_MESSAGE } from '../main/ets/core/Language';
 import { generateCapsuleWith } from '../main/ets/core/CapsuleGenerator';
 import { GenerateResult } from '../main/ets/core/CapsuleTypes';
 
@@ -36,18 +37,22 @@ export default function createTextTest() {
       expect(refusalWords(notRefusal).length).assertEqual(0);
     });
 
-    it('language card text is exact and only the English-only failure triggers it (T3-13)', 0, () => {
+    it('language card text is exact and only the English-only failure triggers it (T3-13)', 0, async () => {
       expect(`${LANGUAGE_MESSAGE}'${LANGUAGE_EXAMPLE}'.`)
         .assertEqual("Harmoniser understands English for now. Try: 'timer 10 minutes'.");
-      const lang: GenerateResult = { ok: false, error: UNSUPPORTED_LANGUAGE, details: [] };
-      expect(isUnsupportedLanguage(lang)).assertTrue();
+      expect(`${LANGUAGE_MESSAGE}'${LANGUAGE_EXAMPLE}'.`).assertEqual(UNSUPPORTED_LANGUAGE_MESSAGE);
+      const zh = await generateCapsuleWith('用照片教我做饭，上网找菜谱', []);
+      expect(isUnsupportedLanguage(zh)).assertTrue();
+      expect(zh.capsule === undefined).assertTrue();
+      const pl = await generateCapsuleWith('licznik pompek na dziś, żółw', []);
+      expect(isUnsupportedLanguage(pl)).assertTrue();
+      const en = await generateCapsuleWith('timer 10 minutes', []);
+      expect(isUnsupportedLanguage(en)).assertFalse();
       const refusal: GenerateResult = { ok: false, failure: 'unsupported', unsupported: ['SMS'], details: [] };
       expect(isUnsupportedLanguage(refusal)).assertFalse();
-      const plain: GenerateResult = { ok: false, error: 'No built-in rule understands this request.', details: [] };
-      expect(isUnsupportedLanguage(plain)).assertFalse();
     });
 
-        it('failureDetail joins details', 0, () => {
+    it('failureDetail joins details', 0, () => {
       const r: GenerateResult = { ok: false, details: ['a', '因为'] };
       expect(failureDetail(r)).assertEqual('a; 因为');
     });
