@@ -48,6 +48,16 @@ const EXAMPLES: ExampleChip[] = [
     request: 'checklist for leaving home: keys, wallet, charger' }
 ];
 
+// Shown after a failed create. Each request is one the offline rules can build.
+const RETRY_SUGGESTIONS: ExampleChip[] = [
+  { label: 'Tennis points counter', icon: $r('sys.symbol.plus_circle'), request: 'count tennis points' },
+  { label: 'Eggs timer 10 min', icon: $r('sys.symbol.timer'), request: 'timer eggs 10' },
+  { label: 'Gym checklist', icon: $r('sys.symbol.checkmark_circle'),
+    request: 'checklist for gym: towel, water, shoes' }
+];
+const FAILED_MESSAGE =
+  "I couldn't build that offline. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
+
 class CalendarScheduler implements TimerScheduler {
   private adapter: TimerAdapter;
 
@@ -107,6 +117,7 @@ struct Index {
   @Local request: string = '';
   @Local busy: boolean = false;
   @Local message: string = '';
+  @Local failed: boolean = false;
   @Local modelStatus: string = getModelStatus().message;
   @Local onDeviceStatus: string = getOnDeviceStatus().message;
   @Local nav: NavPathStack = new NavPathStack();
@@ -212,11 +223,20 @@ struct Index {
     }
     this.busy = true;
     this.message = '';
-    // Rules, then the on-device model, then the cloud model only if the user allowed it.
-    const result: GenerateResult = await generateCapsule(text, { allowCloud: this.settings.allowCloud });
+    this.failed = false;
+    let result: GenerateResult;
+    try {
+      // Rules, then the on-device model, then the cloud model only if the user allowed it.
+      result = await generateCapsule(text, { allowCloud: this.settings.allowCloud });
+    } catch (e) {
+      result = { ok: false, error: `generateCapsule threw: ${(e as Error).message}`, details: [] };
+    }
     this.busy = false;
     if (!result.ok || !result.capsule) {
-      this.message = result.error ?? 'Could not create a capsule.';
+      // The user sees a friendly message; the real error only goes to the log.
+      hilog.error(0x0001, 'Index', 'generateCapsule failed for "%{private}s": %{public}s [%{public}s]',
+        text, result.error ?? 'no error', result.details.join('; '));
+      this.failed = true;
       return;
     }
     this.pending = this.uniqueCapsule(result.capsule);
@@ -242,6 +262,7 @@ struct Index {
     this.showSheet = false;
     this.request = '';
     this.message = '';
+    this.failed = false;
     if (this.ctx) {
       refreshCapsuleWidgets(this.ctx);
     }
@@ -416,6 +437,55 @@ struct Index {
   }
 
   @Builder
+  failedCard() {
+    Column({ space: 12 }) {
+      Text(FAILED_MESSAGE)
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_primary'))
+        .width('100%')
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(RETRY_SUGGESTIONS, (chip: ExampleChip) => {
+          Row({ space: 6 }) {
+            SymbolGlyph(chip.icon)
+              .fontSize(16)
+              .fontColor([$r('sys.color.icon_emphasize')])
+            Text(chip.label)
+              .fontSize($r('sys.float.Body_M'))
+              .fontColor($r('sys.color.font_primary'))
+          }
+          .height(36)
+          .padding({ left: 14, right: 14 })
+          .margin({ right: 8, bottom: 8 })
+          .borderRadius(18)
+          .backgroundColor($r('sys.color.comp_background_tertiary'))
+          .onClick(() => {
+            this.request = chip.request;
+            this.create();
+          })
+        }, (chip: ExampleChip) => chip.label)
+      }
+      .width('100%')
+      if (!this.settings.allowCloud) {
+        Row({ space: 4 }) {
+          Text('or')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_secondary'))
+          Text('turn on cloud AI in Settings')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.brand'))
+            .fontWeight(FontWeight.Medium)
+            .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
+        }
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .padding(16)
+    .borderRadius(20)
+    .backgroundColor($r('sys.color.comp_background_primary'))
+  }
+
+  @Builder
   card(entry: CapsuleEntry) {
     Column({ space: 10 }) {
       Stack() {
@@ -493,7 +563,9 @@ struct Index {
           .width('100%')
           .padding({ left: 4 })
         this.chips()
-        if (this.message.length > 0) {
+        if (this.failed) {
+          this.failedCard()
+        } else if (this.message.length > 0) {
           Text(this.message)
             .fontSize($r('sys.float.Body_M'))
             .fontColor($r('sys.color.font_secondary'))
