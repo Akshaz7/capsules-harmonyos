@@ -34,17 +34,24 @@ single log is preferred.
 | 2026-10-03 | Claude Code sub-agent | Fix "spi transmit (queue) color failed" on every screen update | LVGL draw buffer reduced to 20 lines (`sdkconfig.defaults`) | Errors gone from later boot logs |
 | 2026-10-03 | Claude Code main session | Test on the real board | none | `test_api.sh` passes 50/50 against the board; a screenshot fetched from the board shows the counter screen; the owner read the board's IP off its screen |
 | 2026-10-03 | Claude Code main session | Remove device-specific details before publishing | `find_esp32.sh`, `README.md` | Secret scan of files and history: no Wi-Fi passwords |
+| 2026-10-03 | Claude Code sub-agent (independent reviewer, read-only) | Review the firmware and mock source for real defects | none; a findings list | One critical finding (deeply nested JSON overflows the HTTP task stack and reboots the board), five medium, several low |
+| 2026-10-03 | Claude Code sub-agent | Fix the review findings and add host-side tests | `main/validate.c`, `main/http_api.c`, `main/net.c`, `main/capsule.c`, `mock_esp32.py`, `find_esp32.sh`, `test_api.sh`, `tests/`, `README.md` | Host tests: 1,108 C checks and 19 Python tests pass. `test_api.sh` 72/72 on the mock and on the board. 300-level nested JSON on the board: 400, no reboot. Main session read the diff and re-ran all three suites |
+| 2026-10-03 | Owner | Hands-on check of the board | none | Tapped + (count went up) and heard the timer-end beep |
 
 ## Unsuccessful approaches
 
-- Joining the venue Wi-Fi: its access points are 5 GHz only and the ESP32-S3 radio is 2.4 GHz
-  only. The board's own scan never lists it, so it runs on a phone hotspot.
+- First conclusion about the venue Wi-Fi was wrong: early scans did not list it, so it was written
+  off as 5 GHz only. It is also on 2.4 GHz; the board joins it, though often only after several
+  attempts.
+- Closing the socket straight after a 413 (as the reviewer suggested): the connection was reset
+  and the client never saw the error body. The firmware now reads and drops up to 8 KiB first.
 - The BSP's default 100-line LVGL draw buffer: too large once Wi-Fi is running.
 
 ## Known limitations
 
 - Motion rep counting is untuned; its thresholds are guesses and it is off by default.
-- Timer-end flash and beep, touch input and the motion counter have not been checked by a person.
-- No unit tests for the C code. The mock and the firmware are separate implementations of the
-  same rules; only the HTTP behaviour is tested, on both.
+- The motion counter has not been checked by a person.
+- The mock and the firmware are separate implementations of the same rules. Shared test vectors
+  and `test_api.sh` run against both; remaining differences are listed in the README.
+- The lost-link recovery and the 408 path are covered by code reading and host tests only.
 - Wi-Fi credentials are compiled into the firmware binary, so the binary must not be shared.
