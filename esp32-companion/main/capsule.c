@@ -159,11 +159,11 @@ void capsule_get(capsule_state_t *out)
     unlock();
 }
 
-void capsule_set_timer(const char *label, int seconds, bool running)
+uint32_t capsule_set_timer(const char *label, int seconds, bool running)
 {
     lock();
     memset(&s_state, 0, sizeof(s_state));
-    s_generation++;
+    uint32_t generation = ++s_generation;
     s_state.type = CAPSULE_TIMER;
     copy_label(s_state.label, label);
     s_state.seconds = seconds;
@@ -172,18 +172,20 @@ void capsule_set_timer(const char *label, int seconds, bool running)
         timer_start(now_ms());
     }
     unlock();
+    return generation;
 }
 
-void capsule_set_counter(const char *label, int count, bool motion)
+uint32_t capsule_set_counter(const char *label, int count, bool motion)
 {
     lock();
     memset(&s_state, 0, sizeof(s_state));
-    s_generation++;
+    uint32_t generation = ++s_generation;
     s_state.type = CAPSULE_COUNTER;
     copy_label(s_state.label, label);
     s_state.count = count;
     s_state.motion = motion;
     unlock();
+    return generation;
 }
 
 uint32_t capsule_generation(void)

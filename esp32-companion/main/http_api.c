@@ -111,7 +111,7 @@ static esp_err_t post_capsule(httpd_req_t *req)
     if (!json) {
         return err;
     }
-    const char *error = capsule_json_apply(json);
+    const char *error = capsule_json_apply(json, NULL);
     cJSON_Delete(json);
     if (error) {
         return send_error(req, "400 Bad Request", error);

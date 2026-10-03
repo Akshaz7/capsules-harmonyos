@@ -65,7 +65,7 @@ static bool read_bool(const cJSON *json, const char *key, bool *value)
     return true;
 }
 
-static const char *apply_timer(const cJSON *json, const char *label)
+static const char *apply_timer(const cJSON *json, const char *label, uint32_t *generation)
 {
     int seconds = 0;  // stays 0 when the field is missing, which is rejected too
     bool running = true;
@@ -75,11 +75,11 @@ static const char *apply_timer(const cJSON *json, const char *label)
     if (!read_bool(json, "running", &running)) {
         return ERR_BAD_RUNNING;
     }
-    capsule_set_timer(label, seconds, running);
+    *generation = capsule_set_timer(label, seconds, running);
     return NULL;
 }
 
-static const char *apply_counter(const cJSON *json, const char *label)
+static const char *apply_counter(const cJSON *json, const char *label, uint32_t *generation)
 {
     int count = 0;
     bool motion = false;
@@ -90,12 +90,14 @@ static const char *apply_counter(const cJSON *json, const char *label)
         return ERR_BAD_MOTION;
     }
     // Without a working sensor the counter still works by hand; /state shows motion:false.
-    capsule_set_counter(label, count, motion && motion_available());
+    *generation = capsule_set_counter(label, count, motion && motion_available());
     return NULL;
 }
 
-const char *capsule_json_apply(const cJSON *json)
+const char *capsule_json_apply(const cJSON *json, uint32_t *generation)
 {
+    uint32_t unused;
+    generation = generation ? generation : &unused;
     const cJSON *type = cJSON_GetObjectItemCaseSensitive(json, "type");
     const cJSON *label = cJSON_GetObjectItemCaseSensitive(json, "label");
     if (!cJSON_IsString(type)) {
@@ -109,10 +111,10 @@ const char *capsule_json_apply(const cJSON *json)
         return ERR_BAD_LABEL;  // raw bytes in the body that are not UTF-8: the screen cannot show them
     }
     if (strcmp(type->valuestring, "timer") == 0) {
-        return apply_timer(json, text);
+        return apply_timer(json, text, generation);
     }
     if (strcmp(type->valuestring, "counter") == 0) {
-        return apply_counter(json, text);
+        return apply_counter(json, text, generation);
     }
     return ERR_BAD_TYPE;
 }

@@ -559,6 +559,210 @@ static void test_report_running_timer_is_not_posted_every_second(void)
     CHECK(relay_report_due(&last, &now, 2000));  // the end of the timer is reported at once
 }
 
+// ---- what to do after a request ----
+
+static relay_schedule_t s_schedule;
+
+static relay_verdict_t after(relay_step_t step, relay_outcome_t outcome, int64_t now)
+{
+    return relay_after_request(&s_schedule, step, outcome, now);
+}
+
+static void test_after_a_poll_that_works(void)
+{
+    s_schedule = (relay_schedule_t){ 0 };
+    relay_verdict_t verdict = after(RELAY_STEP_POLL, RELAY_OUTCOME_OK, 1000);
+    CHECK(!verdict.forget && !verdict.offline && !verdict.recovered);
+    CHECK_INT(verdict.wait_ms, 0);
+    CHECK_INT(s_schedule.failures, 0);
+    CHECK_INT(s_schedule.wait_until, 0);
+}
+
+static void test_after_failures_back_off_and_go_offline(void)
+{
+    static const uint32_t waits[] = { 2000, 4000, 8000, 16000, 30000, 30000 };
+    s_schedule = (relay_schedule_t){ 0 };
+    int64_t now = 5000;
+    for (unsigned i = 0; i < sizeof(waits) / sizeof(waits[0]); i++) {
+        relay_step_t step = i % 2 ? RELAY_STEP_REGISTER : RELAY_STEP_POLL;  // either kind counts
+        relay_verdict_t verdict = after(step, RELAY_OUTCOME_FAILED, now);
+        CHECK_INT(verdict.wait_ms, waits[i]);
+        CHECK_INT(s_schedule.wait_until, now + waits[i]);
+        CHECK_INT(s_schedule.failures, i + 1);
+        CHECK_INT(verdict.offline, i + 1 >= RELAY_OFFLINE_AFTER);  // not on the first failure
+        CHECK(!verdict.forget);  // "no answer" is no reason to throw the token away
+        CHECK(!verdict.recovered);
+        now = s_schedule.wait_until;
+    }
+    relay_verdict_t verdict = after(RELAY_STEP_POLL, RELAY_OUTCOME_OK, now);
+    CHECK(verdict.recovered && !verdict.offline && !verdict.forget);
+    CHECK_INT(verdict.wait_ms, 0);
+    CHECK_INT(s_schedule.failures, 0);
+
+    // One failure and back: the screen never said "offline", so nothing "recovers".
+    after(RELAY_STEP_POLL, RELAY_OUTCOME_FAILED, now);
+    CHECK(!after(RELAY_STEP_POLL, RELAY_OUTCOME_OK, now + 2000).recovered);
+}
+
+static void test_after_401_forgets_and_backs_off(void)
+{
+    s_schedule = (relay_schedule_t){ 0 };
+    relay_verdict_t verdict = after(RELAY_STEP_POLL, RELAY_OUTCOME_UNAUTHORIZED, 1000);
+    CHECK(verdict.forget);
+    CHECK(!verdict.offline);  // the relay was restarted, say: one 401, one registration, and on
+    CHECK_INT(verdict.wait_ms, 2000);
+    CHECK_INT(s_schedule.wait_until, 3000);  // the registration waits too
+    CHECK_INT(s_schedule.failures, 1);
+}
+
+static void test_a_relay_that_registers_but_refuses_the_token_does_not_spin(void)
+{
+    // 201 to every registration, 401 to every poll. The registration must not end the
+    // backoff, or the board would register about twice a second for ever.
+    static const uint32_t waits[] = { 2000, 4000, 8000, 16000, 30000, 30000, 30000 };
+    s_schedule = (relay_schedule_t){ 0 };
+    int64_t now = 0;
+    int registrations = 0;
+    for (unsigned i = 0; i < sizeof(waits) / sizeof(waits[0]); i++) {
+        relay_verdict_t verdict = after(RELAY_STEP_POLL, RELAY_OUTCOME_UNAUTHORIZED, now);
+        CHECK(verdict.forget);
+        CHECK_INT(verdict.wait_ms, waits[i]);
+        CHECK_INT(verdict.offline, i >= 1);
+        now = s_schedule.wait_until;
+        verdict = after(RELAY_STEP_REGISTER, RELAY_OUTCOME_OK, now);
+        registrations++;
+        CHECK(!verdict.forget && !verdict.recovered);
+        CHECK_INT(verdict.wait_ms, 0);
+        CHECK_INT(s_schedule.failures, i + 1);   // still counting
+        CHECK_INT(s_schedule.wait_until, now);   // the poll with the new token may go at once
+    }
+    CHECK_INT(registrations, 7);
+    CHECK_INT(now, 120000);  // seven registrations in two minutes, then one every 30 s
+    // The first poll the relay accepts ends it.
+    relay_verdict_t verdict = after(RELAY_STEP_POLL, RELAY_OUTCOME_OK, now);
+    CHECK(verdict.recovered);
+    CHECK_INT(s_schedule.failures, 0);
+}
+
+static void test_after_register_outcomes(void)
+{
+    s_schedule = (relay_schedule_t){ 0 };
+    // Whatever a registration is refused with, there is no token to forget.
+    relay_verdict_t verdict = after(RELAY_STEP_REGISTER, RELAY_OUTCOME_UNAUTHORIZED, 0);
+    CHECK(!verdict.forget);
+    CHECK_INT(verdict.wait_ms, 2000);
+    verdict = after(RELAY_STEP_REGISTER, RELAY_OUTCOME_FAILED, 2000);
+    CHECK(!verdict.forget && verdict.offline);
+    CHECK_INT(verdict.wait_ms, 4000);
+    // A first registration on a healthy relay: nothing to wait for.
+    s_schedule = (relay_schedule_t){ 0 };
+    verdict = after(RELAY_STEP_REGISTER, RELAY_OUTCOME_OK, 0);
+    CHECK(!verdict.forget && !verdict.offline && !verdict.recovered);
+    CHECK_INT(s_schedule.failures, 0);
+    CHECK_INT(s_schedule.wait_until, 0);
+}
+
+static void test_a_failing_report_leaves_polling_alone(void)
+{
+    static const uint32_t waits[] = { 2000, 4000, 8000, 16000, 30000, 30000 };
+    s_schedule = (relay_schedule_t){ 0 };
+    int64_t now = 1000;
+    for (unsigned i = 0; i < sizeof(waits) / sizeof(waits[0]); i++) {
+        // Refused or unanswered, even with a 401: the poll decides whether the token is good.
+        relay_outcome_t outcome = i % 2 ? RELAY_OUTCOME_UNAUTHORIZED : RELAY_OUTCOME_FAILED;
+        relay_verdict_t verdict = after(RELAY_STEP_REPORT, outcome, now);
+        CHECK(!verdict.forget && !verdict.offline && !verdict.recovered);
+        CHECK_INT(verdict.wait_ms, 0);
+        CHECK_INT(s_schedule.failures, 0);
+        CHECK_INT(s_schedule.wait_until, 0);  // the next poll is not held up
+        CHECK_INT(s_schedule.report_failures, i + 1);
+        CHECK_INT(s_schedule.report_wait_until, now + waits[i]);  // the report itself is
+        now = s_schedule.report_wait_until;
+    }
+    after(RELAY_STEP_POLL, RELAY_OUTCOME_OK, now);
+    CHECK_INT(s_schedule.report_failures, 6);  // a good poll does not hurry the report either
+    after(RELAY_STEP_REPORT, RELAY_OUTCOME_OK, now);
+    CHECK_INT(s_schedule.report_failures, 0);
+
+    // And the other way round: a report that works says nothing about failing polls.
+    after(RELAY_STEP_POLL, RELAY_OUTCOME_FAILED, now);
+    after(RELAY_STEP_POLL, RELAY_OUTCOME_FAILED, now);
+    relay_verdict_t verdict = after(RELAY_STEP_REPORT, RELAY_OUTCOME_OK, now);
+    CHECK(!verdict.recovered);
+    CHECK_INT(s_schedule.failures, 2);
+}
+
+static void test_failures_do_not_wrap(void)
+{
+    s_schedule = (relay_schedule_t){ .failures = 4294967295u };
+    relay_verdict_t verdict = after(RELAY_STEP_POLL, RELAY_OUTCOME_FAILED, 0);
+    CHECK_INT(s_schedule.failures, 4294967295u);
+    CHECK_INT(verdict.wait_ms, RELAY_BACKOFF_MAX_MS);
+    CHECK(verdict.offline);
+}
+
+// ---- sizes ----
+
+static void test_the_longest_answers_fit(void)
+{
+    // Every field at the limit the board accepts, and the label written the longest way a
+    // server could (47 control characters, six bytes each as \u00XX).
+    char id[RELAY_ID_MAX + 1], token[RELAY_TOKEN_MAX + 1], code[RELAY_CODE_MAX + 1], url[RELAY_PAIR_URL_MAX + 1];
+    char label[47 * 6 + 1] = "";
+    memset(id, 'i', RELAY_ID_MAX), id[RELAY_ID_MAX] = '\0';
+    memset(token, 't', RELAY_TOKEN_MAX), token[RELAY_TOKEN_MAX] = '\0';
+    memset(code, 'c', RELAY_CODE_MAX), code[RELAY_CODE_MAX] = '\0';
+    memset(url, 'u', RELAY_PAIR_URL_MAX), url[RELAY_PAIR_URL_MAX] = '\0';
+    for (int i = 0; i < 47; i++) {
+        strcat(label, "\\u0001");
+    }
+    char body[2048];
+    int len = snprintf(body, sizeof(body), "{\"id\":\"%s\",\"token\":\"%s\",\"code\":\"%s\",\"pair_url\":\"%s\"}", id, token,
+                       code, url);
+    CHECK(len < RELAY_MAX_RESPONSE - 200);
+    relay_credentials_t got;
+    CHECK(relay_parse_register(body, (size_t)len, &got));
+    CHECK_INT(strlen(got.pair_url), RELAY_PAIR_URL_MAX);
+
+    len = snprintf(body, sizeof(body),
+                   "{\"claimed\":false,\"version\":9007199254740992,\"capsule\":{\"type\":\"counter\",\"label\":\"%s\","
+                   "\"count\":999999,\"motion\":false},\"action_seq\":9007199254740992,\"action\":\"motion_off\","
+                   "\"code\":\"%s\",\"pair_url\":\"%s\"}",
+                   label, code, url);
+    CHECK(len < RELAY_MAX_RESPONSE - 200);  // room for a field or two more
+    fresh();
+    relay_poll_t result = poll(body);
+    CHECK(result.ok && result.capsule_applied);
+    CHECK_INT(strlen(state().label), 47);
+    CHECK_INT(strlen(result.pair_url), RELAY_PAIR_URL_MAX);
+}
+
+// ---- which capsule is on screen ----
+
+static void test_setters_return_their_generation(void)
+{
+    uint32_t before = capsule_generation();
+    CHECK_INT(capsule_set_counter("a", 1, false), before + 1);
+    CHECK_INT(capsule_generation(), before + 1);
+    CHECK_INT(capsule_set_timer("b", 5, false), before + 2);
+    capsule_apply(CAPSULE_ACT_START);  // an action is not a new capsule
+    CHECK_INT(capsule_generation(), before + 2);
+
+    // The relay's capsule is remembered by the generation its own set produced.
+    fresh();
+    before = capsule_generation();
+    poll(SQUATS(1, 0, "null"));
+    CHECK_INT(s_sync.generation, before + 1);
+    CHECK_INT(relay_shown_version(&s_sync), 1);
+    capsule_set_counter("Local", 9, false);
+    CHECK_INT(relay_shown_version(&s_sync), 0);
+    // A refused capsule leaves both alone.
+    uint32_t held = s_sync.generation;
+    poll("{\"claimed\":true,\"version\":2,\"capsule\":{\"type\":\"timer\"},\"action_seq\":0}");
+    CHECK_INT(s_sync.generation, held);
+    CHECK_INT(capsule_generation(), before + 2);
+}
+
 // ---- backoff ----
 
 static void test_backoff(void)
@@ -597,6 +801,15 @@ int main(void)
     test_report_body();
     test_report_due();
     test_report_running_timer_is_not_posted_every_second();
+    test_after_a_poll_that_works();
+    test_after_failures_back_off_and_go_offline();
+    test_after_401_forgets_and_backs_off();
+    test_a_relay_that_registers_but_refuses_the_token_does_not_spin();
+    test_after_register_outcomes();
+    test_a_failing_report_leaves_polling_alone();
+    test_failures_do_not_wrap();
+    test_the_longest_answers_fit();
+    test_setters_return_their_generation();
     test_backoff();
     return check_report("test_relay");
 }

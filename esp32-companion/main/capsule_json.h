@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "cJSON.h"
 
@@ -31,8 +32,9 @@
 cJSON *capsule_json_parse(const char *text, size_t len, const char **error);
 
 // Makes `json` the current capsule. Returns NULL, or the reason it was refused; a refused
-// capsule leaves the current one untouched.
-const char *capsule_json_apply(const cJSON *json);
+// capsule leaves the current one untouched. On success *generation (if not NULL) is the
+// generation of the capsule that was set, see capsule.h.
+const char *capsule_json_apply(const cJSON *json, uint32_t *generation);
 
 // The action a JSON string names. False if `name` is not a string or not an action.
 bool capsule_json_action(const cJSON *name, capsule_action_t *action);

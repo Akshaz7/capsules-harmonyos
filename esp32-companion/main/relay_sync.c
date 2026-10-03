@@ -1,5 +1,6 @@
 #include "relay_sync.h"
 
+#include <limits.h>
 #include <string.h>
 
 #include "capsule_json.h"
@@ -121,11 +122,14 @@ static void take_capsule(relay_sync_t *sync, const cJSON *capsule, int64_t versi
     if (absent_or_null(capsule)) {
         return;  // the relay has nothing to show; what is on screen stays
     }
-    result->capsule_error = capsule_json_apply(capsule);
+    uint32_t generation = 0;
+    result->capsule_error = capsule_json_apply(capsule, &generation);
     if (!result->capsule_error) {
         result->capsule_applied = true;
         sync->shown = version;
-        sync->generation = capsule_generation();
+        // The generation of the very capsule that was set, not a later read: a capsule
+        // posted to the local API in between must not be reported under this version.
+        sync->generation = generation;
     }
 }
 
@@ -235,6 +239,41 @@ bool relay_report_due(const relay_report_t *last, const relay_report_t *now, int
         return true;
     }
     return since_last_ms >= RELAY_MIN_POST_GAP_MS && report_differs(last, now);
+}
+
+relay_verdict_t relay_after_request(relay_schedule_t *schedule, relay_step_t step, relay_outcome_t outcome,
+                                    int64_t now)
+{
+    relay_verdict_t verdict = { 0 };
+    if (step == RELAY_STEP_REPORT) {
+        // A report that fails is tried again later; it says nothing about the link that the
+        // next poll will not say better, so it never touches the poll's schedule.
+        if (outcome == RELAY_OUTCOME_OK) {
+            schedule->report_failures = 0;
+        } else {
+            schedule->report_failures++;
+            schedule->report_wait_until = now + relay_backoff_ms(schedule->report_failures);
+        }
+        return verdict;
+    }
+    if (outcome == RELAY_OUTCOME_OK) {
+        // A registration that worked proves nothing yet: only a poll the relay accepts with
+        // the new token ends the backoff. Otherwise a relay that hands out tokens it then
+        // refuses would have the board registering in a tight loop.
+        if (step == RELAY_STEP_POLL) {
+            verdict.recovered = schedule->failures >= RELAY_OFFLINE_AFTER;
+            schedule->failures = 0;
+        }
+        return verdict;
+    }
+    if (schedule->failures < UINT_MAX) {
+        schedule->failures++;
+    }
+    verdict.wait_ms = relay_backoff_ms(schedule->failures);
+    schedule->wait_until = now + verdict.wait_ms;
+    verdict.offline = schedule->failures >= RELAY_OFFLINE_AFTER;
+    verdict.forget = step == RELAY_STEP_POLL && outcome == RELAY_OUTCOME_UNAUTHORIZED;
+    return verdict;
 }
 
 uint32_t relay_backoff_ms(unsigned failures)

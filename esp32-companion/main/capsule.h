@@ -40,8 +40,10 @@ void capsule_init(void);
 void capsule_get(capsule_state_t *out);
 const char *capsule_type_name(capsule_type_t type);
 
-void capsule_set_timer(const char *label, int seconds, bool running);
-void capsule_set_counter(const char *label, int count, bool motion);
+// Both return the generation of the capsule they set: capsule_generation() as it was at
+// that instant, taken under the same lock, whatever another task sets right after.
+uint32_t capsule_set_timer(const char *label, int seconds, bool running);
+uint32_t capsule_set_counter(const char *label, int count, bool motion);
 
 // Goes up by one each time a capsule is set. Lets a sender find out later whether the
 // capsule it set is still the one on screen (actions on a capsule do not change it).

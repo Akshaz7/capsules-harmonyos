@@ -32,17 +32,11 @@ static const char *TAG = "relay";
 #define TASK_STACK_BYTES 10240  // a TLS handshake with certificate checks runs on this stack
 #define TASK_PRIORITY 3         // below the UI, the local HTTP server and Wi-Fi handling
 #define TICK_MS 250
-#define REQUEST_TIMEOUT_MS 4000
+#define REQUEST_TIMEOUT_MS 10000  // also covers the whole TCP and TLS connect: a cold start, a busy network
 #define BASE_URL_MAX 160
 #define NVS_NAMESPACE "relay"
 #define HW_SALT "harmoniser-wrist:"
 #define HW_ID_BYTES 8
-
-typedef enum {
-    REQUEST_OK,
-    REQUEST_FAILED,        // no answer, an answer that makes no sense, or a server error
-    REQUEST_UNAUTHORIZED,  // the relay does not know this device or token (any more)
-} outcome_t;
 
 static portMUX_TYPE s_status_lock = portMUX_INITIALIZER_UNLOCKED;
 static relay_status_t s_status;
@@ -54,7 +48,7 @@ static bool s_connection_used;  // a request went through on the current connect
 static char s_response[RELAY_MAX_RESPONSE + 1];
 static size_t s_response_len;
 static bool s_response_overflow;
-static relay_credentials_t s_credentials;  // id[0] == '\0': not registered
+static relay_credentials_t s_credentials;  // id[0] == '\0': not registered. Only id and token are in flash.
 static relay_sync_t s_sync;
 
 // ---- status for the screen ----
@@ -91,6 +85,9 @@ static bool load_string(nvs_handle_t nvs, const char *key, char *out, size_t siz
     return nvs_get_str(nvs, key, out, &len) == ESP_OK;
 }
 
+// Only the id and the token are kept in flash, and they are written once per registration.
+// The pairing code and its URL come with every poll answer while the board is unclaimed, so
+// a relay that changes the code often does not wear the flash.
 static void load_credentials(void)
 {
     relay_credentials_t stored = { 0 };
@@ -99,11 +96,7 @@ static void load_credentials(void)
         return;  // never registered
     }
     bool ok = load_string(nvs, "id", stored.id, sizeof(stored.id)) &&
-              load_string(nvs, "token", stored.token, sizeof(stored.token)) &&
-              load_string(nvs, "code", stored.code, sizeof(stored.code));
-    if (ok && !load_string(nvs, "url", stored.pair_url, sizeof(stored.pair_url))) {
-        stored.pair_url[0] = '\0';  // optional
-    }
+              load_string(nvs, "token", stored.token, sizeof(stored.token));
     nvs_close(nvs);
     if (ok) {
         s_credentials = stored;
@@ -116,10 +109,10 @@ static void save_credentials(void)
     nvs_handle_t nvs;
     esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs);
     if (err == ESP_OK) {
+        nvs_erase_key(nvs, "code");  // left by firmware that stored them; not there otherwise
+        nvs_erase_key(nvs, "url");
         err = nvs_set_str(nvs, "id", s_credentials.id);
         err = err == ESP_OK ? nvs_set_str(nvs, "token", s_credentials.token) : err;
-        err = err == ESP_OK ? nvs_set_str(nvs, "code", s_credentials.code) : err;
-        err = err == ESP_OK ? nvs_set_str(nvs, "url", s_credentials.pair_url) : err;
         err = err == ESP_OK ? nvs_commit(nvs) : err;
         nvs_close(nvs);
     }
@@ -254,24 +247,25 @@ static int request(esp_http_client_method_t method, const char *path, bool with_
     return -1;
 }
 
-static outcome_t outcome_of(int status, int wanted, const char *what)
+// `ok_from`..`ok_to`: the statuses that count as success.
+static relay_outcome_t outcome_of(int status, int ok_from, int ok_to, const char *what)
 {
-    if (status == wanted) {
-        return REQUEST_OK;
+    if (status >= ok_from && status <= ok_to) {
+        return RELAY_OUTCOME_OK;
     }
-    if (status == 401 || status == 404) {  // 404: a relay that forgot the device and says so that way
-        ESP_LOGW(TAG, "%s: HTTP %d, the relay does not know this device or token", what, status);
-        return REQUEST_UNAUTHORIZED;
+    if (status == 401) {
+        ESP_LOGW(TAG, "%s: HTTP 401, the relay does not know this device or token", what);
+        return RELAY_OUTCOME_UNAUTHORIZED;
     }
     if (status >= 0) {
         ESP_LOGW(TAG, "%s: HTTP %d", what, status);
     }
-    return REQUEST_FAILED;
+    return RELAY_OUTCOME_FAILED;
 }
 
 // ---- the three exchanges ----
 
-// A stable id for this board that does not give away its MAC address.
+// A stable id for this board: a salted hash of its MAC address rather than the address itself.
 static void hardware_id(char out[HW_ID_BYTES * 2 + 1])
 {
     uint8_t input[sizeof(HW_SALT) - 1 + 6];
@@ -284,13 +278,13 @@ static void hardware_id(char out[HW_ID_BYTES * 2 + 1])
     }
 }
 
-static outcome_t do_register(void)
+static relay_outcome_t do_register(void)
 {
     char hw[HW_ID_BYTES * 2 + 1];
     hardware_id(hw);
     char *body = relay_register_body(hw, esp_app_get_description()->version);
     if (!body) {
-        return REQUEST_FAILED;
+        return RELAY_OUTCOME_FAILED;
     }
     int status = request(HTTP_METHOD_POST, "/api/devices/register", false, body);
     cJSON_free(body);
@@ -298,32 +292,32 @@ static outcome_t do_register(void)
         if (status >= 0) {
             ESP_LOGW(TAG, "register: HTTP %d", status);
         }
-        return REQUEST_FAILED;
+        return RELAY_OUTCOME_FAILED;
     }
     if (!relay_parse_register(s_response, s_response_len, &s_credentials)) {
         ESP_LOGW(TAG, "register: the answer is not {id, token, code[, pair_url]}");
-        return REQUEST_FAILED;
+        return RELAY_OUTCOME_FAILED;
     }
     save_credentials();
     relay_sync_reset(&s_sync);
     ESP_LOGI(TAG, "registered as device %s, pairing code %s, %s", s_credentials.id, s_credentials.code,
              s_credentials.pair_url[0] ? s_credentials.pair_url : "no pair_url");
     set_online(false);
-    return REQUEST_OK;
+    return RELAY_OUTCOME_OK;
 }
 
-static outcome_t do_poll(void)
+static relay_outcome_t do_poll(void)
 {
     char path[RELAY_ID_MAX + 32];
     snprintf(path, sizeof(path), "/api/devices/%s/capsule", s_credentials.id);
-    outcome_t outcome = outcome_of(request(HTTP_METHOD_GET, path, true, NULL), 200, "poll");
-    if (outcome != REQUEST_OK) {
+    relay_outcome_t outcome = outcome_of(request(HTTP_METHOD_GET, path, true, NULL), 200, 200, "poll");
+    if (outcome != RELAY_OUTCOME_OK) {
         return outcome;
     }
     relay_poll_t result = relay_handle_poll(&s_sync, s_response, s_response_len);
     if (!result.ok) {
         ESP_LOGW(TAG, "poll: the answer is not usable");
-        return REQUEST_FAILED;
+        return RELAY_OUTCOME_FAILED;
     }
     if (result.capsule_applied) {
         ESP_LOGI(TAG, "capsule version %" PRId64 " applied", s_sync.version);
@@ -334,25 +328,24 @@ static outcome_t do_poll(void)
         ESP_LOGI(TAG, "action %" PRId64 " %s", s_sync.action_seq,
                  result.action_applied ? "applied" : "skipped: unknown, or it does not fit the capsule");
     }
-    if (relay_take_pairing(&s_credentials, &result)) {
-        save_credentials();
-        ESP_LOGI(TAG, "new pairing code %s", s_credentials.code);
+    if (relay_take_pairing(&s_credentials, &result)) {  // in RAM only, see load_credentials()
+        ESP_LOGI(TAG, "pairing code %s", s_credentials.code);
     }
     set_online(result.claimed);
-    return REQUEST_OK;
+    return RELAY_OUTCOME_OK;
 }
 
-static outcome_t do_report(const relay_report_t *report)
+static relay_outcome_t do_report(const relay_report_t *report)
 {
     char path[RELAY_ID_MAX + 32];
     snprintf(path, sizeof(path), "/api/devices/%s/state", s_credentials.id);
     char *body = relay_report_body(report);
     if (!body) {
-        return REQUEST_FAILED;
+        return RELAY_OUTCOME_FAILED;
     }
     int status = request(HTTP_METHOD_POST, path, true, body);
     cJSON_free(body);
-    return outcome_of(status, 204, "state");
+    return outcome_of(status, 200, 299, "state");  // 204 by the contract; any 2xx will do
 }
 
 // ---- the task ----
@@ -362,10 +355,31 @@ static int64_t now_ms(void)
     return esp_timer_get_time() / 1000;
 }
 
+// Carries out what relay_after_request() decided for a registration or a poll.
+static void act_on(const relay_verdict_t *verdict, unsigned failures)
+{
+    if (verdict->forget) {
+        // The relay is there, it just does not know us. The registration that follows waits
+        // for the backoff like any other request.
+        forget_credentials();
+        relay_sync_reset(&s_sync);
+    }
+    if (verdict->wait_ms > 0) {
+        ESP_LOGW(TAG, "request failed (%u in a row), next try in %u s", failures, (unsigned)(verdict->wait_ms / 1000));
+    }
+    if (verdict->offline) {
+        set_status(RELAY_OFFLINE);
+    } else if (verdict->forget) {
+        set_status(RELAY_STARTING);  // the pairing code on the screen died with the registration
+    }
+    if (verdict->recovered) {
+        ESP_LOGI(TAG, "the relay answers again");
+    }
+}
+
 static void relay_task(void *arg)
 {
-    unsigned failures = 0;
-    int64_t wait_until = 0;      // backoff: nothing is sent before this
+    relay_schedule_t schedule = { 0 };
     int64_t next_poll = 0;
     int64_t last_report_at = 0;
     relay_report_t last_report;
@@ -386,57 +400,49 @@ static void relay_task(void *arg)
             continue;
         }
         int64_t now = now_ms();
-        if (now < wait_until) {
+        if (now < schedule.wait_until) {
             continue;
         }
 
-        outcome_t outcome = REQUEST_OK;
         if (s_credentials.id[0] == '\0') {
-            outcome = do_register();
+            relay_outcome_t outcome = do_register();
+            relay_verdict_t verdict = relay_after_request(&schedule, RELAY_STEP_REGISTER, outcome, now_ms());
+            act_on(&verdict, schedule.failures);
             have_last_report = false;
             next_poll = 0;
-        } else {
-            if (now >= next_poll) {
-                outcome = do_poll();
-                next_poll = now + RELAY_POLL_MS;
-            }
-            relay_report_t report = { .version = relay_shown_version(&s_sync) };
-            capsule_get(&report.state);
-            if (outcome == REQUEST_OK &&
-                relay_report_due(have_last_report ? &last_report : NULL, &report, now - last_report_at)) {
-                outcome = do_report(&report);
-                if (outcome == REQUEST_OK) {
-                    last_report = report;
-                    last_report_at = now;
-                    have_last_report = true;
-                }
+            continue;
+        }
+        if (now >= next_poll) {
+            relay_outcome_t outcome = do_poll();
+            next_poll = now + RELAY_POLL_MS;
+            relay_verdict_t verdict = relay_after_request(&schedule, RELAY_STEP_POLL, outcome, now_ms());
+            act_on(&verdict, schedule.failures);
+            if (outcome != RELAY_OUTCOME_OK) {
+                continue;
             }
         }
 
-        if (outcome == REQUEST_OK) {
-            if (failures >= RELAY_OFFLINE_AFTER) {
-                ESP_LOGI(TAG, "the relay answers again");
+        // The state report has a schedule of its own: when it fails it is tried again later,
+        // and polling (and with it the marker on the screen) carries on regardless.
+        relay_report_t report = { .version = relay_shown_version(&s_sync) };
+        capsule_get(&report.state);
+        if (now >= schedule.report_wait_until &&
+            relay_report_due(have_last_report ? &last_report : NULL, &report, now - last_report_at)) {
+            relay_outcome_t outcome = do_report(&report);
+            relay_after_request(&schedule, RELAY_STEP_REPORT, outcome, now_ms());
+            if (outcome == RELAY_OUTCOME_OK) {
+                last_report = report;
+                last_report_at = now;
+                have_last_report = true;
+            } else {
+                ESP_LOGW(TAG, "state report failed (%u in a row), polling carries on", schedule.report_failures);
             }
-            failures = 0;
-            if (!stack_logged && have_last_report) {
-                stack_logged = true;
-                ESP_LOGI(TAG, "task stack: %u of %d bytes never used", (unsigned)uxTaskGetStackHighWaterMark(NULL),
-                         TASK_STACK_BYTES);
-                log_heap("after the first full exchange");
-            }
-        } else if (outcome == REQUEST_UNAUTHORIZED) {
-            // The relay is there, it just lost us: register again on the next tick.
-            forget_credentials();
-            relay_sync_reset(&s_sync);
-            failures = 0;
-        } else {
-            failures++;
-            uint32_t wait = relay_backoff_ms(failures);
-            wait_until = now_ms() + wait;
-            ESP_LOGW(TAG, "request failed (%u in a row), next try in %u s", failures, (unsigned)(wait / 1000));
-            if (failures >= RELAY_OFFLINE_AFTER) {
-                set_status(RELAY_OFFLINE);
-            }
+        }
+        if (!stack_logged && have_last_report) {
+            stack_logged = true;
+            ESP_LOGI(TAG, "task stack: %u of %d bytes never used", (unsigned)uxTaskGetStackHighWaterMark(NULL),
+                     TASK_STACK_BYTES);
+            log_heap("after the first full exchange");
         }
     }
 }
