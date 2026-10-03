@@ -1,0 +1,146 @@
+# Capsules
+
+**Describe a tiny app in one sentence and get it running natively on HarmonyOS. The app is plain JSON, checked against a strict schema, and can only use the device features you allow.**
+
+A *capsule* is a small single-purpose app, such as a set of cooking timers, a squat counter or a medication checklist. It is described as JSON under the contract in [`SCHEMA.md`](SCHEMA.md). A capsule contains no code. The app reads it, rejects anything outside the schema, and draws it with native ArkUI components backed by real system services.
+
+> **Status (2026-10-03, commit `33b0d26`):** the core pipeline (rule parser, AI fallback, validator) and the renderer are built and tested separately. They are **not yet connected in the UI**. The app currently opens a built-in "Pasta night" capsule. The gatekeeper, notifications and vibration have not been built. See [What's real and what's simulated](#whats-real-and-whats-simulated).
+
+## Challenge themes
+
+| Theme | How Capsules addresses it |
+| --- | --- |
+| **Intelligent Experiences** (lead) | Plain-language requests become working mini-apps. An on-device rule parser handles common requests instantly and offline. An LLM fallback handles the rest, and its output is always re-validated against the schema. |
+| **Human-Centric Technology: responsible tech** | Generated apps cannot run code. Each capsule must declare the permissions it needs, and the schema blocks and logs anything it didn't declare. The API key is never packed into the public `.hap`, and with no key the app works rules-only. |
+
+The third theme, Spatial Experiences, is not claimed.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    R["User request<br/>(plain language)"] --> P["Rule parser<br/>on-device, offline"]
+    P -- "no rule matches" --> AI["AI fallback<br/>LLM over HTTPS (optional)"]
+    P -- "capsule JSON" --> V["Validator<br/>strict SCHEMA.md v0"]
+    AI -- "capsule JSON" --> V
+    V -- "invalid: errors fed back,<br/>1 retry" --> AI
+    V -- "valid capsule" --> G["Gatekeeper<br/>per-permission allow/deny,<br/>block log"]
+    G --> RN["Renderer<br/>ArkUI components"]
+    RN --> CAL["Calendar Kit<br/>timer reminders"]
+    RN --> N["Notifications"]
+    RN --> VB["Vibration"]
+
+    classDef built fill:#d8f5d0,stroke:#2e7d32,color:#1b1b1b
+    classDef planned fill:#f2f2f2,stroke:#9e9e9e,stroke-dasharray:5 4,color:#555
+    class P,AI,V,RN,CAL built
+    class G,N,VB planned
+```
+
+Green boxes are built. Dashed grey boxes are planned and not yet in the code. Today the validator rejects a capsule that is missing a permission it needs. The gatekeeper will add per-permission user control and a visible block log on top of that.
+
+| Stage | Source | Notes |
+| --- | --- | --- |
+| Types | `entry/src/main/ets/core/CapsuleTypes.ets` | The only definition of capsule types |
+| Rule parser | `core/RuleParser.ets` | Timers, counters, dose schedules, goals and bill splits. Returns `null` when no rule matches. |
+| AI fallback | `core/ModelProvider.ets`, `core/CapsuleModel.ets` | Supports the Anthropic Messages API or any OpenAI-compatible chat endpoint. The request is capped at 500 characters and treated only as a description, never as instructions. |
+| Validator | `core/CapsuleValidator.ets` | Rejects unknown fields, component types, actions and permissions, dangling ids, and missing permissions |
+| Pipeline | `core/CapsuleGenerator.ets`, `core/index.ets` | `generateCapsule(request)` tries the rules first, then the model |
+| Renderer | `renderer/CapsuleRuntime.ets`, `renderer/CapsuleView.ets` | Draws all six component types and runs actions |
+| Timer adapter | `adapters/TimerAdapter.ets` | Adds each timer to the app's own local calendar as an event with a reminder |
+
+The timer adapter uses Calendar Kit rather than `reminderAgentManager`. On phones, agent reminders need an AppGallery Connect capability grant, and without it `publishReminder` fails with error `1700002`.
+
+## Setup, build, install, launch
+
+**You need:** DevEco Studio 6.1.1 or later (HarmonyOS SDK API 24, minimum API 20), [`devecocli`](hackathon-resources/devecocli.md), and a running HarmonyOS phone emulator reachable at `127.0.0.1:5555`.
+
+Run these from the repository root:
+
+```sh
+HDC=/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc
+
+# 1. Build the debug HAP
+devecocli build --modules entry
+#    -> entry/build/default/outputs/default/entry-default-unsigned.hap
+
+# 2. Install on the emulator (-r replaces an existing install)
+$HDC -t 127.0.0.1:5555 install -r entry/build/default/outputs/default/entry-default-unsigned.hap
+
+# 3. Launch
+$HDC -t 127.0.0.1:5555 shell aa start -a EntryAbility -b com.hackyeah.capsules
+```
+
+`build-profile.json5` has no `signingConfigs`, so the HAP is unsigned. The emulator accepts it, but a physical device needs signing (`devecocli auth login`, then `devecocli signature generate`).
+
+### Optional: enable the AI fallback
+
+With no config file the app runs rules-only and reports "AI fallback not configured." To enable the fallback, create `config.local.json` in the repository root. This file is git-ignored and never packed into the `.hap`:
+
+```json
+{ "provider": "anthropic", "apiKey": "<your key>" }
+```
+
+`"provider": "openai"` also works with any OpenAI-compatible endpoint; it needs `"model"` and optionally `"baseUrl"`. Push the file to the app's private files directory after installing:
+
+```sh
+$HDC -t 127.0.0.1:5555 file send -b com.hackyeah.capsules config.local.json data/storage/el2/base/files/
+```
+
+Never put the key in `entry/src/main/resources/rawfile/`, because that folder is packed into the `.hap`.
+
+### Run the unit tests
+
+```sh
+DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk \
+  /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw \
+  --mode module -p module=entry@default -p product=default test --no-daemon
+tail -1 entry/.test/default/intermediates/test/coverage_data/test_result.txt
+# Tests run: 35, Failure: 0, Error: 0, Pass: 35, Ignore: 0
+```
+
+## What's real and what's simulated
+
+| Feature | Status |
+| --- | --- |
+| Schema v0 validator | **Real.** Unit-tested. |
+| On-device rule parser | **Real.** Unit-tested, and every rule's output is checked against the validator. |
+| AI fallback (model call, validate, one corrective retry) | **Implemented and unit-tested against a fake HTTP transport.** The config is loaded at startup and `ohos.permission.INTERNET` is declared, but the fallback has not been run against a real provider on the device. |
+| Typing a request in the app | **Not built.** `generateCapsule` is not called from the UI yet. |
+| Renderer (text, timer, counter, checklist, number, button) | **Real.** It currently shows a built-in "Pasta night" capsule rather than a generated one. |
+| In-app timer countdown | **Real** |
+| Timer reminders that fire with the app closed | **Real** (Calendar Kit). The demo capsule includes a temporary 1-minute "Test" timer for checking this. |
+| `motion` counter source | **Not built.** The counter only counts manual taps for now. |
+| Gatekeeper (allow/deny per permission, block log, Undo) | **Planned** |
+| `notify:<text>` action and notifications | **Planned.** The action is accepted but does nothing yet. |
+| Vibration | **Planned** |
+| Time-of-day reminders, computed values | **Not in schema v0.** "Medication 8am and 8pm" becomes a dose checklist, and bill splits are worked out once as static text. |
+
+No sensor or device data is currently simulated.
+
+## Third-party components and licences
+
+| Component | Used for | Licence |
+| --- | --- | --- |
+| [`@ohos/hypium`](https://ohpm.openharmony.cn/#/cn/detail/@ohos%2Fhypium) 1.0.25 | Unit test framework (development only) | Apache-2.0 |
+| [`@ohos/hamock`](https://ohpm.openharmony.cn/#/cn/detail/@ohos%2Fhamock) 1.0.0 | Mocking for tests (development only) | Apache-2.0 |
+| HarmonyOS SDK kits (ArkUI, Calendar Kit, Network Kit, Core File Kit, Ability Kit) | Platform APIs | Part of the HarmonyOS SDK |
+| Remote LLM, optional (Anthropic API, default model `claude-sonnet-5-5`, or any OpenAI-compatible endpoint) | AI fallback, only when the user supplies a key | Bound by the provider's terms. No model weights are bundled. |
+
+**Cactus and LFM2 are not used.** There is no on-device LLM runtime or bundled model. The only on-device "intelligence" is the rule parser.
+
+Capsules' own licence has not been chosen yet.
+
+AI-assisted development is recorded in [`AI_WORKFLOW.md`](AI_WORKFLOW.md).
+
+## How to verify each feature
+
+| Feature | Steps | Expected |
+| --- | --- | --- |
+| Build | Run step 1 above | `BUILD SUCCESSFUL`, and the `.hap` exists |
+| Validator, rule parser, model fallback | [Run the unit tests](#run-the-unit-tests) | `Pass: 35`. This includes bad JSON, unknown component, unknown action, missing permission, rules-first, model fallback and "not configured" cases. |
+| Renderer | Install and launch | The "Pasta night" capsule shows Pasta 9, Sauce 15, Bread 6 and Test 1 timers, plus a **Start all** button |
+| In-app timers | Tap **Start all** | All four timers count down. The log shows `dispatch startAllTimers` (`$HDC -t 127.0.0.1:5555 shell hilog \| grep dispatch`). |
+| Calendar permission | First launch | The system asks for calendar access with the reason "Capsule timers are saved as calendar reminders…" |
+| Reminders with the app closed | Tap **Start all**, then close the app (swipe it away from recents). Wait one minute. | A calendar reminder "Test is done" fires. The Pasta, Sauce and Bread reminders follow at 6, 9 and 15 minutes. |
+| Rules-only without a key | Launch without pushing `config.local.json`, then run `$HDC -t 127.0.0.1:5555 shell hilog \| grep initCapsuleModel` | No crash, and the log shows `initCapsuleModel ready=false`. Rule requests still work (covered by unit tests until the request field exists). |
+| AI config loaded | Push `config.local.json` (see above), relaunch, run the same `grep initCapsuleModel` | The log shows `initCapsuleModel ready=true` |
