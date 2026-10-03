@@ -122,6 +122,23 @@ export class CapsuleStore {
     }
   }
 
+  /** The weather city the user picked for this capsule (a bundled city id); '' when none yet. */
+  weatherCity(capsuleId: string): string {
+    try {
+      return this.prefs.getSync(`weatherCity:${capsuleId}`, '') as string;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  setWeatherCity(capsuleId: string, city: string): void {
+    try {
+      this.prefs.putSync(`weatherCity:${capsuleId}`, city);
+    } catch (e) {
+      hilog.error(DOMAIN, TAG, 'setWeatherCity failed: %{public}s', (e as BusinessError).message);
+    }
+  }
+
   /** Whether the "Add to home screen" how-to was already shown for this capsule. */
   hintSeen(capsuleId: string): boolean {
     try {

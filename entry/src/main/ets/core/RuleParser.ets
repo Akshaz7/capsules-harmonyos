@@ -7,6 +7,8 @@
  * - counter:  "count my squats", "count coffees", "pushup counter"
  * - schedule: "medication 8am and 8pm", "vitamins at 9:30am, 21:00"
  * - goal:     "water 8 glasses", "drink 8 glasses of water", "pushups goal 50" (schema v1: live progress)
+ * - battery:  "phone battery", "battery level" (schema v1: a read-only reading from the phone)
+ * - weather:  "weather", "weather in Kraków" (schema v1: Open-Meteo; the user picks the city when unnamed)
  * - split:    "split 84 between 4", "split the bill 120.50 among 3 people" (schema v1: live bill split)
  * - checklist: "checklist for leaving home: keys, wallet, charger", "packing list: socks, charger"
  *
@@ -21,6 +23,7 @@ import {
   CapsuleComponent,
   ChecklistComponent,
   CounterComponent,
+  DeviceComponent,
   DisplayComponent,
   InputComponent,
   Permission,
@@ -31,6 +34,7 @@ import {
   TimerComponent,
   WhenComponent
 } from './CapsuleTypes';
+import { cityIdFromText, cityName } from '../capabilities/WeatherData';
 
 /** Requests with these words need logic (scores, games, quizzes, ...) and are left to the models. */
 const SKIP_RULES: RegExp[] = [
@@ -104,6 +108,46 @@ class Ids {
 
 function capsule(id: string, name: string, permissions: Permission[], ui: CapsuleComponent[]): Capsule {
   return { schemaVersion: SCHEMA_VERSION, id: id, name: name, permissions: permissions, ui: ui };
+}
+
+/** "phone battery" / "battery level": a live, read-only battery reading (v1 device component). */
+function parseBattery(req: string): Capsule | null {
+  const battery = /^(?:(?:phone|my|the)\s+)?battery(?:\s+(?:level|percentage|percent|status|left))?$/;
+  if (!battery.test(req)) {
+    return null;
+  }
+  const reading: DeviceComponent = { type: 'device', bind: 'battery', label: 'Battery' };
+  const c: Capsule = {
+    schemaVersion: 1, id: 'battery', name: 'Battery', permissions: ['battery'], ui: [reading]
+  };
+  return c;
+}
+
+/** "weather" / "weather in Kraków": a live Open-Meteo reading; an unnamed or unknown city is picked later. */
+function parseWeather(req: string): Capsule | null {
+  let cityText: string = '';
+  const after = req.match(/^(?:the\s+)?(?:weather|forecast)(?:\s+(?:in|for|at)\s+([a-z\u00c0-\u024f -]+))?$/);
+  if (after !== null) {
+    cityText = after[1] !== undefined ? after[1].trim() : '';
+  } else {
+    const before = req.match(/^([a-z\u00c0-\u024f -]+?)\s+(?:weather|forecast)$/);
+    if (before === null) {
+      return null;
+    }
+    cityText = before[1].trim();
+  }
+  const reading: DeviceComponent = { type: 'device', bind: 'weather' };
+  if (cityText.length > 0) {
+    const id: string = cityIdFromText(cityText);
+    if (id.length > 0) {
+      reading.city = id;
+    }
+  }
+  const named: string = reading.city !== undefined ? ` · ${cityName(reading.city)}` : '';
+  const c: Capsule = {
+    schemaVersion: 1, id: 'weather', name: `Weather${named}`, permissions: ['weather'], ui: [reading]
+  };
+  return c;
 }
 
 function capsuleV1(id: string, name: string, state: Record<string, StateVar>, computed: Record<string, string> | null,
@@ -414,7 +458,8 @@ export function parseRequest(request: string): Capsule | null {
     return null;
   }
   const rules: ((r: string) => Capsule | null)[] = [
-    parsePomodoro, parseTimers, parseSplit, parseChecklist, parseCounter, parseSchedule, parseGoal
+    parsePomodoro, parseTimers, parseSplit, parseChecklist, parseCounter, parseSchedule, parseGoal, parseBattery,
+    parseWeather
   ];
   for (const rule of rules) {
     const result = rule(req);

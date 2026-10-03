@@ -15,6 +15,9 @@ import {
   COUNTER_SOURCES,
   CounterComponent,
   CounterSource,
+  DeviceBind,
+  DeviceComponent,
+  DEVICE_BINDS,
   DisplayComponent,
   InputComponent,
   InputKind,
@@ -52,6 +55,7 @@ import {
   typeOf
 } from './Expr';
 import { nameTypes } from './CapsuleProgram';
+import { cityById } from '../capabilities/WeatherData';
 
 type JsonValue = Object | null | undefined;
 type JsonRecord = Record<string, Object | null>;
@@ -63,6 +67,10 @@ export const MAX_COMPONENTS: number = 60;
 export const MAX_NESTING: number = 5;
 export const MAX_VARS: number = 30;
 export const MAX_STEPS: number = 20;
+/** Live readings are rare; a capsule may show at most this many at once. */
+export const MAX_DEVICE_COMPONENTS: number = 2;
+/** One city's weather is enough; the card carries the attribution. */
+export const MAX_WEATHER_COMPONENTS: number = 1;
 
 function fieldsFor(type: string): string[] {
   switch (type) {
@@ -88,6 +96,8 @@ function fieldsFor(type: string): string[] {
       return ['type', 'if', 'show'];
     case 'row':
       return ['type', 'items'];
+    case 'device':
+      return ['type', 'bind'];
     default:
       return [];
   }
@@ -149,6 +159,9 @@ export function permissionForComponent(c: CapsuleComponent): Permission | null {
   }
   if (c.type === 'counter' && (c as CounterComponent).source === 'motion') {
     return 'motion';
+  }
+  if (c.type === 'device') {
+    return (c as DeviceComponent).bind;
   }
   return null;
 }
@@ -262,6 +275,10 @@ class Checker {
     const before = this.errors.length;
     if (type === 'button' && this.v1) {
       this.checkFields(obj, ['type', 'label'], path, ['action', 'do', 'enabledIf']);
+    } else if (type === 'device') {
+      const rawBind: JsonValue = obj['bind'];
+      const optional: string[] = rawBind === 'weather' ? ['label', 'city'] : ['label'];
+      this.checkFields(obj, ['type', 'bind'], path, optional);
     } else {
       this.checkFields(obj, fieldsFor(type), path);
     }
@@ -300,6 +317,33 @@ class Checker {
           t.source = s as CounterSource;
         }
         c = t;
+        break;
+      }
+      case 'device': {
+        const d: DeviceComponent = { type: 'device', bind: 'battery' };
+        const b: JsonValue = obj['bind'];
+        if (typeof b !== 'string' || !DEVICE_BINDS.includes(b as string)) {
+          if (b !== undefined) {
+            this.add(`${path}.bind`, `must be one of ${DEVICE_BINDS.join(', ')}, got ${JSON.stringify(b)}`);
+          }
+        } else {
+          d.bind = b as DeviceBind;
+          const city: JsonValue = obj['city'];
+          if (b === 'weather') {
+            if (city === undefined) {
+              // The user picks the city in the app; the capsule itself names none.
+            } else if (typeof city !== 'string' || cityById(city as string) === undefined) {
+              this.add(`${path}.city`, `must be a bundled city id, got ${JSON.stringify(city)}`);
+            } else {
+              d.city = city as string;
+            }
+          }
+        }
+        const label: JsonValue = obj['label'];
+        if (label !== undefined) {
+          d.label = this.str(obj, 'label', path);
+        }
+        c = d;
         break;
       }
       case 'checklist': {
@@ -832,6 +876,15 @@ export function validateCapsuleObject(root: JsonValue): ValidationResult {
   }
   if (ck.count > MAX_COMPONENTS) {
     ck.add('$.ui', `has ${ck.count} components including nested ones (max ${MAX_COMPONENTS})`);
+  }
+  const readings: number = ck.placed.filter((p: Placed) => p.c.type === 'device').length;
+  if (readings > MAX_DEVICE_COMPONENTS) {
+    ck.add('$.ui', `has ${readings} device readings (max ${MAX_DEVICE_COMPONENTS})`);
+  }
+  const weatherReadings: number = ck.placed.filter((p: Placed) =>
+    p.c.type === 'device' && (p.c as DeviceComponent).bind === 'weather').length;
+  if (weatherReadings > MAX_WEATHER_COMPONENTS) {
+    ck.add('$.ui', `has ${weatherReadings} weather readings (max ${MAX_WEATHER_COMPONENTS})`);
   }
 
   // ids must be unique across all components, nested ones included

@@ -68,7 +68,7 @@ const BATTERY: Capability = {
   osPermissions: [],
   minApi: 12,
   hardware: '',
-  implemented: false,
+  implemented: true,
   foregroundOnly: true,
   disclosure: 'The battery level and charging state are read on the phone. Nothing is sent anywhere.',
   rateLimits: 'read when the capsule opens and when the app returns to the foreground only',
@@ -85,7 +85,7 @@ const WEATHER: Capability = {
   osPermissions: [{ name: 'ohos.permission.INTERNET', grantMode: 'system_grant', minApi: 9 }],
   minApi: 9,
   hardware: '',
-  implemented: false,
+  implemented: true,
   foregroundOnly: true,
   disclosure: 'Only the chosen city\'s coordinates are sent to Open-Meteo (open-meteo.com). Capsule text, state ' +
     'and identifiers never leave the phone.',

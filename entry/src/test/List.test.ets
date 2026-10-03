@@ -19,6 +19,7 @@ import templatesTest from './Templates.test';
 import editCapsuleTest from './EditCapsule.test';
 import motionDetectTest from './MotionDetect.test';
 import deviceComponentsTest from './DeviceComponents.test';
+import weatherTest from './Weather.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -42,4 +43,5 @@ export default function testsuite() {
   editCapsuleTest();
   motionDetectTest();
   deviceComponentsTest();
+  weatherTest();
 }
