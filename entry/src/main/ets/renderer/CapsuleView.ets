@@ -3,9 +3,14 @@ import {
   CapsuleComponent,
   ChecklistComponent,
   CounterComponent,
+  DisplayComponent,
+  InputComponent,
+  ListComponent,
   NumberComponent,
+  RowComponent,
   TextComponent,
-  TimerComponent
+  TimerComponent,
+  WhenComponent
 } from '../core';
 import { CapsuleRuntime, ChecklistState, CounterState, formatClock, NumberState, TimerState } from './CapsuleRuntime';
 
@@ -19,12 +24,35 @@ function sectionCard() {
 }
 
 /**
- * Draws any schema v0 capsule body (no title; the host page shows it).
- * Holds no logic; all actions go to CapsuleRuntime.dispatch.
+ * Draws any schema v0 or v1 capsule body (no title; the host page shows it).
+ * Holds no logic: buttons go to CapsuleRuntime.press, which runs core's interpreter.
  */
 @ComponentV2
 export struct CapsuleView {
   @Require @Param runtime: CapsuleRuntime;
+
+  build() {
+    Column({ space: 12 }) {
+      ForEach(this.runtime.capsule.ui, (c: CapsuleComponent) => {
+        CapsuleNode({ runtime: this.runtime, component: c })
+      }, (c: CapsuleComponent, i: number) => `${i}-${c.type}`)
+      if (this.runtime.message.length > 0) {
+        Text(this.runtime.message)
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.warning'))
+          .width('100%')
+          .padding({ left: 4, right: 4 })
+      }
+    }
+    .width('100%')
+  }
+}
+
+/** One component. when/row hold more CapsuleNodes, so nesting works at any depth. */
+@ComponentV2
+struct CapsuleNode {
+  @Require @Param runtime: CapsuleRuntime;
+  @Require @Param component: CapsuleComponent;
 
   @Builder
   blockedItem(c: CapsuleComponent, reason: string) {
@@ -171,29 +199,116 @@ export struct CapsuleView {
       // Reset is secondary: tonal instead of filled.
       .backgroundColor(c.action.startsWith('reset:') ? $r('sys.color.comp_background_tertiary') : $r('sys.color.brand'))
       .fontColor(c.action.startsWith('reset:') ? $r('sys.color.font_primary') : $r('sys.color.font_on_primary'))
-      .onClick(() => this.runtime.dispatch(c.action))
+      .enabled(this.runtime.enabled(c))
+      .opacity(this.runtime.enabled(c) ? 1 : 0.4)
+      .onClick(() => this.runtime.press(c))
+  }
+
+  @Builder
+  displayItem(c: DisplayComponent) {
+    Column() {
+      Text(this.runtime.display(c.text))
+        .fontSize($r('sys.float.Title_S'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_primary'))
+        .fontFeature('"tnum" on')
+        .width('100%')
+    }
+    .sectionCard()
+  }
+
+  @Builder
+  inputItem(c: InputComponent) {
+    Column({ space: 4 }) {
+      Row() {
+        Text(c.label)
+          .fontSize($r('sys.float.Subtitle_M'))
+          .fontColor($r('sys.color.font_primary'))
+          .layoutWeight(1)
+        TextInput({ text: this.runtime.inputValue(c.bind), placeholder: c.kind === 'number' ? '0' : '' })
+          .type(c.kind === 'number' ? InputType.NUMBER_DECIMAL : InputType.Normal)
+          .width(c.kind === 'number' ? 120 : 180)
+          .textAlign(c.kind === 'number' ? TextAlign.End : TextAlign.Start)
+          .onChange((value: string) => this.runtime.setInputValue(c.bind, value))
+      }
+      .width('100%')
+      if (this.runtime.inputError(c.bind).length > 0) {
+        Text(this.runtime.inputError(c.bind))
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.warning'))
+          .width('100%')
+      }
+    }
+    .sectionCard()
+  }
+
+  @Builder
+  listItem(c: ListComponent) {
+    Column() {
+      if (this.runtime.items(c.source).length === 0) {
+        Text('Nothing yet')
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+          .height(48)
+      } else {
+        ForEach(this.runtime.items(c.source), (item: string) => {
+          Text(item)
+            .fontSize($r('sys.float.Body_L'))
+            .fontColor($r('sys.color.font_primary'))
+            .width('100%')
+            .height(48)
+        }, (item: string, i: number) => `${i}-${item}`)
+      }
+    }
+    .sectionCard()
+    .padding({ left: 16, right: 16, top: 4, bottom: 4 })
   }
 
   build() {
-    Column({ space: 12 }) {
-      ForEach(this.runtime.capsule.ui, (c: CapsuleComponent, i: number) => {
-        if (this.runtime.blockReason(i).length > 0) {
-          this.blockedItem(c, this.runtime.blockReason(i))
-        } else if (c.type === 'text') {
-          this.textItem(c as TextComponent)
-        } else if (c.type === 'timer') {
-          this.timerItem(c as TimerComponent, this.runtime.timer((c as TimerComponent).id))
-        } else if (c.type === 'counter') {
-          this.counterItem(c as CounterComponent, this.runtime.counter((c as CounterComponent).id))
-        } else if (c.type === 'checklist') {
-          this.checklistItem(c as ChecklistComponent, this.runtime.checklist((c as ChecklistComponent).id))
-        } else if (c.type === 'number') {
-          this.numberItem(c as NumberComponent, this.runtime.numberField((c as NumberComponent).id))
-        } else if (c.type === 'button') {
-          this.buttonItem(c as ButtonComponent)
+    if (this.runtime.blockReason(this.component).length > 0) {
+      this.blockedItem(this.component, this.runtime.blockReason(this.component))
+    } else if (this.component.type === 'text') {
+      this.textItem(this.component as TextComponent)
+    } else if (this.component.type === 'timer') {
+      this.timerItem(this.component as TimerComponent, this.runtime.timer((this.component as TimerComponent).id))
+    } else if (this.component.type === 'counter') {
+      this.counterItem(this.component as CounterComponent,
+        this.runtime.counter((this.component as CounterComponent).id))
+    } else if (this.component.type === 'checklist') {
+      this.checklistItem(this.component as ChecklistComponent,
+        this.runtime.checklist((this.component as ChecklistComponent).id))
+    } else if (this.component.type === 'number') {
+      this.numberItem(this.component as NumberComponent,
+        this.runtime.numberField((this.component as NumberComponent).id))
+    } else if (this.component.type === 'button') {
+      this.buttonItem(this.component as ButtonComponent)
+    } else if (this.component.type === 'display') {
+      this.displayItem(this.component as DisplayComponent)
+    } else if (this.component.type === 'input') {
+      this.inputItem(this.component as InputComponent)
+    } else if (this.component.type === 'list') {
+      this.listItem(this.component as ListComponent)
+    } else if (this.component.type === 'when') {
+      if (this.runtime.shown(this.component as WhenComponent)) {
+        Column({ space: 12 }) {
+          ForEach((this.component as WhenComponent).show, (child: CapsuleComponent) => {
+            CapsuleNode({ runtime: this.runtime, component: child })
+          }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)
         }
-      }, (c: CapsuleComponent, i: number) => `${i}-${c.type}`)
+        .width('100%')
+      }
+    } else if (this.component.type === 'row') {
+      Row({ space: 12 }) {
+        ForEach((this.component as RowComponent).items, (child: CapsuleComponent) => {
+          Column() {
+            CapsuleNode({ runtime: this.runtime, component: child })
+          }
+          .layoutWeight(1)
+        }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
     }
-    .width('100%')
   }
 }

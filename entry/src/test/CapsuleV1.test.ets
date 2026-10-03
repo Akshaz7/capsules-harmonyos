@@ -1,4 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium';
+import { ActionGuard, CapsuleRuntime } from '../main/ets/renderer/CapsuleRuntime';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import { BILL_SPLIT_CAPSULE as BILL, TENNIS_CAPSULE as TENNIS } from '../main/ets/core/V1Fixtures';
 import {
@@ -73,6 +74,13 @@ function errorsOf(json: string): string {
 
 const NUM: string = '{"n":{"type":"number","initial":0},"t":{"type":"text","initial":"hi"},' +
   '"xs":{"type":"list","initial":[1,2]},"on":{"type":"bool","initial":true}}';
+
+/** A gatekeeper stand-in that refuses every action. */
+class DenyAll implements ActionGuard {
+  allowAction(action: string): boolean {
+    return false;
+  }
+}
 
 export default function capsuleV1Test() {
   describe('Schema v1: tennis scoreboard', () => {
@@ -291,6 +299,70 @@ export default function capsuleV1Test() {
         .assertContain('$.ui[0].do[0]: action "notify:hi" needs permission "notifications"');
       expect(errorsOf(v1(NUM, '{}', '[{"type":"button","label":"Go","do":["increment:nope"]}]')))
         .assertContain('refers to id "nope"');
+    });
+  });
+
+  describe('Schema v1: renderer runtime', () => {
+    it('presses buttons through the interpreter and updates values', 0, () => {
+      const rt = new CapsuleRuntime(load(TENNIS));
+      const p1 = button(rt.capsule, 'Point P1');
+      for (let i = 0; i < 4; i++) {
+        rt.press(p1);
+      }
+      expect(rt.values['g1']).assertEqual(1);
+      expect(rt.values['p1']).assertEqual(0);
+      expect(rt.display('Games {g1} - {g2}')).assertEqual('Games 1 - 0');
+      expect(rt.message).assertEqual('');
+    });
+
+    it('enabledIf disables a button, and pressing it changes nothing', 0, () => {
+      const rt = new CapsuleRuntime(load(TENNIS));
+      const reset = button(rt.capsule, 'Reset match');
+      expect(rt.enabled(reset)).assertFalse();
+      rt.press(reset);
+      expect(rt.message.length > 0).assertTrue();
+      rt.press(button(rt.capsule, 'Point P2'));
+      expect(rt.enabled(reset)).assertTrue();
+      rt.press(reset);
+      expect(rt.values['p2']).assertEqual(0);
+    });
+
+    it('a blocked v0 action inside "do" cancels the whole press', 0, () => {
+      const c = load(v1('{"n":{"type":"number","initial":0}}', '{}',
+        '[{"type":"row","items":[{"type":"counter","id":"k","label":"K","source":"manual"},' +
+        '{"type":"button","label":"Go","do":[{"set":"n","to":"n + 1"},"increment:k"]}]}]'));
+      const rt = new CapsuleRuntime(c);
+      rt.guard = new DenyAll();
+      rt.press(button(c, 'Go'));
+      expect(rt.values['n']).assertEqual(0);
+      expect(rt.counter('k')?.value).assertEqual(0);
+      expect(rt.message).assertContain('increment:k');
+      rt.guard = undefined;
+      rt.press(button(c, 'Go'));
+      expect(rt.values['n']).assertEqual(1);
+      expect(rt.counter('k')?.value).assertEqual(1);
+    });
+
+    it('finds nested components and their block reasons in allComponents order', 0, () => {
+      const c = load(TENNIS);
+      const rt = new CapsuleRuntime(c);
+      const all = allComponents(c.ui);
+      rt.blockReasons = all.map((x: CapsuleComponent, i: number) => i === all.length - 1 ? 'denied' : '');
+      expect(rt.blockReason(all[all.length - 1])).assertEqual('denied');
+      expect(rt.blockReason(button(c, 'Point P1'))).assertEqual('');
+    });
+
+    it('inputs keep what is typed and only accept valid numbers', 0, () => {
+      const rt = new CapsuleRuntime(load(BILL));
+      rt.setInputValue('total', '12.');
+      expect(rt.inputValue('total')).assertEqual('12.');
+      rt.setInputValue('total', 'abc');
+      expect(rt.inputError('total').length > 0).assertTrue();
+      expect(rt.values['total']).assertEqual(12);
+      rt.setInputValue('total', '90');
+      expect(rt.inputError('total')).assertEqual('');
+      expect(rt.display('Each pays {each}')).assertEqual('Each pays 45');
+      expect(rt.summary()).assertEqual('Each pays 45');
     });
   });
 }

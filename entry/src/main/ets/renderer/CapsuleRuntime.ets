@@ -1,12 +1,29 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
+  ButtonComponent,
   Capsule,
   CapsuleComponent,
   ChecklistComponent,
   CounterComponent,
+  DisplayComponent,
   NumberComponent,
-  TimerComponent
+  TimerComponent,
+  WhenComponent
 } from '../core/CapsuleTypes';
+import {
+  allComponents,
+  applyActions,
+  ApplyResult,
+  initialState,
+  inputText,
+  isEnabled,
+  isShown,
+  listItems,
+  renderTemplate,
+  restoreState,
+  setInput,
+  StateValues
+} from '../core/CapsuleProgram';
 import { CapsuleState, ChecklistTicks, CounterValue, TimerRun } from '../core/WidgetModel';
 
 const DOMAIN = 0x0001;
@@ -85,7 +102,16 @@ export interface ActionGuard {
   allowAction(action: string): boolean;
 }
 
-/** Live state for one rendered capsule. Actions from buttons go through dispatch(). */
+function withKey(rec: Record<string, string>, key: string, value: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  Object.keys(rec).forEach((k: string) => {
+    out[k] = rec[k];
+  });
+  out[key] = value;
+  return out;
+}
+
+/** Live state for one rendered capsule. Buttons go through press(), which uses core's interpreter. */
 @ObservedV2
 export class CapsuleRuntime {
   readonly capsule: Capsule;
@@ -93,18 +119,30 @@ export class CapsuleRuntime {
   @Trace counters: CounterState[] = [];
   @Trace checklists: ChecklistState[] = [];
   @Trace numbers: NumberState[] = [];
+  /** v1 state values. Replaced, never mutated, on each change so @Trace sees it. Empty for v0. */
+  @Trace values: StateValues;
+  /** What the user is typing into each v1 input, by bound var. Cleared when a button changes state. */
+  @Trace drafts: Record<string, string> = {};
+  /** Why the last text in an input was not accepted, by bound var. */
+  @Trace inputErrors: Record<string, string> = {};
+  /** Why the last button press did nothing; '' when it worked. */
+  @Trace message: string = '';
   scheduler?: TimerScheduler;
   guard?: ActionGuard;
   alert?: TimerAlert;
-  /** Called after the user changes persisted state (timers started, counts, ticks). */
+  /** Called after the user changes persisted state (timers started, counts, ticks, v1 values). */
   onChange?: () => void;
-  // Per ui index: '' if the component may render, else why it is blocked.
+  // Per component in allComponents(capsule.ui) order: '' if it may render, else why it is blocked.
   @Trace blockReasons: string[] = [];
   private tickHandle: number = -1;
+  /** Every component, nested ones included, in the order the gatekeeper checks them. */
+  private flat: CapsuleComponent[];
 
   constructor(capsule: Capsule) {
     this.capsule = capsule;
-    capsule.ui.forEach((c: CapsuleComponent) => {
+    this.values = initialState(capsule);
+    this.flat = allComponents(capsule.ui);
+    this.flat.forEach((c: CapsuleComponent) => {
       if (c.type === 'timer') {
         this.timers.push(new TimerState(c as TimerComponent));
       } else if (c.type === 'counter') {
@@ -129,8 +167,84 @@ export class CapsuleRuntime {
     return this.checklists.find((c: ChecklistState) => c.listId === listId);
   }
 
-  blockReason(index: number): string {
-    return index < this.blockReasons.length ? this.blockReasons[index] : '';
+  /** '' if the component may render, else why the gatekeeper blocked it. Works for nested components. */
+  blockReason(c: CapsuleComponent): string {
+    const index = this.flat.indexOf(c);
+    return index >= 0 && index < this.blockReasons.length ? this.blockReasons[index] : '';
+  }
+
+  // ---- v1 ----
+
+  /** A display template with each {expr} evaluated ("?" where one fails). */
+  display(template: string): string {
+    return renderTemplate(this.capsule, this.values, template);
+  }
+
+  shown(w: WhenComponent): boolean {
+    return isShown(this.capsule, this.values, w);
+  }
+
+  enabled(b: ButtonComponent): boolean {
+    return isEnabled(this.capsule, this.values, b);
+  }
+
+  items(source: string): string[] {
+    return listItems(this.values, source);
+  }
+
+  /** The text an input shows: what the user is typing, else the bound state value. */
+  inputValue(name: string): string {
+    const draft = this.drafts[name];
+    return draft !== undefined ? draft : inputText(this.values, name);
+  }
+
+  inputError(name: string): string {
+    return this.inputErrors[name] ?? '';
+  }
+
+  /** User typed into an input bound to `name`. State changes only when the text is valid. */
+  setInputValue(name: string, raw: string): void {
+    this.drafts = withKey(this.drafts, name, raw);
+    const r: ApplyResult = setInput(this.capsule, this.values, name, raw);
+    if (!r.ok) {
+      this.inputErrors = withKey(this.inputErrors, name, r.error ?? 'Not accepted');
+      return;
+    }
+    this.inputErrors = withKey(this.inputErrors, name, '');
+    this.values = r.state;
+    this.onChange?.();
+  }
+
+  /** Replaces v1 values with saved ones (names and types that no longer match fall back to initial). */
+  restoreValues(saved: StateValues): void {
+    this.values = restoreState(this.capsule, saved);
+  }
+
+  /**
+   * Presses a button (v0 or v1). Core's interpreter runs the do-steps all-or-nothing and returns
+   * the v0 actions; the gatekeeper must allow every one of them, or nothing changes.
+   */
+  press(b: ButtonComponent): void {
+    const r: ApplyResult = applyActions(this.capsule, this.values, b);
+    if (!r.ok) {
+      this.message = r.error ?? 'That did not work.';
+      hilog.warn(DOMAIN, TAG, 'press "%{public}s" failed: %{public}s', b.label, this.message);
+      return;
+    }
+    for (const action of r.actions) {
+      if (this.guard && !this.guard.allowAction(action)) {
+        this.message = `Blocked: "${action}" needs a permission you didn't allow.`;
+        return;
+      }
+    }
+    this.message = '';
+    this.values = r.state;
+    if (b.do !== undefined && b.do.length > 0) {
+      this.drafts = {};
+      this.inputErrors = {};
+    }
+    r.actions.forEach((action: string) => this.run(action));
+    this.onChange?.();
   }
 
   numberField(numberId: string): NumberState | undefined {
@@ -154,18 +268,32 @@ export class CapsuleRuntime {
       const ticked = c.checked.filter((v: boolean) => v).length;
       parts.push(`${ticked}/${c.checked.length} ticked`);
     });
+    if (parts.length === 0) {
+      // v1: the first display line, e.g. "Score 15-30".
+      const first = this.flat.find((c: CapsuleComponent) => c.type === 'display');
+      if (first !== undefined) {
+        parts.push(this.display((first as DisplayComponent).text));
+      }
+    }
     return parts.length > 0 ? parts.join(' · ') : 'Tap to open';
   }
 
-  /** Runs one schema action string, e.g. "startTimer:pasta" or "startAllTimers". */
+  /** Runs one schema action string, e.g. "startTimer:pasta" or "startAllTimers", after the gatekeeper. */
   dispatch(action: string): void {
-    const sep = action.indexOf(':');
-    const kind = sep < 0 ? action : action.substring(0, sep);
-    const arg = sep < 0 ? '' : action.substring(sep + 1);
     hilog.info(DOMAIN, TAG, 'dispatch %{public}s', action);
     if (this.guard && !this.guard.allowAction(action)) {
       return;
     }
+    if (this.run(action) && !action.startsWith('notify')) {
+      this.onChange?.();
+    }
+  }
+
+  /** Runs an action the gatekeeper already allowed. False if the action is unknown. */
+  private run(action: string): boolean {
+    const sep = action.indexOf(':');
+    const kind = sep < 0 ? action : action.substring(0, sep);
+    const arg = sep < 0 ? '' : action.substring(sep + 1);
     switch (kind) {
       case 'startTimer': {
         const t = this.timer(arg);
@@ -196,11 +324,9 @@ export class CapsuleRuntime {
         break;
       default:
         hilog.warn(DOMAIN, TAG, 'unknown action %{public}s', action);
-        return;
+        return false;
     }
-    if (kind !== 'notify') {
-      this.onChange?.();
-    }
+    return true;
   }
 
   /** Ticks or unticks one checklist item (user tap). */

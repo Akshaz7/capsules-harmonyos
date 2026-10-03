@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { allComponents } from '../core/CapsuleProgram';
 import {
   Capsule,
   CapsuleComponent,
@@ -85,14 +86,16 @@ export class Gatekeeper {
   }
 
   /**
-   * Returns, for each ui component, '' if it may render or the reason it is blocked.
+   * Returns, for each component in allComponents(capsule.ui) order (so a timer nested in a v1
+   * when/row is checked too), '' if it may render or the reason it is blocked.
    * Every blocked component is logged.
    */
   checkComponents(capsule: Capsule): string[] {
-    const reasons = capsule.ui.map((c: CapsuleComponent) => this.componentBlockReason(capsule, c));
+    const all = allComponents(capsule.ui);
+    const reasons = all.map((c: CapsuleComponent) => this.componentBlockReason(capsule, c));
     reasons.forEach((r: string, i: number) => {
       if (r.length > 0) {
-        this.add(capsule.id, 'blocked', `ui[${i}] ${capsule.ui[i].type}: ${r}`);
+        this.add(capsule.id, 'blocked', `component ${i} (${all[i].type}): ${r}`);
       }
     });
     this.save();
