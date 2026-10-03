@@ -26,6 +26,7 @@ import {
 } from '../core/CapsuleProgram';
 import { CapsuleState, ChecklistTicks, CounterValue, TimerRun } from '../core/WidgetModel';
 import { runTrigger, TriggerGuard, TriggerRun } from '../core/Triggers';
+import { DeviceReadout } from '../capabilities/DeviceReadout';
 
 const DOMAIN = 0x0001;
 const TAG = 'CapsuleRuntime';
@@ -136,6 +137,8 @@ export class CapsuleRuntime {
   @Trace inputErrors: Record<string, string> = {};
   /** Why the last button press did nothing; '' when it worked. */
   @Trace message: string = '';
+  /** Read-only host readings by bind ('battery'), filled by the page. Never capsule state. */
+  @Trace devices: Record<string, DeviceReadout> = {};
   scheduler?: TimerScheduler;
   guard?: ActionGuard;
   alert?: TimerAlert;
@@ -180,6 +183,20 @@ export class CapsuleRuntime {
   blockReason(c: CapsuleComponent): string {
     const index = this.flat.indexOf(c);
     return index >= 0 && index < this.blockReasons.length ? this.blockReasons[index] : '';
+  }
+
+  deviceReadout(bind: string): DeviceReadout | undefined {
+    return this.devices[bind];
+  }
+
+  /** Replaces one reading; a new object so @Trace sees the change. */
+  setDeviceReadout(bind: string, r: DeviceReadout): void {
+    const next: Record<string, DeviceReadout> = {};
+    Object.keys(this.devices).forEach((k: string) => {
+      next[k] = this.devices[k];
+    });
+    next[bind] = r;
+    this.devices = next;
   }
 
   // ---- v1 ----

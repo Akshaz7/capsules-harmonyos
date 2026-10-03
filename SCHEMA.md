@@ -79,3 +79,23 @@ Three more actions, usable wherever actions are (a button's "action", a v1 "do" 
 - "stopTimer:<id>"   stops the timer and puts it back to its full length.
 - "resetTimer:<id>"  puts the timer back to its full length; if it was running it keeps running from there.
 <id> must be a timer. Like every timer action they need "reminders".
+
+# Capsule schema v1.2: device readings (battery, weather)
+Proposed 2026-10-04 (branch `codex/ark-kits`), for Ash's review. Backwards compatible: an optional v1
+component; every v0 and v1 capsule stays valid.
+
+  { "type": "device", "bind": "battery", "label"?: string }                    needs: battery
+  { "type": "device", "bind": "weather", "label"?: string, "city"?: string }   needs: weather
+
+- A device reading is read-only host data. It has no id, no action and no "do" steps: no capsule state, button,
+  trigger or expression can write it or name it. At most 60 components as usual, of which at most 2 are device
+  readings and at most 1 is weather.
+- battery: the phone's level and charging state. Read while the capsule is open and when the app returns to the
+  foreground only; no OS permission; capsule consent still required.
+- weather: the current temperature, condition and wind from Open-Meteo for one city. "city" must be one of the
+  bundled city ids (krakow, warsaw, wroclaw, gdansk, poznan, lodz, katowice, berlin, prague, vienna, london,
+  paris). Without "city" the user picks one in the app. Only the chosen city's coordinates are sent; the card
+  shows "Weather data by Open-Meteo.com" with a link, a fetched-at time, a stale marker and an offline state.
+- Unknown binds, a "city" on battery, a city id outside the list, an extra field or a missing permission =
+  reject. A capsule never supplies a URL, header, key or raw coordinate.
+- Widgets: a capsule with any device reading is app-only, like motion capsules.

@@ -111,10 +111,12 @@ export default function widgetModelTest() {
         .assertFalse();
     });
 
-    it('hides a motion counter without the motion grant', 0, () => {
-      const c = rules('count my squats');
-      expect(buildWidgetView(c, initialState(c), gate([], true, false), NOW, false).rows.length).assertEqual(0);
-      expect(buildWidgetView(c, initialState(c), gate(['motion'], true, false), NOW, false).rows.length).assertEqual(1);
+    it('never draws a motion capsule: motion runs only while the capsule is open in the app', 0, () => {
+      const c = rules('count my shakes');
+      const view = buildWidgetView(c, initialState(c), gate([], true, false), NOW, false);
+      expect(view.rows.length).assertEqual(0);
+      expect(view.message).assertContain('motion');
+      expect(buildWidgetView(c, initialState(c), gate(['motion'], true, false), NOW, false).rows.length).assertEqual(0);
     });
 
     it('shows checklists and text, and marks removed capsules', 0, () => {

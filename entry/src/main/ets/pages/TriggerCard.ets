@@ -37,7 +37,7 @@ export struct TriggerCard {
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(this.allowed[i] === false ? `${triggerWhen(t)} · Blocked: permission not allowed` :
-            t.on === 'motion' ? `${triggerWhen(t)} · Motion triggers: coming soon` : // no motion sensor adapter yet
+            t.on === 'motion' ? `${triggerWhen(t)} · Shakes count while this capsule is open` :
             [triggerWhen(t), triggerNext(t, this.now)].filter((s: string) => s.length > 0).join(' · '))
             .fontSize($r('sys.float.Caption_M'))
             .fontColor(this.allowed[i] === false ? $r('sys.color.warning') : $r('sys.color.font_secondary'))

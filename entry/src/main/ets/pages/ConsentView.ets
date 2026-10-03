@@ -22,6 +22,10 @@ function permissionTitle(p: Permission): string {
       return 'Motion sensor';
     case 'location':
       return 'Location';
+    case 'battery':
+      return 'Battery';
+    case 'weather':
+      return 'Weather';
     case 'widget':
       return 'Home screen widget';
     default:
@@ -38,9 +42,13 @@ function permissionReason(p: Permission): string {
     case 'vibration':
       return 'Vibrate the phone for alerts';
     case 'motion':
-      return 'Count reps or steps with the motion sensor';
+      return 'React to shaking the phone while the capsule is open. It does not count steps or reps';
     case 'location':
       return 'Use where you are';
+    case 'battery':
+      return 'Read the battery level and charging state while the capsule is open';
+    case 'weather':
+      return 'Send the chosen city\'s coordinates to Open-Meteo (open-meteo.com) to show its weather';
     case 'widget':
       return 'Show this capsule on your home screen';
     default:
@@ -60,6 +68,10 @@ function permissionIcon(p: Permission): Resource {
       return $r('sys.symbol.figure_walk');
     case 'location':
       return $r('sys.symbol.pin');
+    case 'battery':
+      return $r('sys.symbol.battery_100percent');
+    case 'weather':
+      return $r('sys.symbol.cloud');
     default:
       return $r('sys.symbol.square_grid_2x2');
   }

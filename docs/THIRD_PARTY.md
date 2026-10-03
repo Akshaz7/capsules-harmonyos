@@ -33,3 +33,18 @@ We wrote the Node-API wrapper in `cactus/src/main/cpp/` (`napi_init.cpp`, `cactu
 | Licence | LFM Open License v1.0 (Liquid AI), https://huggingface.co/LiquidAI/LFM2-VL-450M/blob/main/LICENSE |
 
 LFM Open License v1.0 is Apache-2.0-style: perpetual, royalty-free copyright and patent grants, with notice and attribution requirements when you redistribute. It adds a commercial-use limit. Commercial use is licensed only if the user's legal entity has under $10M in annual revenue; qualifying non-profits doing non-commercial or research work are exempt. Use in a hackathon demo is within these terms. Because we don't redistribute the weights, anyone installing the model downloads it from Hugging Face under that licence.
+
+## Open-Meteo weather data (runtime service, nothing bundled)
+
+| | |
+| --- | --- |
+| What | Current weather (temperature, WMO condition code, wind speed) for the capsule's chosen city |
+| Source | https://open-meteo.com/ — API `https://api.open-meteo.com/v1/forecast` |
+| Where in this repo | `entry/src/main/ets/adapters/WeatherAdapter.ets`, `entry/src/main/ets/capabilities/WeatherData.ets` |
+| Licence | Weather data under CC BY 4.0; see https://open-meteo.com/en/license |
+| Our changes | None; no code is copied |
+
+The free endpoint is for non-commercial use and needs no API key; commercial use needs a separate plan from
+Open-Meteo. Attribution "Weather data by Open-Meteo.com" is shown beside the reading and links to
+https://open-meteo.com/. Only the chosen bundled city's coordinates are sent — never capsule text, state or
+identifiers, and capsules cannot supply a URL, header or key.

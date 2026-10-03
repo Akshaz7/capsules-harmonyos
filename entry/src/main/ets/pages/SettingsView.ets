@@ -10,6 +10,49 @@ export struct SettingsView {
   @Param cloudStatus: string = '';
   /** Second line of the Smart option: which cloud provider Smart mode would use. */
   @Param smartDetail: string = 'On-device + Mistral EU when needed';
+  /** Bumped when the user changes the motion scope, so the page can start or stop the sensor. */
+  @Event onMotionScopeChange: () => void = () => {
+  };
+
+  @Builder
+  motionRow(scope: string, title: string, detail: string) {
+    Row({ space: 12 }) {
+      Stack() {
+        SymbolGlyph($r('sys.symbol.figure_walk'))
+          .fontSize(20)
+          .fontColor([$r('sys.color.icon_emphasize')])
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(20)
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      Column({ space: 2 }) {
+        Text(title)
+          .fontSize($r('sys.float.Body_L'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+        Text(detail)
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Radio({ value: scope, group: 'motionScope' })
+        .checked(this.settings.motionScope === scope)
+        .onChange((isChecked: boolean) => {
+          if (isChecked) {
+            this.settings.setMotionScope(scope === 'app' ? 'app' : 'capsule');
+            this.onMotionScopeChange();
+          }
+        })
+    }
+    .width('100%')
+    .padding({ top: 12, bottom: 12 })
+    .onClick(() => {
+      this.settings.setMotionScope(scope === 'app' ? 'app' : 'capsule');
+      this.onMotionScopeChange();
+    })
+  }
 
   @Builder
   modeRow(mode: AiMode, icon: Resource, title: string, detail: string) {
@@ -78,6 +121,30 @@ export struct SettingsView {
       Text(LIMITS_TEXT)
         .fontSize($r('sys.float.Caption_M'))
         .fontColor($r('sys.color.font_secondary'))
+        .width('100%')
+        .padding({ left: 4, right: 4 })
+
+      Text('Motion')
+        .fontSize($r('sys.float.Subtitle_S'))
+        .fontColor($r('sys.color.font_secondary'))
+        .width('100%')
+        .padding({ left: 4, right: 4, top: 16 })
+      Column() {
+        this.motionRow('capsule', 'While a capsule is open',
+          'Only the capsule on screen reacts to shakes')
+        Divider()
+          .color($r('sys.color.comp_divider'))
+          .margin({ left: 52 })
+        this.motionRow('app', 'Anywhere in Harmoniser',
+          'Every capsule you allowed reacts while the app is in front')
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+      .borderRadius(20)
+      .backgroundColor($r('sys.color.comp_background_primary'))
+      Text('Harmoniser never records motion, and only listens while the app is in front.')
+        .fontSize($r('sys.float.Caption_M'))
+        .fontColor($r('sys.color.font_tertiary'))
         .width('100%')
         .padding({ left: 4, right: 4 })
 
