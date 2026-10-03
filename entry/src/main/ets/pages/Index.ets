@@ -32,9 +32,12 @@ import { refreshCapsuleWidgets } from '../widget/WidgetService';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
+import { PreparedImport, SharingBar } from '../sharing';
 
 const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
+// Stored as a capsule origin so the sheet and the card badge say where it came from.
+const IMPORTED_ORIGIN = 'imported';
 const OPEN_CURVE: ICurve = curves.springMotion(0.45, 0.9);
 
 interface ExampleChip {
@@ -358,6 +361,17 @@ struct Index {
     this.showSheet = false;
   }
 
+  /**
+   * A capsule from another phone. It goes to the gatekeeper sheet first and is
+   * saved only when the user runs it; cancelling the sheet discards it.
+   */
+  private handleImported(prepared: PreparedImport): void {
+    this.pending = this.uniqueCapsule(prepared.capsule);
+    this.pendingOriginRaw = IMPORTED_ORIGIN;
+    this.pendingOrigin = originBadge(this.pendingOriginRaw);
+    this.showSheet = true;
+  }
+
   private open(id: string): void {
     this.getUIContext().animateTo({ curve: OPEN_CURVE }, () => {
       this.openId = id;
@@ -658,6 +672,11 @@ struct Index {
             .fontColor($r('sys.color.font_secondary'))
             .width('100%')
         }
+        // Import from another phone. Nothing is saved until the sheet's Run.
+        SharingBar({
+          showShare: false,
+          onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+        })
         Row() {
           Text('Your capsules')
             .fontSize($r('sys.float.Subtitle_L'))
@@ -766,6 +785,10 @@ struct Index {
           this.originPill(entry.origin)
           CapsuleView({ runtime: entry.runtime })
           this.routeCard(entry)
+          SharingBar({
+            capsule: entry.capsule,
+            onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+          })
           Button() {
             Row({ space: 6 }) {
               SymbolGlyph($r('sys.symbol.trash'))

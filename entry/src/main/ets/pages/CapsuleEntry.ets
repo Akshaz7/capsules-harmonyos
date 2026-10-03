@@ -26,6 +26,8 @@ export function originBadge(origin: string): string {
       return 'Made on-device';
     case 'cloud':
       return 'Made with Mistral (EU)';
+    case 'imported':
+      return 'From someone else';
     default:
       return '';
   }
@@ -37,6 +39,9 @@ export function originIcon(origin: string): Resource {
   }
   if (origin === 'cloud') {
     return $r('sys.symbol.cloud');
+  }
+  if (origin === 'imported') {
+    return $r('sys.symbol.arrow_down_circle');
   }
   return $r('sys.symbol.wand_and_stars');
 }
