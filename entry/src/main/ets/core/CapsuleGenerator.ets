@@ -77,7 +77,7 @@ export function needsLogic(request: string): boolean {
 }
 
 /** The cloud model to use under the policy: the first EU provider, else a non-EU one only if allowed. */
-function pickCloud(models: CapsuleModel[], allowNonEu: boolean): CapsuleModel | null {
+export function pickCloud(models: CapsuleModel[], allowNonEu: boolean): CapsuleModel | null {
   const eu = models.find((m: CapsuleModel) => m.isEu);
   if (eu !== undefined) {
     return eu;

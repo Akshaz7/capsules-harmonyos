@@ -17,7 +17,7 @@ import { util } from '@kit.ArkTS';
 import { fileIo } from '@kit.CoreFileKit';
 import { GenerateResult } from './CapsuleTypes';
 import { CapsuleModel } from './CapsuleModel';
-import { AI_NOT_CONFIGURED, CapsuleSource, GenerateOptions, generateCapsuleWith } from './CapsuleGenerator';
+import { AI_NOT_CONFIGURED, CapsuleSource, GenerateOptions, generateCapsuleWith, pickCloud } from './CapsuleGenerator';
 import { parseRequest } from './RuleParser';
 import {
   createProvider, HttpResponse, HttpTransport, isEuProvider, ModelConfig, ModelConfigResult, parseModelConfig, ProviderName,
@@ -73,11 +73,15 @@ export interface ModelStatus {
   providers: string[];
   /** True if an EU provider is configured, so smart mode can use the cloud without the non-EU setting. */
   euAvailable: boolean;
+  /** The config's default provider, or 'none'. Which one a request uses: see activeCloudProvider(). */
+  provider: ProviderName | 'none';
 }
 
 let models: CapsuleModel[] = [];
 let modelError: string = 'initCapsuleModel() has not been called';
-let status: ModelStatus = { configured: false, source: 'none', message: AI_NOT_CONFIGURED, providers: [], euAvailable: false };
+let status: ModelStatus = {
+  configured: false, source: 'none', message: AI_NOT_CONFIGURED, providers: [], euAvailable: false, provider: 'none'
+};
 const onDevice: CactusProvider = new CactusProvider();
 
 interface ConfigText {
@@ -124,7 +128,9 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
   const found = await readConfigText(context);
   if (found === null) {
     modelError = '';
-    status = { configured: false, source: 'none', message: AI_NOT_CONFIGURED, providers: [], euAvailable: false };
+    status = {
+      configured: false, source: 'none', message: AI_NOT_CONFIGURED, providers: [], euAvailable: false, provider: 'none'
+    };
     return false;
   }
   const loaded = parseModelConfigs(found.text);
@@ -132,7 +138,7 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
     modelError = loaded.error ?? 'unknown config error';
     status = {
       configured: false, source: found.source, message: `AI fallback unavailable: ${modelError}`, providers: [],
-      euAvailable: false
+      euAvailable: false, provider: 'none'
     };
     return false;
   }
@@ -144,7 +150,7 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
   const names = ordered.map((c: ModelConfig) => c.provider as string);
   const eu = ordered.some((c: ModelConfig) => isEuProvider(c.provider));
   status = {
-    configured: true, source: found.source, providers: names, euAvailable: eu,
+    configured: true, source: found.source, providers: names, euAvailable: eu, provider: chosen.provider,
     message: `Cloud AI ready: ${names.map((n: string) => isEuProvider(n as ProviderName) ? `${n} (EU)` : n).join(', ')}.`
   };
   return true;
@@ -153,6 +159,15 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
 /** Whether the AI fallback is available, and where its config came from. */
 export function getModelStatus(): ModelStatus {
   return status;
+}
+
+/**
+ * The cloud provider generateCapsule would use in smart mode: an EU provider (Mistral) if one is configured,
+ * otherwise the default provider only when `allowNonEu` is true; 'none' if the cloud cannot be used.
+ */
+export function activeCloudProvider(allowNonEu: boolean): ProviderName | 'none' {
+  const m = pickCloud(models, allowNonEu);
+  return m === null ? 'none' : m.providerName;
 }
 
 /** On-device model status: "On-device AI ready", "On-device model not installed", ... */

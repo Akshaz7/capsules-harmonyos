@@ -2,7 +2,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import { createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig } from '../main/ets/core/ModelProvider';
 import { CapsuleModel, PLAN_PROMPT, SYSTEM_PROMPT } from '../main/ets/core/CapsuleModel';
 import {
-  CapsuleSource, CLOUD_OFF, generateCapsuleWith, needsLogic, ON_DEVICE_ONLY
+  CapsuleSource, CLOUD_OFF, generateCapsuleWith, needsLogic, ON_DEVICE_ONLY, pickCloud
 } from '../main/ets/core/CapsuleGenerator';
 import { Capsule, GenerateResult } from '../main/ets/core/CapsuleTypes';
 
@@ -338,6 +338,19 @@ export default function capsuleGeneratorTest() {
         expect(t.calls).assertEqual(1);
         done();
       });
+  });
+
+  describe('Active cloud provider (BUG-3)', () => {
+    it('names the provider smart mode would use', 0, () => {
+      const t = new CountingTransport();
+      const anthropicOnly = [modelWith(t, 'anthropic')];
+      expect(pickCloud(anthropicOnly, false)).assertNull();
+      expect(pickCloud(anthropicOnly, true)?.providerName).assertEqual('anthropic');
+      const both = [modelWith(t, 'anthropic'), modelWith(t, 'mistral')];
+      expect(pickCloud(both, false)?.providerName).assertEqual('mistral');
+      expect(pickCloud(both, true)?.providerName).assertEqual('mistral');
+      expect(pickCloud([], true)).assertNull();
+    });
   });
 
   describe('needsLogic', () => {
