@@ -70,6 +70,11 @@ function permissionIcon(p: Permission): Resource {
 export struct ConsentView {
   @Require @Param capsule: Capsule;
   @Param origin: string = '';
+  /** T3-17: "Built from a template" / "Built from a community capsule"; '' when not from one. */
+  @Param builtFrom: string = '';
+  /** Show "Not quite right? Build fresh" (only when fresh generation is possible). */
+  @Param canBuildFresh: boolean = false;
+  @Event onBuildFresh: () => void = () => {};
   @Event onDecide: (allowed: Permission[]) => void = () => {};
   @Event onCancel: () => void = () => {};
   @Local choices: PermissionChoice[] = [];
@@ -97,6 +102,20 @@ export struct ConsentView {
           Text(this.origin)
             .fontSize($r('sys.float.Caption_M'))
             .fontColor($r('sys.color.font_tertiary'))
+        }
+        if (this.builtFrom.length > 0) {
+          Row({ space: 4 }) {
+            Text(this.builtFrom)
+              .fontSize($r('sys.float.Caption_M'))
+              .fontColor($r('sys.color.font_secondary'))
+            if (this.canBuildFresh) {
+              Text('· Not quite right? Build fresh')
+                .fontSize($r('sys.float.Caption_M'))
+                .fontColor($r('sys.color.brand'))
+                .fontWeight(FontWeight.Medium)
+                .onClick(() => this.onBuildFresh())
+            }
+          }
         }
       }
       .width('100%')

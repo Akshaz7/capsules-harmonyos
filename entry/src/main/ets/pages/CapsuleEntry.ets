@@ -19,6 +19,10 @@ export class CapsuleEntry {
   }
 }
 
+/** T3-17: the consent sheet line for capsules a template (or a community capsule) explained. */
+export const BUILT_FROM_TEMPLATE = 'Built from a template';
+export const BUILT_FROM_COMMUNITY = 'Built from a community capsule';
+
 /** 'cloud', 'cloud-eu:<provider>' or 'cloud:<provider>'. */
 export function isCloudOrigin(origin: string): boolean {
   return origin === 'cloud' || origin.startsWith('cloud-eu:') || origin.startsWith('cloud:');
@@ -44,6 +48,8 @@ export function originBadge(origin: string): string {
       return 'From someone else';
     case 'marketplace':
       return 'From the marketplace';
+    case 'community': // T3-17: a marketplace capsule matched to a request (T6-5)
+      return 'Made from a community capsule';
     default:
       return '';
   }

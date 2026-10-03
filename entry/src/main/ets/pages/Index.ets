@@ -68,6 +68,7 @@ import { getInstallToken, getMarketplaceToken } from '../adapters/InstallToken';
 import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
+import { BUILT_FROM_TEMPLATE } from './CapsuleEntry';
 import { copyToCache, pickPhoto, removeSnap, SNAP_HINT, SNAP_NEEDS_CLOUD, takePhoto } from './SnapPhoto';
 import { CapsuleState, TimerRun } from '../core/WidgetModel';
 
@@ -141,12 +142,6 @@ const CAPSULE_ABILITIES = 'timers, counters, checklists, calculations, inputs an
 const TRIGGER_CHECK_MS = 30 * 1000;
 
 /** T3-12: a built-in template that fits the request, offered before anything is built. */
-interface TemplateOffer {
-  request: string;
-  name: string;
-  description: string;
-  capsule: Capsule;
-}
 
 /** How often a device's state is read back while its capsule is on screen. */
 const DEVICE_POLL_MS = 2000;
@@ -252,6 +247,8 @@ struct Index {
   @Local openId: string = '';
   @Local pending: Capsule | undefined = undefined;
   @Local pendingOrigin: string = '';
+  /** T3-17: the consent sheet's "Built from a template" line; '' when the capsule was not. */
+  @Local pendingBuiltFrom: string = '';
   private pendingOriginRaw: string = '';
   /** The request text behind `pending`; '' for imports. */
   private pendingRequest: string = '';
@@ -279,7 +276,6 @@ struct Index {
   /** Core's English-only gate refused the request (T4-11): show the calm language card. */
   @Local languageFailed: boolean = false;
   /** "Found a template: X — Use / Adapt / Build new" (T3-12); undefined when none is offered. */
-  @Local templateOffer: TemplateOffer | undefined = undefined;
   @Local modelStatus: string = getModelStatus().message;
   @Local cloudConfigured: boolean = getModelStatus().configured;
   @Local euCloud: boolean = getModelStatus().euAvailable;
@@ -827,8 +823,7 @@ struct Index {
       this.busy = false;
       this.unsupported = [];
       this.languageFailed = false;
-      this.templateOffer = undefined;
-      this.failed = true;
+        this.failed = true;
     }
   }
 
@@ -839,7 +834,6 @@ struct Index {
     this.failed = false;
     this.unsupported = [];
     this.languageFailed = false;
-    this.templateOffer = undefined;
     const fixture = demoFixture(text);
     if (fixture !== null) {
       const v = validateCapsule(fixture);
@@ -853,9 +847,13 @@ struct Index {
     if (!isNotEnglish(text) && parseRequest(text) === null) {
       const m = matchTemplate(text);
       if (m !== null) {
+        // T3-17: a strong template match goes straight to consent, with "Build fresh" as the way out.
         this.busy = false;
-        this.templateOffer = { request: text, name: m.template.name, description: m.template.description, capsule: m.capsule };
-        hilog.info(0x0001, 'Index', 'offering template %{public}s (score %{public}d)', m.template.id, Math.round(m.score * 100));
+        hilog.info(0x0001, 'Index', 'built from template %{public}s (score %{public}d)', m.template.id,
+          Math.round(m.score * 100));
+        const fromTemplate: GenerateResult = { ok: true, capsule: m.capsule, origin: 'template', details: [] };
+        this.finishCreate(text, fromTemplate);
+        this.pendingBuiltFrom = BUILT_FROM_TEMPLATE;
         return;
       }
     }
@@ -929,8 +927,7 @@ struct Index {
       hilog.error(0x0001, 'Index', 'finishCreate crashed: %{public}s', (e as Error).message);
       this.unsupported = [];
       this.languageFailed = false;
-      this.templateOffer = undefined;
-      this.failed = true;
+        this.failed = true;
     }
   }
 
@@ -954,6 +951,7 @@ struct Index {
     this.pending = this.uniqueCapsule(result.capsule);
     this.pendingOriginRaw = result.origin ?? '';
     this.pendingRequest = text;
+    this.pendingBuiltFrom = '';
     this.replacingId = '';
     this.pendingOrigin = originBadge(this.pendingOriginRaw);
     this.showSheet = true;
@@ -1000,7 +998,6 @@ struct Index {
     this.failed = false;
     this.unsupported = [];
     this.languageFailed = false;
-    this.templateOffer = undefined;
     if (this.ctx) {
       refreshCapsuleWidgets(this.ctx);
     }
@@ -1008,6 +1005,7 @@ struct Index {
   }
 
   private cancelPending(): void {
+    this.pendingBuiltFrom = '';
     this.consentForEdit = false; // the change stays proposed; nothing was applied
     this.pending = undefined;
     this.pendingMarketItem = undefined;
@@ -1148,7 +1146,6 @@ struct Index {
     this.failed = false;
     this.unsupported = [];
     this.languageFailed = false;
-    this.templateOffer = undefined;
     this.snapNeedsCloud = false;
     const path = copyToCache(ctx, uri);
     if (path.length === 0) {
@@ -1500,6 +1497,9 @@ struct Index {
         ConsentView({
           capsule: this.pending,
           origin: this.pendingOrigin,
+          builtFrom: this.pendingBuiltFrom,
+          canBuildFresh: this.pendingBuiltFrom.length > 0 && this.settings.aiMode === 'smart' && this.cloudUsable(),
+          onBuildFresh: () => this.buildFresh(),
           onDecide: (allowed: Permission[]) => this.decide(allowed),
           onCancel: () => this.cancelPending()
         })
@@ -1605,77 +1605,32 @@ struct Index {
     .backgroundColor($r('sys.color.comp_background_primary'))
   }
 
-  /** Use: the template goes to the consent sheet as it is. */
-  private useTemplate(): void {
-    const offer = this.templateOffer;
-    if (offer === undefined) {
+  /**
+   * "Not quite right? Build fresh" on a template's consent sheet: skip templates and ask the cloud for a capsule
+   * made for this request (after the cloud notice). Declining the notice brings the template back.
+   */
+  private buildFresh(): void {
+    const capsule = this.pending;
+    const request = this.pendingRequest;
+    if (capsule === undefined || request.length === 0) {
       return;
     }
-    this.templateOffer = undefined;
-    const r: GenerateResult = { ok: true, capsule: offer.capsule, origin: 'template', details: [] };
-    this.finishCreate(offer.request, r);
-  }
-
-  /** Build new: skip the template and ask the cloud for one made for this request (after the cloud notice). */
-  private buildNewInsteadOfTemplate(): void {
-    const offer = this.templateOffer;
-    if (offer === undefined) {
-      return;
-    }
-    this.templateOffer = undefined;
+    this.cancelPending();
     const run = async (): Promise<void> => {
       this.busy = true;
-      const result = await this.generate(offer.request, true, true);
+      const result = await this.generate(request, true, true);
       this.busy = false;
-      this.finishCreate(offer.request, result);
+      this.finishCreate(request, result);
     };
     if (this.settings.hasCloudConsent(this.cloudKey())) {
       run();
     } else {
       this.showCloudNotice(() => run(), () => {
-        this.templateOffer = offer; // declined: keep the offer on screen
+        const back: GenerateResult = { ok: true, capsule: capsule, origin: 'template', details: [] };
+        this.finishCreate(request, back);
+        this.pendingBuiltFrom = BUILT_FROM_TEMPLATE;
       });
     }
-  }
-
-  @Builder
-  templateCard(offer: TemplateOffer) {
-    Column({ space: 10 }) {
-      Row({ space: 10 }) {
-        SymbolGlyph($r('sys.symbol.rectangle_on_rectangle'))
-          .fontSize(20)
-          .fontColor([$r('sys.color.icon_emphasize')])
-        Text(`Found a template: ${offer.name}`)
-          .fontSize($r('sys.float.Subtitle_S'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .layoutWeight(1)
-      }
-      .width('100%')
-      if (offer.description.length > 0) {
-        Text(offer.description)
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
-      }
-      Text('Ready now, made on your phone, no internet.')
-        .fontSize($r('sys.float.Caption_M'))
-        .fontColor($r('sys.color.font_tertiary'))
-        .width('100%')
-      Row({ space: 8 }) {
-        Button('Use', { controlSize: ControlSize.SMALL })
-          .onClick(() => this.useTemplate())
-        if (this.settings.aiMode === 'smart' && this.cloudUsable()) {
-          Button('Build new', { buttonStyle: ButtonStyleMode.NORMAL, controlSize: ControlSize.SMALL })
-            .onClick(() => this.buildNewInsteadOfTemplate())
-        }
-      }
-      .width('100%')
-    }
-    .width('100%')
-    .padding(16)
-    .borderRadius(20)
-    .backgroundColor($r('sys.color.comp_background_primary'))
   }
 
   /** T3-13: exact wording; tapping the example fills the input (it does not create anything). */
@@ -1707,7 +1662,6 @@ struct Index {
   private useLanguageExample(): void {
     this.request = LANGUAGE_EXAMPLE;
     this.languageFailed = false;
-    this.templateOffer = undefined;
   }
 
   @Builder
@@ -1852,8 +1806,6 @@ struct Index {
           .padding({ left: 4 })
         if (this.snapNeedsCloud) {
           this.snapCloudNote()
-        } else if (this.templateOffer !== undefined) {
-          this.templateCard(this.templateOffer)
         } else if (this.languageFailed) {
           this.languageCard()
         } else if (this.failed && this.unsupported.length > 0) {
