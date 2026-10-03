@@ -7,7 +7,10 @@ import {
   generateCapsule,
   getModelStatus,
   getOnDeviceStatus,
-  routeCapsule
+  routeCapsule,
+  BILL_SPLIT_CAPSULE,
+  TENNIS_CAPSULE,
+  validateCapsule
 } from '../core';
 import { NotificationAdapter } from '../adapters/NotificationAdapter';
 import { TimerAdapter } from '../adapters/TimerAdapter';
@@ -55,6 +58,14 @@ const RETRY_SUGGESTIONS: ExampleChip[] = [
   { label: 'Gym checklist', icon: $r('sys.symbol.checkmark_circle'),
     request: 'checklist for gym: towel, water, shoes' }
 ];
+/** Hidden demo requests that load core's schema v1 fixtures (for testing and the demo video). */
+function demoFixture(text: string): string | null {
+  const t = text.toLowerCase();
+  return t === 'demo tennis' ? TENNIS_CAPSULE : t === 'demo bill split' ? BILL_SPLIT_CAPSULE : null;
+}
+
+const CLOUD_NOTICE =
+  'For advanced apps, Harmoniser sends only your request text to Mistral AI (EU). No personal data or app data.';
 const FAILED_MESSAGE =
   "I couldn't build that offline. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
 
@@ -119,6 +130,7 @@ struct Index {
   @Local message: string = '';
   @Local failed: boolean = false;
   @Local modelStatus: string = getModelStatus().message;
+  @Local cloudConfigured: boolean = getModelStatus().configured;
   @Local onDeviceStatus: string = getOnDeviceStatus().message;
   @Local nav: NavPathStack = new NavPathStack();
 
@@ -150,6 +162,7 @@ struct Index {
       const status = getModelStatus();
       const onDevice = getOnDeviceStatus();
       this.modelStatus = status.message;
+      this.cloudConfigured = status.configured;
       this.onDeviceStatus = onDevice.message;
       tries++;
       if ((status.configured && onDevice.ready) || tries >= 20) {
@@ -233,14 +246,76 @@ struct Index {
     this.busy = true;
     this.message = '';
     this.failed = false;
-    let result: GenerateResult;
-    try {
-      // Rules, then the on-device model, then the cloud model only if the user allowed it.
-      result = await generateCapsule(text, { allowCloud: this.settings.allowCloud });
-    } catch (e) {
-      result = { ok: false, error: `generateCapsule threw: ${(e as Error).message}`, details: [] };
+    const fixture = demoFixture(text);
+    if (fixture !== null) {
+      const v = validateCapsule(fixture);
+      this.busy = false;
+      const demo: GenerateResult = { ok: v.ok, capsule: v.capsule, origin: 'rules', error: v.errors.join('; '),
+        details: v.errors };
+      this.finishCreate(text, demo);
+      return;
     }
+    const smart = this.settings.aiMode === 'smart';
+    const result = await this.generate(text, smart && this.settings.cloudNoticeAccepted);
     this.busy = false;
+    if (!result.ok && smart && !this.settings.cloudNoticeAccepted && getModelStatus().configured) {
+      // The device couldn't build it and the cloud would be next: ask once before the first cloud request.
+      hilog.info(0x0001, 'Index', 'on-device failed (%{public}s); showing the cloud notice', result.error ?? '');
+      this.showCloudNotice(text);
+      return;
+    }
+    this.finishCreate(text, result);
+  }
+
+  /** Rules, then the on-device model, then the cloud model only when `allowCloud`. Never throws. */
+  private async generate(text: string, allowCloud: boolean): Promise<GenerateResult> {
+    try {
+      return await generateCapsule(text, { allowCloud: allowCloud });
+    } catch (e) {
+      const failed: GenerateResult = { ok: false, error: `generateCapsule threw: ${(e as Error).message}`, details: [] };
+      return failed;
+    }
+  }
+
+  /** One-time notice before the first cloud request. OK retries with the cloud; the other choice switches modes. */
+  private showCloudNotice(text: string): void {
+    this.getUIContext().showAlertDialog({
+      title: 'Use Mistral AI (EU)?',
+      message: CLOUD_NOTICE,
+      autoCancel: false,
+      // Stacked so "On-device only" is not cut off.
+      buttonDirection: DialogButtonDirection.VERTICAL,
+      buttons: [
+        {
+          value: 'OK',
+          style: DialogButtonStyle.HIGHLIGHT,
+          action: () => {
+            this.settings.acceptCloudNotice();
+            this.retryWithCloud(text);
+          }
+        },
+        {
+          value: 'On-device only',
+          action: () => {
+            this.settings.setAiMode('on-device');
+            this.failed = true;
+          }
+        }
+      ],
+      cancel: () => {
+        this.failed = true;
+      }
+    });
+  }
+
+  private async retryWithCloud(text: string): Promise<void> {
+    this.busy = true;
+    const result = await this.generate(text, true);
+    this.busy = false;
+    this.finishCreate(text, result);
+  }
+
+  private finishCreate(text: string, result: GenerateResult): void {
     if (!result.ok || !result.capsule) {
       // The user sees a friendly message; the real error only goes to the log.
       hilog.error(0x0001, 'Index', 'generateCapsule failed for "%{private}s": %{public}s [%{public}s]',
@@ -315,7 +390,10 @@ struct Index {
 
   /** Home status: on-device model state from core, then the cloud fallback state. */
   private statusLine(): string {
-    return `${this.onDeviceStatus} · ${this.settings.allowCloud ? this.modelStatus : 'Cloud AI off'}`;
+    if (this.settings.aiMode === 'on-device') {
+      return `${this.onDeviceStatus} · On-device only`;
+    }
+    return `${this.onDeviceStatus} · ${this.cloudConfigured ? 'Mistral (EU) when needed' : this.modelStatus}`;
   }
 
   @Builder
@@ -341,7 +419,7 @@ struct Index {
     if (name === LOG_PAGE && this.gate) {
       LogView({ log: this.gate.log })
     } else if (name === SETTINGS_PAGE) {
-      SettingsView({ settings: this.settings, cloudStatus: this.modelStatus })
+      SettingsView({ settings: this.settings, cloudStatus: this.cloudConfigured ? '' : this.modelStatus })
     }
   }
 
@@ -474,12 +552,12 @@ struct Index {
         }, (chip: ExampleChip) => chip.label)
       }
       .width('100%')
-      if (!this.settings.allowCloud) {
+      if (this.settings.aiMode === 'on-device') {
         Row({ space: 4 }) {
           Text('or')
             .fontSize($r('sys.float.Body_M'))
             .fontColor($r('sys.color.font_secondary'))
-          Text('turn on cloud AI in Settings')
+          Text('switch AI mode to Smart in Settings')
             .fontSize($r('sys.float.Body_M'))
             .fontColor($r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)

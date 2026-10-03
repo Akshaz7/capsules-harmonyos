@@ -25,7 +25,7 @@ export function originBadge(origin: string): string {
     case 'on-device':
       return 'Made on-device';
     case 'cloud':
-      return 'Made in the cloud';
+      return 'Made with Mistral (EU)';
     default:
       return '';
   }

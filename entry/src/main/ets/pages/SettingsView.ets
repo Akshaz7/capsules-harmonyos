@@ -1,4 +1,4 @@
-import { AppSettings } from './AppSettings';
+import { AiMode, AppSettings } from './AppSettings';
 
 /** Settings page (NavDestination). */
 @ComponentV2
@@ -6,48 +6,101 @@ export struct SettingsView {
   @Require @Param settings: AppSettings;
   @Param cloudStatus: string = '';
 
+  @Builder
+  modeRow(mode: AiMode, icon: Resource, title: string, detail: string) {
+    Row({ space: 12 }) {
+      Stack() {
+        SymbolGlyph(icon)
+          .fontSize(20)
+          .fontColor([$r('sys.color.icon_emphasize')])
+      }
+      .width(40)
+      .height(40)
+      .borderRadius(20)
+      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      Column({ space: 2 }) {
+        Text(title)
+          .fontSize($r('sys.float.Body_L'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+        Text(detail)
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Radio({ value: mode, group: 'aiMode' })
+        .checked(this.settings.aiMode === mode)
+        .onChange((isChecked: boolean) => {
+          if (isChecked) {
+            this.settings.setAiMode(mode);
+          }
+        })
+    }
+    .width('100%')
+    .padding({ top: 12, bottom: 12 })
+    .onClick(() => this.settings.setAiMode(mode))
+  }
+
   build() {
     NavDestination() {
       Column({ space: 8 }) {
+        Text('AI mode')
+          .fontSize($r('sys.float.Subtitle_S'))
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+          .padding({ left: 4, right: 4, top: 4 })
+        Column() {
+          this.modeRow('smart', $r('sys.symbol.wand_and_stars'), 'Smart',
+            'On-device + Mistral EU when needed')
+          Divider()
+            .color($r('sys.color.comp_divider'))
+            .margin({ left: 52 })
+          this.modeRow('on-device', $r('sys.symbol.lock'), 'On-device only',
+            'Requests never leave the device')
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+        .borderRadius(20)
+        .backgroundColor($r('sys.color.comp_background_primary'))
+
+        Text(this.settings.aiMode === 'smart' ?
+          `Only your request text is sent, and only when the device can't build it. ${this.cloudStatus}` :
+          'Capsules are made by rules and the on-device model only.')
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+          .width('100%')
+          .padding({ left: 4, right: 4 })
+
+        Text('Advanced')
+          .fontSize($r('sys.float.Subtitle_S'))
+          .fontColor($r('sys.color.font_secondary'))
+          .width('100%')
+          .padding({ left: 4, right: 4, top: 16 })
         Row({ space: 12 }) {
-          Stack() {
-            SymbolGlyph($r('sys.symbol.cloud'))
-              .fontSize(20)
-              .fontColor([$r('sys.color.icon_emphasize')])
-          }
-          .width(40)
-          .height(40)
-          .borderRadius(20)
-          .backgroundColor($r('sys.color.comp_background_tertiary'))
           Column({ space: 2 }) {
-            Text('Allow cloud AI fallback')
+            Text('Allow non-EU providers')
               .fontSize($r('sys.float.Body_L'))
               .fontWeight(FontWeight.Medium)
               .fontColor($r('sys.color.font_primary'))
-            Text('When neither the rules nor the on-device model can handle a request, send it to a cloud AI model')
+            Text('Let Smart mode use cloud AI providers outside the EU')
               .fontSize($r('sys.float.Caption_M'))
               .fontColor($r('sys.color.font_secondary'))
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: this.settings.allowCloud })
+          Toggle({ type: ToggleType.Switch, isOn: this.settings.allowNonEu })
             .selectedColor($r('sys.color.brand'))
+            .enabled(this.settings.aiMode === 'smart')
             .onChange((isOn: boolean) => {
-              this.settings.setAllowCloud(isOn);
+              this.settings.setAllowNonEu(isOn);
             })
         }
         .width('100%')
         .padding(16)
         .borderRadius(20)
         .backgroundColor($r('sys.color.comp_background_primary'))
-
-        Text(this.settings.allowCloud ?
-          `On: only your request text is sent, and only when nothing on the device can handle it. ${this.cloudStatus}` :
-          'Off: requests never leave the device.')
-          .fontSize($r('sys.float.Caption_M'))
-          .fontColor($r('sys.color.font_tertiary'))
-          .width('100%')
-          .padding({ left: 4, right: 4 })
+        .opacity(this.settings.aiMode === 'smart' ? 1 : 0.5)
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 8 })
