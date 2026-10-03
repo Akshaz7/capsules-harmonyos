@@ -57,25 +57,29 @@ export struct CapsuleFrame {
 
   @Builder
   footer() {
-    Row({ space: 8 }) {
+    // Two rows: T4's button sizes itself (full width), so it gets its own row and the pill keeps its size.
+    Column({ space: 8 }) {
       Row({ space: 8 }) {
-        SymbolGlyph($r('sys.symbol.square_and_pencil'))
-          .fontSize(18)
-          .fontColor([Palette.blue])
-        Text('Change it…')
-          .fontSize(15)
-          .fontWeight(500)
-          .fontColor(Palette.text2)
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.square_and_pencil'))
+            .fontSize(18)
+            .fontColor([Palette.blue])
+          Text('Change it…')
+            .fontSize(15)
+            .fontWeight(500)
+            .fontColor(Palette.text2)
+        }
+        .layoutWeight(1)
+        .height(Space.touch)
+        .padding({ left: 14, right: 14 })
+        .borderRadius(Radius.pill)
+        .backgroundColor(Palette.card)
+        .border({ width: 1, color: Palette.inputBorder })
+        .accessibilityText('Change it')
+        .onClick(() => this.onChangeIt())
+        IconButton({ icon: $r('sys.symbol.share'), label: 'Share', onTap: () => this.onShare() })
       }
-      .layoutWeight(1)
-      .height(Space.touch)
-      .padding({ left: 14, right: 14 })
-      .borderRadius(Radius.pill)
-      .backgroundColor(Palette.card)
-      .border({ width: 1, color: Palette.inputBorder })
-      .accessibilityText('Change it')
-      .onClick(() => this.onChangeIt())
-      IconButton({ icon: $r('sys.symbol.share'), label: 'Share', onTap: () => this.onShare() })
+      .width('100%')
       this.addToHome()
     }
     .width('100%')

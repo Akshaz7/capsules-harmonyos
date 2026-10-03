@@ -39,12 +39,12 @@ export struct RecentRow {
                   .fontColor(Palette.text)
                   .maxLines(2)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .layoutWeight(1)
+                Blank()
                 OriginChip({ text: t.originText, kind: t.originKind })
               }
               .alignItems(HorizontalAlign.Start)
               .width(148)
-              .height(120)
+              .constraintSize({ minHeight: 120 })
               .padding(12)
               .borderRadius(20)
               .backgroundColor(Palette.surface)
@@ -53,10 +53,12 @@ export struct RecentRow {
               .onClick(() => this.onOpen(t.id))
             }, (t: RecentTile) => t.id)
           }
+          .alignItems(VerticalAlign.Top)
           .padding({ left: 4, right: 4 })
         }
         .scrollable(ScrollDirection.Horizontal)
         .scrollBar(BarState.Off)
+        .align(Alignment.Start)
         .width('100%')
       }
       .alignItems(HorizontalAlign.Start)

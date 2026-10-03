@@ -2773,76 +2773,77 @@ struct Index {
 
   @Builder
   frameBody(entry: CapsuleEntry) {
-      CapsuleView({
-        runtime: entry.runtime,
-        motionNote: this.motionNoteFor(entry.capsule),
-        onPickCity: () => this.openCityPicker(entry.capsule.id)
+    // "Change it…" (footer pill) opens here, at the top, so it is seen at once.
+    if (this.changeOpenId === entry.capsule.id || this.undoIds.includes(entry.capsule.id) ||
+      (this.changeId === entry.capsule.id &&
+        (this.changeBusy || this.changeSummary.length > 0 || this.changeIssue.length > 0))) {
+      this.changeCard(entry)
+    }
+    CapsuleView({
+      runtime: entry.runtime,
+      motionNote: this.motionNoteFor(entry.capsule),
+      onPickCity: () => this.openCityPicker(entry.capsule.id)
+    })
+    if ((entry.capsule.triggers ?? []).length > 0) {
+      TriggerCard({
+        triggers: entry.capsule.triggers ?? [],
+        allowed: this.triggersAllowed(entry),
+        now: this.triggerNow,
+        onRunNow: (i: number) => this.runTriggerNow(entry, i),
+        onEditTime: (i: number) => this.editTriggerTime(entry, i),
+        onRemove: (i: number) => this.removeTrigger(entry, i)
       })
-      if (this.changeOpenId === entry.capsule.id || this.undoIds.includes(entry.capsule.id) ||
-        (this.changeId === entry.capsule.id &&
-          (this.changeBusy || this.changeSummary.length > 0 || this.changeIssue.length > 0))) {
-        this.changeCard(entry)
-      }
-      if ((entry.capsule.triggers ?? []).length > 0) {
-        TriggerCard({
-          triggers: entry.capsule.triggers ?? [],
-          allowed: this.triggersAllowed(entry),
-          now: this.triggerNow,
-          onRunNow: (i: number) => this.runTriggerNow(entry, i),
-          onEditTime: (i: number) => this.editTriggerTime(entry, i),
-          onRemove: (i: number) => this.removeTrigger(entry, i)
-        })
-      }
-      if (this.canMakeSmarter(entry)) {
-        this.smarterButton(entry)
-      }
-      if (this.devicesEnabled && payloadFor(entry.capsule) !== null) {
-        DevicePanel({
-          devices: this.devices,
-          simulated: this.relaySimulated,
-          status: this.deviceCapsuleId === entry.capsule.id ? this.deviceStatus : '',
-          onPairScan: () => this.pairScan(),
-          onPairPhrase: (phrase: string) => this.claimDevice(phrase),
-          onShow: (id: string) => this.showOnDevice(entry, id),
-          onUnpair: (id: string) => this.unpairDevice(id)
-        })
-      }
-      // Share only (with "Show as QR code"); the footer's Share opens the same share panel.
-      SharingBar({ capsule: entry.capsule, showImport: false })
-      if (this.marketConfigured) {
-        if (this.publishedIds.includes(entry.capsule.id)) {
-          Row({ space: 8 }) {
-            Text('In the marketplace')
-              .fontSize($r('sys.float.Body_M'))
-              .fontColor($r('sys.color.font_secondary'))
-            Button('Remove from marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
-              .onClick(() => this.unpublishFromMarket(entry))
-          }
-        } else {
-          Button('Publish to marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
-            .onClick(() => this.publishToMarket(entry))
-        }
-      }
-      Button() {
-        Row({ space: 6 }) {
-          SymbolGlyph($r('sys.symbol.trash'))
-            .fontSize(18)
-            .fontColor([$r('sys.color.warning')])
-          Text('Remove capsule')
-            .fontSize($r('sys.float.Body_L'))
-            .fontColor($r('sys.color.warning'))
-        }
-      }
-      .width('100%')
-      .height(48)
-      .margin({ top: 8 })
-      .backgroundColor($r('sys.color.comp_background_tertiary'))
-      .onClick(() => {
-        this.undo(entry);
+    }
+    if (this.canMakeSmarter(entry)) {
+      this.smarterButton(entry)
+    }
+    if (this.devicesEnabled && payloadFor(entry.capsule) !== null) {
+      DevicePanel({
+        devices: this.devices,
+        simulated: this.relaySimulated,
+        status: this.deviceCapsuleId === entry.capsule.id ? this.deviceStatus : '',
+        onPairScan: () => this.pairScan(),
+        onPairPhrase: (phrase: string) => this.claimDevice(phrase),
+        onShow: (id: string) => this.showOnDevice(entry, id),
+        onUnpair: (id: string) => this.unpairDevice(id)
       })
-      Text('Removes the capsule, its permissions and its calendar events.')
-        .fontSize($r('sys.float.Caption_M'))
-        .fontColor($r('sys.color.font_tertiary'))
+    }
+    // Share only (with "Show as QR code"); the footer's Share opens the same share panel.
+    SharingBar({ capsule: entry.capsule, showImport: false })
+    if (this.marketConfigured) {
+      if (this.publishedIds.includes(entry.capsule.id)) {
+        Row({ space: 8 }) {
+          Text('In the marketplace')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_secondary'))
+          Button('Remove from marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
+            .onClick(() => this.unpublishFromMarket(entry))
+        }
+      } else {
+        Button('Publish to marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .onClick(() => this.publishToMarket(entry))
+      }
+    }
+    Button() {
+      Row({ space: 6 }) {
+        SymbolGlyph($r('sys.symbol.trash'))
+          .fontSize(18)
+          .fontColor([$r('sys.color.warning')])
+        Text('Remove capsule')
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.warning'))
+      }
+    }
+    .width('100%')
+    .height(48)
+    .margin({ top: 8 })
+    .backgroundColor($r('sys.color.comp_background_tertiary'))
+    .onClick(() => {
+      this.undo(entry);
+    })
+    Text('Removes the capsule, its permissions and its calendar events.')
+      .fontSize($r('sys.float.Caption_M'))
+      .fontColor($r('sys.color.font_tertiary'))
     Row() {
       Button('Activity log', { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
         .onClick(() => this.nav.pushPath({ name: LOG_PAGE }))
