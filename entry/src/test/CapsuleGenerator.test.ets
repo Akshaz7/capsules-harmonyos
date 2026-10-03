@@ -2,9 +2,12 @@ import { describe, it, expect } from '@ohos/hypium';
 import { createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig } from '../main/ets/core/ModelProvider';
 import { CapsuleModel, PLAN_PROMPT, SYSTEM_PROMPT } from '../main/ets/core/CapsuleModel';
 import {
-  CapsuleSource, CLOUD_OFF, generateCapsuleWith, generateFromSharedTextWith, needsLogic, ON_DEVICE_ONLY, pickCloud
+  CapsuleSource, CLOUD_OFF, cloudFirst, generateCapsuleWith, generateFromSharedTextWith, isNonEnglish, needsLogic,
+  ON_DEVICE_ONLY, pickCloud
 } from '../main/ets/core/CapsuleGenerator';
 import { SHARED_TOO_LONG } from '../main/ets/core/SharedText';
+import { parseRequest } from '../main/ets/core/RuleParser';
+import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import { Capsule, GenerateResult } from '../main/ets/core/CapsuleTypes';
 
 const GOOD: string =
@@ -390,12 +393,73 @@ export default function capsuleGeneratorTest() {
     });
   });
 
+  describe('Refusals only for clear runtime actions (T4-6)', () => {
+    it('does not treat cameras, photos, the internet, files or news as unsupported', 0, () => {
+      ['cooking timers from a photo of the recipe', 'remind me to charge the camera', 'read the news at 8am',
+        'internet bill due on the 5th', 'back up my files on sunday', 'weather check every morning'].forEach((r: string) => {
+        expect(needsLogic(r) ? `flagged: ${r}` : r).assertEqual(r);
+      });
+    });
+
+    it('still sends SMS, calls, contacts, email, browsing and payments to the cloud plan step', 0, () => {
+      ['send an sms to mum at 8', 'make a phone call every evening', 'read my contacts', 'send emails to the team',
+        'browse the shop for me', 'take payments for lemonade'].forEach((r: string) => {
+        expect(needsLogic(r) ? r : `missed: ${r}`).assertEqual(r);
+      });
+    });
+
+    it('the plan prompt lists only those runtime actions and allows any language', 0, () => {
+      expect(PLAN_PROMPT).assertContain('The only things capsules cannot do are these runtime actions: send SMS, make phone');
+      expect(PLAN_PROMPT).assertContain('never treat a request in another language as gibberish');
+      expect(PLAN_PROMPT.includes('the camera or microphone')).assertFalse();
+      expect(SYSTEM_PROMPT).assertContain('Requests may be in any language (for example Chinese or Polish)');
+    });
+  });
+
+  describe('Non-English requests (T4-6)', () => {
+    const CHINESE = '根据照片做菜，帮我设置计时器';
+    const POLISH = 'makaron 9 minut, sos 15 minut';
+
+    it('detects Chinese and Polish, not English', 0, () => {
+      expect(isNonEnglish(CHINESE)).assertTrue();
+      expect(isNonEnglish(POLISH)).assertTrue();
+      expect(isNonEnglish('przypomnij mi o lekach')).assertTrue();
+      expect(isNonEnglish('Zażółć gęślą jaźń')).assertTrue();
+      expect(isNonEnglish('pasta 9 min, sauce 15 min')).assertFalse();
+      expect(isNonEnglish('count my squats')).assertFalse();
+      expect(cloudFirst(CHINESE)).assertTrue();
+    });
+
+    it('goes to the EU cloud first, and asks for the cloud when it is not allowed yet', 0, async (done: Function) => {
+      const t = new CountingTransport();
+      const local = onDeviceReturning(LOCAL);
+      const r = await generateCapsuleWith(CHINESE, [modelWith(t)], '', local);
+      expect(r.origin).assertEqual('cloud-eu:mistral');
+      expect(local.calls).assertEqual(0);
+      expect(t.bodies[0]).assertContain(CHINESE);
+      const blocked = await generateCapsuleWith(POLISH, [modelWith(t)], '', local, { allowCloud: false });
+      expect(blocked.needsCloud).assertTrue();
+      const deviceOnly = await generateCapsuleWith(POLISH, [modelWith(t)], '', local, { mode: 'on-device-only' });
+      expect(deviceOnly.origin).assertEqual('on-device');
+      done();
+    });
+
+    it('the rules leave them alone and the validator accepts non-English text', 0, () => {
+      expect(parseRequest(CHINESE)).assertNull();
+      expect(parseRequest(POLISH)).assertNull();
+      const r = validateCapsule('{"schemaVersion":0,"id":"pasta","name":"做菜计时器","permissions":["reminders"],' +
+        '"ui":[{"type":"timer","id":"makaron","label":"Makaron","minutes":9},' +
+        '{"type":"checklist","id":"kroki","items":["Zagotuj wodę","放盐"]}]}');
+      expect(r.errors.join('\n')).assertEqual('');
+    });
+  });
+
   describe('Photos and receipts (vision path)', () => {
     it('are not treated as unsupported capabilities', 0, () => {
       ['photo diary checklist', 'remind me to photograph the meter', 'keep my receipts in order'].forEach((r: string) => {
         expect(needsLogic(r) ? `flagged: ${r}` : r).assertEqual(r);
       });
-      expect(PLAN_PROMPT).assertContain('Photos and receipts are fine');
+      expect(PLAN_PROMPT).assertContain('A request that mentions a photo, the camera, a recipe from the internet');
       expect(PLAN_PROMPT.includes('files or photos')).assertFalse();
     });
 
@@ -417,7 +481,7 @@ export default function capsuleGeneratorTest() {
         'tennis game tracker', 'football match score', 'chess game tracker', 'keep track of points in our card game',
         'cost per person for the trip', 'habit streak for reading', 'how many days in a row did I run',
         'track my weight and tell me if I gained', 'flashcards for Spanish', 'inches to cm', 'basketball for 2 teams',
-        'text my contacts happy birthday', 'show the weather', 'open the camera', 'email me a summary'];
+        'text my contacts happy birthday', 'browse websites for deals', 'pay my bills on time', 'email me a summary'];
       logic.forEach((r: string) => {
         expect(needsLogic(r) ? r : `missed: ${r}`).assertEqual(r);
       });

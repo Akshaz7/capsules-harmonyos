@@ -69,13 +69,30 @@ const LOGIC_PATTERNS: RegExp[] = [
   /\b(type|enter|input)\b/i,
   /\b(add (items?|things|it) to|shopping list|to-?do list|list (that|where|of things))\b/i,
   /%|\d\s*[-+*/x×]\s*\d/,
-  // capabilities capsules do not have: the cloud plan step reports them instead of a weaker capsule.
-  // Photos and receipts are not here: they go to the vision path, and a request about them is fine.
-  /\b(contacts?|sms|text (messages?|my|them)|phone calls?|e-?mail (me|them|my|people)|(send|read)( my| an)? e-?mails?|internet|websites?|online|weather|news|stocks?|camera|files?|payments?|pay for|bluetooth|microphone|record (audio|voice))\b/i
+  // runtime actions capsules cannot perform: the cloud plan step reports them instead of a weaker capsule.
+  // Only clear actions: photos, cameras, recipes from the web or files in a request are fine (they go to the
+  // vision path or just describe the app).
+  /\b(send (an? )?(sms|texts?|text messages?|e-?mails?|money)|sms|text (my|them|everyone|all)|(make|place) (a )?(phone )?calls?|phone calls?|call (my|them|everyone|all)|read (my |all )?contacts|my contacts|e-?mail (me|them|my|people)|browse|websites?|web pages?|payments?|pay (for|my|bills?)|transfer money)\b/i
 ];
+
+/**
+ * Requests not in English: the rules and the on-device templates only understand English, so smart mode
+ * sends these to the cloud first. Detects CJK, Cyrillic, Greek, Arabic or Hebrew script, Polish letters,
+ * and common Polish words.
+ */
+export function isNonEnglish(request: string): boolean {
+  return /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\u0400-\u04ff\u0370-\u03ff\u0600-\u06ff\u0590-\u05ff]/.test(request) ||
+    /[ąćęłńśźżĄĆĘŁŃŚŹŻ]/.test(request) ||
+    /\b(minut[aey]?|godzin[aey]?|licznik|lista|zakupy|dla|mnie|przypomnij|podziel|wynik|gra|trening)\b/i.test(request);
+}
 
 export function needsLogic(request: string): boolean {
   return LOGIC_PATTERNS.some((p: RegExp) => p.test(request));
+}
+
+/** Smart mode asks the cloud before the on-device templates: logic they cannot express, or another language. */
+export function cloudFirst(request: string): boolean {
+  return needsLogic(request) || isNonEnglish(request);
 }
 
 /** The cloud model to use under the policy: the first EU provider, else a non-EU one only if allowed. */
@@ -133,7 +150,7 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
     // A rule produced an invalid capsule (a bug); fall through to the models rather than return it.
   }
 
-  const logic = needsLogic(request);
+  const logic = cloudFirst(request);
   if (logic && mode === 'smart' && options?.allowCloud === false) {
     // The on-device templates would build a wrong, simplified capsule (e.g. two counters for tennis).
     // If an EU provider could do it, say so instead, so the app can ask and retry with the cloud.

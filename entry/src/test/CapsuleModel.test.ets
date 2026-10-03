@@ -253,7 +253,7 @@ export default function capsuleModelTest() {
         expect((r.unsupported ?? []).join('|')).assertEqual('contacts|SMS');
         expect(r.error).assertEqual("Capsules can't do this: it needs contacts, SMS.");
         expect(t.sent.length).assertEqual(1);
-        expect(t.sent[0].body).assertContain('They cannot read or send contacts, SMS');
+        expect(t.sent[0].body).assertContain('runtime actions: send SMS, make phone calls, read');
         done();
       });
 
