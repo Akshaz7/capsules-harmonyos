@@ -1,0 +1,26 @@
+import { GenerateResult } from '../core';
+
+/** "a", "a and b", "a, b and c". */
+export function joinWords(words: string[]): string {
+  return words.length <= 1 ? words.join('') :
+    `${words.slice(0, words.length - 1).join(', ')} and ${words[words.length - 1]}`;
+}
+
+/**
+ * What the "can't do X by design" card names, or [] when the failure is not a refusal. Only non-empty strings
+ * survive, whatever shape the model's reply had, so the card can always render (any language, emoji included).
+ */
+export function refusalWords(result: GenerateResult): string[] {
+  if (result.failure !== 'unsupported') {
+    return [];
+  }
+  const raw: Object[] = Array.isArray(result.unsupported) ? result.unsupported as Object[] : [];
+  const words = raw.filter((w: Object) => typeof w === 'string' && (w as string).trim().length > 0)
+    .map((w: Object) => (w as string).trim());
+  return words.length > 0 ? words : ['that'];
+}
+
+/** The failure's details for the log; never throws when `details` is missing. */
+export function failureDetail(result: GenerateResult): string {
+  return Array.isArray(result.details) ? result.details.join('; ') : '';
+}

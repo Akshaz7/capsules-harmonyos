@@ -34,6 +34,7 @@ import {
 import { WidgetCapsulePicker } from './WidgetCapsulePicker';
 import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
 import { ShareLaunch, shareLaunch } from './ShareLaunch';
+import { failureDetail, joinWords, refusalWords } from './CreateText';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
@@ -96,11 +97,6 @@ function cloudNotice(provider: string): CloudNotice {
 /** What capsules can do, for the "can't do that by design" card. */
 const CAPSULE_ABILITIES = 'timers, counters, checklists, calculations, inputs and lists, reminders, ' +
   'notifications, vibration and the motion sensor';
-
-function joinWords(words: string[]): string {
-  return words.length <= 1 ? words.join('') :
-    `${words.slice(0, words.length - 1).join(', ')} and ${words[words.length - 1]}`;
-}
 
 const FAILED_MESSAGE =
   "I couldn't build that offline. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
@@ -412,11 +408,23 @@ struct Index {
     return copy;
   }
 
+  /** Never throws: whatever goes wrong (any language, any reply), the user gets the failure card. */
   private async create(): Promise<void> {
     const text = this.request.trim();
     if (text.length === 0 || this.busy) {
       return;
     }
+    try {
+      await this.createFrom(text);
+    } catch (e) {
+      hilog.error(0x0001, 'Index', 'create crashed: %{public}s %{public}s', (e as Error).message, (e as Error).stack);
+      this.busy = false;
+      this.unsupported = [];
+      this.failed = true;
+    }
+  }
+
+  private async createFrom(text: string): Promise<void> {
     this.busy = true;
     this.message = '';
     this.failed = false;
@@ -493,16 +501,21 @@ struct Index {
     this.busy = true;
     const result = await this.generate(text, true);
     this.busy = false;
-    this.finishCreate(text, result);
+    try {
+      this.finishCreate(text, result);
+    } catch (e) {
+      hilog.error(0x0001, 'Index', 'finishCreate crashed: %{public}s', (e as Error).message);
+      this.unsupported = [];
+      this.failed = true;
+    }
   }
 
   private finishCreate(text: string, result: GenerateResult): void {
     if (!result.ok || !result.capsule) {
       // The user sees a friendly message; the real error only goes to the log.
       hilog.error(0x0001, 'Index', 'generateCapsule failed for "%{private}s": %{public}s [%{public}s]',
-        text, result.error ?? 'no error', result.details.join('; '));
-      this.unsupported = result.failure === 'unsupported' ?
-        ((result.unsupported ?? []).length > 0 ? (result.unsupported ?? []) : ['that']) : [];
+        text, result.error ?? 'no error', failureDetail(result));
+      this.unsupported = refusalWords(result);
       this.failed = true;
       return;
     }
