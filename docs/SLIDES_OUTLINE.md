@@ -1,6 +1,6 @@
 # Pitch deck outline (6 slides)
 
-Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim vibration, motion counting, alerts firing with the app closed, marketplace publishing, or photo input and capsule editing in the app (core only).
+Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim vibration, motion counting, alerts firing with the app closed, marketplace publishing, or photo → capsule working (wired, not yet verified).
 
 ## 1. Problem
 
@@ -18,6 +18,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 - Describe it in one sentence, and get a working native mini-app (a *capsule*) in seconds.
 - A capsule is JSON, not code. A strict schema plus our own expression interpreter means nothing from a model ever executes.
+- Change a capsule later in plain words ("make it 1 minute"), see the change before applying it, and undo it.
 - You decide what each capsule may use, on a consent sheet. Denied actions are blocked and logged.
 - Simple capsules live on the home screen as widgets. Any capsule can be shared as a file or QR code, or installed from a marketplace (still validated, still behind consent).
 

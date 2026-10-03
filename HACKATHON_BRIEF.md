@@ -48,7 +48,7 @@ The commit history shows the progression. AI coding agents were used throughout,
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
 | Marketplace: browse, install with consent, run (live API, 108 templates listed) | Marketplace publishing: not tested |
 | | Vibration and motion counting: not built |
-| | Photo → capsule and capsule editing: in core and unit-tested, not in the app yet |
+| Editing a capsule ("Change it…", with undo) | Photo → capsule: Snap button wired, not yet seen working; on-device OCR planned |
 | | Wrist companion works on its own hardware; not connected to the app |
 
 Nothing is simulated in the app. Eval figures and limits are in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
