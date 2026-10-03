@@ -84,6 +84,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 | Cloud, hard logic requests (4), earlier single-step prompt | Mistral 2/4 · Claude 4/4. Mistral's two failures were rejected by the validator; no wrong capsule was shown. |
 | On-device, 15 requests (emulator) | 9/15 correct; 11/15 with the rule parser in front |
 | Photo → capsule, 10 synthetic photos, cloud path only (`scripts/eval-images.mjs`, before OCR was added) | Claude 10/10 valid, 9/10 correct · Mistral 9/10 valid, 5/10 correct · on-device 0/10 (vision blocked) |
+| Photo → capsule, cloud path, Mistral reading options (same 10 photos, host) | `pixtral-12b` reads + `ministral-14b` builds: 8/10 correct (the setup the app uses) · Ministral alone 5/10 · Pixtral for both 7/10 |
 | Photo → capsule on a real phone, same 10 photos, OCR first (T5-6) | 10/10 valid, 6/10 correct, all built on the phone with no internet, 0.35–1 s per photo. The 4 misses are text-converter issues (bill total, workout read as a recipe, no scoreboard converter), being fixed in T4-18. |
 | On-device speed (emulator, Apple M4 Pro host) | 92–114 tokens/s decode, about 0.3 s to first token, about 380 MB RSS |
 
