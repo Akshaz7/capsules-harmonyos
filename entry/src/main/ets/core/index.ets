@@ -52,6 +52,7 @@ export { StateValues, EvalResult, ApplyResult, DISPLAY_ERROR, initialState, rest
   renderTemplate, isShown, isEnabled, listItems, inputText, applyActions, setInput, allComponents } from './CapsuleProgram';
 export { formatValue, MAX_EXPR_LENGTH, MAX_TEXT_LENGTH, MAX_LIST_ITEMS } from './Expr';
 export { TENNIS_CAPSULE, BILL_SPLIT_CAPSULE } from './V1Fixtures';
+export * from './edit';
 
 const CONFIG_FILE: string = 'config.local.json';
 

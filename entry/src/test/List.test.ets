@@ -16,6 +16,7 @@ import triggerTextTest from './TriggerText.test';
 import deviceRelayTest from './DeviceRelay.test';
 import marketplaceTest from './Marketplace.test';
 import templatesTest from './Templates.test';
+import editCapsuleTest from './EditCapsule.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -36,4 +37,5 @@ export default function testsuite() {
   deviceRelayTest();
   marketplaceTest();
   templatesTest();
+  editCapsuleTest();
 }
