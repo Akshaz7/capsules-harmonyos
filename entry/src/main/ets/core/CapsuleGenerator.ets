@@ -7,6 +7,13 @@ import { validateCapsule } from './CapsuleValidator';
 import { parseRequest } from './RuleParser';
 import { CapsuleModel } from './CapsuleModel';
 
+export const NO_RULE_MATCH: string = 'No built-in rule understands this request.';
+export const AI_NOT_CONFIGURED: string = 'AI fallback not configured.';
+
+/**
+ * `modelUnavailableReason`: empty or omitted means no config was found (the normal state for the
+ * public .hap); otherwise it explains why a config that exists could not be used.
+ */
 export async function generateCapsuleWith(request: string, model: CapsuleModel | null,
   modelUnavailableReason?: string): Promise<GenerateResult> {
   if (request.trim().length === 0) {
@@ -22,8 +29,8 @@ export async function generateCapsuleWith(request: string, model: CapsuleModel |
   }
   if (model === null) {
     const why = modelUnavailableReason !== undefined && modelUnavailableReason.length > 0 ?
-      ` The AI model is not available: ${modelUnavailableReason}` : ' The AI model is not configured.';
-    return { ok: false, error: `No built-in rule understands this request.${why}`, details: [] };
+      `AI fallback unavailable: ${modelUnavailableReason}` : AI_NOT_CONFIGURED;
+    return { ok: false, error: `${NO_RULE_MATCH} ${why}`, details: [] };
   }
   return model.generate(request);
 }

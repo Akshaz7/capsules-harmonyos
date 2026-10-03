@@ -39,11 +39,23 @@ export default function capsuleGeneratorTest() {
       done();
     });
 
-    it('returns a clear error when no rule matches and there is no model', 0, async (done: Function) => {
-      const r = await generateCapsuleWith('track my plants', null, 'config.local.json not found in resources/rawfile');
+    it('says the AI fallback is not configured when there is no config', 0, async (done: Function) => {
+      const r = await generateCapsuleWith('track my plants', null);
       expect(r.ok).assertFalse();
-      expect(r.error).assertContain('No built-in rule understands this request');
-      expect(r.error).assertContain('config.local.json not found');
+      expect(r.error).assertEqual('No built-in rule understands this request. AI fallback not configured.');
+      done();
+    });
+
+    it('still serves rule requests with no config', 0, async (done: Function) => {
+      const r = await generateCapsuleWith('split 84 between 4', null);
+      expect(r.ok).assertTrue();
+      expect(r.origin).assertEqual('rules');
+      done();
+    });
+
+    it('explains why a broken config cannot be used', 0, async (done: Function) => {
+      const r = await generateCapsuleWith('track my plants', null, 'config.local.json: "apiKey" is missing');
+      expect(r.error).assertContain('AI fallback unavailable: config.local.json: "apiKey" is missing');
       expect((await generateCapsuleWith('', null)).error).assertContain('empty');
       done();
     });
