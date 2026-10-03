@@ -34,7 +34,9 @@ import {
 import { WidgetCapsulePicker } from './WidgetCapsulePicker';
 import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
 import { ShareLaunch, shareLaunch } from './ShareLaunch';
-import { failureDetail, joinWords, LIMITS_TEXT, refusalWords } from './CreateText';
+import {
+  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, LIMITS_TEXT, refusalWords
+} from './CreateText';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
 import { SettingsView } from './SettingsView';
@@ -185,6 +187,8 @@ struct Index {
   @Local failed: boolean = false;
   /** When core refused a request by design: what it would need, e.g. ["contacts", "SMS"]. Else empty. */
   @Local unsupported: string[] = [];
+  /** Core's English-only gate refused the request (T4-11): show the calm language card. */
+  @Local languageFailed: boolean = false;
   @Local modelStatus: string = getModelStatus().message;
   @Local cloudConfigured: boolean = getModelStatus().configured;
   @Local euCloud: boolean = getModelStatus().euAvailable;
@@ -425,6 +429,7 @@ struct Index {
       hilog.error(0x0001, 'Index', 'create crashed: %{public}s %{public}s', (e as Error).message, (e as Error).stack);
       this.busy = false;
       this.unsupported = [];
+      this.languageFailed = false;
       this.failed = true;
     }
   }
@@ -434,6 +439,7 @@ struct Index {
     this.message = '';
     this.failed = false;
     this.unsupported = [];
+    this.languageFailed = false;
     const fixture = demoFixture(text);
     if (fixture !== null) {
       const v = validateCapsule(fixture);
@@ -447,7 +453,8 @@ struct Index {
     const consent = this.settings.hasCloudConsent(this.cloudKey());
     const result = await this.generate(text, smart && consent);
     this.busy = false;
-    if (!result.ok && result.failure === undefined && smart && !consent && this.cloudUsable()) {
+    if (!result.ok && result.failure === undefined && !isUnsupportedLanguage(result) && smart && !consent &&
+      this.cloudUsable()) {
       // The device couldn't build it and the cloud would be next: ask once before the first cloud request.
       hilog.info(0x0001, 'Index', 'on-device failed (%{public}s); showing the cloud notice', result.error ?? '');
       this.showCloudNotice(() => this.retryWithCloud(text), () => {
@@ -511,11 +518,20 @@ struct Index {
     } catch (e) {
       hilog.error(0x0001, 'Index', 'finishCreate crashed: %{public}s', (e as Error).message);
       this.unsupported = [];
+      this.languageFailed = false;
       this.failed = true;
     }
   }
 
   private finishCreate(text: string, result: GenerateResult): void {
+    if (isUnsupportedLanguage(result)) {
+      // English only for now (T4-11): a calm card, never the error or refusal card, and nothing is saved.
+      hilog.info(0x0001, 'Index', 'request refused by the English-only gate');
+      this.unsupported = [];
+      this.failed = false;
+      this.languageFailed = true;
+      return;
+    }
     if (!result.ok || !result.capsule) {
       // The user sees a friendly message; the real error only goes to the log.
       hilog.error(0x0001, 'Index', 'generateCapsule failed for "%{private}s": %{public}s [%{public}s]',
@@ -559,6 +575,7 @@ struct Index {
     this.message = '';
     this.failed = false;
     this.unsupported = [];
+    this.languageFailed = false;
     if (this.ctx) {
       refreshCapsuleWidgets(this.ctx);
     }
@@ -882,6 +899,37 @@ struct Index {
     .backgroundColor($r('sys.color.comp_background_primary'))
   }
 
+  /** T3-13: exact wording; tapping the example fills the input (it does not create anything). */
+  @Builder
+  languageCard() {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.character_on_character'))
+        .fontSize(20)
+        .fontColor([$r('sys.color.icon_secondary')])
+      Text() {
+        Span(LANGUAGE_MESSAGE)
+        Span(`'${LANGUAGE_EXAMPLE}'`)
+          .fontColor($r('sys.color.font_emphasize'))
+          .fontWeight(FontWeight.Medium)
+          .onClick(() => this.useLanguageExample())
+        Span('.')
+      }
+      .fontSize($r('sys.float.Body_M'))
+      .fontColor($r('sys.color.font_primary'))
+      .layoutWeight(1)
+    }
+    .alignItems(VerticalAlign.Top)
+    .width('100%')
+    .padding(16)
+    .borderRadius(20)
+    .backgroundColor($r('sys.color.comp_background_primary'))
+  }
+
+  private useLanguageExample(): void {
+    this.request = LANGUAGE_EXAMPLE;
+    this.languageFailed = false;
+  }
+
   @Builder
   failedCard() {
     Column({ space: 12 }) {
@@ -1020,7 +1068,9 @@ struct Index {
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
           .padding({ left: 4 })
-        if (this.failed && this.unsupported.length > 0) {
+        if (this.languageFailed) {
+          this.languageCard()
+        } else if (this.failed && this.unsupported.length > 0) {
           this.unsupportedCard()
         } else if (this.failed) {
           this.failedCard()

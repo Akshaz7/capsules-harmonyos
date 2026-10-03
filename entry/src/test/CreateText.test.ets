@@ -1,5 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
-import { failureDetail, joinWords, refusalWords } from '../main/ets/pages/CreateText';
+import {
+  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, refusalWords, UNSUPPORTED_LANGUAGE
+} from '../main/ets/pages/CreateText';
 import { generateCapsuleWith } from '../main/ets/core/CapsuleGenerator';
 import { GenerateResult } from '../main/ets/core/CapsuleTypes';
 
@@ -34,7 +36,18 @@ export default function createTextTest() {
       expect(refusalWords(notRefusal).length).assertEqual(0);
     });
 
-    it('failureDetail joins details', 0, () => {
+    it('language card text is exact and only the English-only failure triggers it (T3-13)', 0, () => {
+      expect(`${LANGUAGE_MESSAGE}'${LANGUAGE_EXAMPLE}'.`)
+        .assertEqual("Harmoniser understands English for now. Try: 'timer 10 minutes'.");
+      const lang: GenerateResult = { ok: false, error: UNSUPPORTED_LANGUAGE, details: [] };
+      expect(isUnsupportedLanguage(lang)).assertTrue();
+      const refusal: GenerateResult = { ok: false, failure: 'unsupported', unsupported: ['SMS'], details: [] };
+      expect(isUnsupportedLanguage(refusal)).assertFalse();
+      const plain: GenerateResult = { ok: false, error: 'No built-in rule understands this request.', details: [] };
+      expect(isUnsupportedLanguage(plain)).assertFalse();
+    });
+
+        it('failureDetail joins details', 0, () => {
       const r: GenerateResult = { ok: false, details: ['a', '因为'] };
       expect(failureDetail(r)).assertEqual('a; 因为');
     });
