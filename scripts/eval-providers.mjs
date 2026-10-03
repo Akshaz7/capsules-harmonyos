@@ -194,11 +194,19 @@ const HELD_OUT = [
       buttons(c).some((b) => (b.do ?? []).some((s) => typeof s === 'object' && s.set)), 'no streak that can go up')]
 ];
 
+// Requests that must be refused, not built: the check gets the whole result.
+const REFUSALS = [
+  ['asdf', (r) => need(r.failure === 'not-an-app', `expected not-an-app, got ${r.ok ? 'a capsule' : r.failure ?? r.error}`)],
+  ['text all my contacts happy new year at midnight',
+    (r) => need(r.failure === 'unsupported' && (r.unsupported ?? []).length > 0,
+      `expected unsupported, got ${r.ok ? 'a capsule' : r.failure ?? r.error}`)]
+];
+
 // ---- Run ----
 
 const results = [];
 
-async function runSet(model, config, setName, requests) {
+async function runSet(model, config, setName, requests, refusals = false) {
   let valid = 0;
   let correct = 0;
   let totalMs = 0;
@@ -215,7 +223,13 @@ async function runSet(model, config, setName, requests) {
     const ms = Date.now() - started;
     totalMs += ms;
     let verdict;
-    if (!r.ok) {
+    if (refusals) {
+      const reason = check(r);
+      valid += r.ok ? 0 : 1;
+      correct += reason === '' ? 1 : 0;
+      verdict = reason === '' ? `correct (${r.failure}${r.unsupported ? `: ${r.unsupported.join(', ')}` : ''})` :
+        `wrong: ${reason}`;
+    } else if (!r.ok) {
       verdict = `INVALID  ${r.error}${r.details?.length ? ` (${r.details.slice(0, 2).join('; ')})` : ''}`;
     } else {
       valid++;
@@ -249,9 +263,10 @@ const pick = (set) => set.filter(([request]) => words.length === 0 || words.some
 const summary = [];
 for (const config of configs) {
   const model = new lib.CapsuleModel(lib.createProvider(config, new FetchTransport()));
-  for (const [name, set] of [['tuning set', pick(REQUESTS)], ['held-out set', pick(HELD_OUT)]]) {
+  for (const [name, set] of [['tuning set', pick(REQUESTS)], ['held-out set', pick(HELD_OUT)],
+    ['refusal set', pick(REFUSALS)]]) {
     if (set.length > 0) {
-      summary.push(await runSet(model, config, name, set));
+      summary.push(await runSet(model, config, name, set, name === 'refusal set'));
     }
   }
 }
