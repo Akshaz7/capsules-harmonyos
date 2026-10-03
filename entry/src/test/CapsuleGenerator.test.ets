@@ -225,6 +225,33 @@ export default function capsuleGeneratorTest() {
       done();
     });
 
+    it('cloudOnly skips rules and on-device but keeps the cloud policy', 0, async (done: Function) => {
+      const t = new CountingTransport();
+      const local = onDeviceReturning(LOCAL);
+      // A rule would match and on-device would succeed: cloudOnly still asks the cloud.
+      const r = await generateCapsuleWith('count my squats', [modelWith(t)], '', local, { cloudOnly: true });
+      expect(r.origin).assertEqual('cloud-eu:mistral');
+      expect(t.calls).assertEqual(1);
+      expect(local.calls).assertEqual(0);
+      const nonEu = new CountingTransport();
+      const blocked = await generateCapsuleWith(PLAIN, [modelWith(nonEu, 'anthropic')], '', local, { cloudOnly: true });
+      expect(blocked.ok).assertFalse();
+      expect(blocked.error).assertContain('outside the EU');
+      const allowed = await generateCapsuleWith(PLAIN, [modelWith(nonEu, 'anthropic')], '', local,
+        { cloudOnly: true, allowNonEu: true });
+      expect(allowed.origin).assertEqual('cloud:anthropic');
+      const off = await generateCapsuleWith(PLAIN, [modelWith(t)], '', local, { cloudOnly: true, allowCloud: false });
+      expect(off.error).assertEqual(CLOUD_OFF);
+      const deviceOnly = await generateCapsuleWith(PLAIN, [modelWith(t)], '', local,
+        { cloudOnly: true, mode: 'on-device-only' });
+      expect(deviceOnly.error).assertEqual(ON_DEVICE_ONLY);
+      expect((await generateCapsuleWith(PLAIN, [], '', local, { cloudOnly: true })).error)
+        .assertEqual('AI fallback not configured.');
+      expect(t.calls).assertEqual(1);
+      expect(local.calls).assertEqual(0);
+      done();
+    });
+
     it('on-device-only mode never calls the cloud, even for logic requests', 0, async (done: Function) => {
       const t = new CountingTransport();
       const local = onDeviceFailing();

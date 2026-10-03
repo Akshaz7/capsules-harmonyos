@@ -10,7 +10,8 @@
  *      not allow it (allowCloud false), return needsCloud instead of a simplified on-device capsule.
  *   3. Otherwise the on-device model; if it fails or is ungrounded, the cloud.
  * A cloud provider may be used only if it is in the EU (Mistral), or the caller allows non-EU providers.
- * Mode "on-device-only" never calls the cloud. Only the request text is ever sent to the cloud.
+ * Mode "on-device-only" never calls the cloud. Option cloudOnly skips rules and on-device (same cloud
+ * policy). Only the request text is ever sent to the cloud.
  */
 import { GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
@@ -36,6 +37,11 @@ export interface GenerateOptions {
   allowNonEu?: boolean;
   /** False blocks the cloud for this request, e.g. until the user has accepted the cloud notice. Default true. */
   allowCloud?: boolean;
+  /**
+   * Skip the rules and the on-device model and ask the cloud directly (e.g. "Make it smarter").
+   * Still respects mode, allowNonEu and allowCloud: if the cloud may not be used, it fails with the reason.
+   */
+  cloudOnly?: boolean;
 }
 
 /**
@@ -93,15 +99,6 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
   if (request.trim().length === 0) {
     return { ok: false, error: 'The request is empty.', details: [] };
   }
-  const fromRules = parseRequest(request);
-  if (fromRules !== null) {
-    const v = validateCapsule(JSON.stringify(fromRules));
-    if (v.ok) {
-      return { ok: true, capsule: v.capsule, origin: 'rules', details: [] };
-    }
-    // A rule produced an invalid capsule (a bug); fall through to the models rather than return it.
-  }
-
   const mode: GenerateMode = options?.mode ?? 'smart';
   const allowNonEu = options?.allowNonEu ?? false;
   const cloudBlocked = mode === 'on-device-only' || options?.allowCloud === false;
@@ -117,6 +114,19 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
   } else if (chosen === null) {
     cloudWhy = modelUnavailableReason !== undefined && modelUnavailableReason.length > 0 ?
       `AI fallback unavailable: ${modelUnavailableReason}` : AI_NOT_CONFIGURED;
+  }
+
+  if (options?.cloudOnly === true) {
+    return chosen !== null ? chosen.generate(request) : { ok: false, error: cloudWhy, details: [] };
+  }
+
+  const fromRules = parseRequest(request);
+  if (fromRules !== null) {
+    const v = validateCapsule(JSON.stringify(fromRules));
+    if (v.ok) {
+      return { ok: true, capsule: v.capsule, origin: 'rules', details: [] };
+    }
+    // A rule produced an invalid capsule (a bug); fall through to the models rather than return it.
   }
 
   const logic = needsLogic(request);
