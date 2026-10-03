@@ -7867,53 +7867,51 @@
  },
  {
   "id": "walking-step-counter",
-  "title": "Walking step counter",
+  "title": "Shake counter",
   "category": "fitness",
   "tags": [
-   "step counter",
-   "steps",
-   "pedometer",
-   "walking",
-   "walk",
+   "shake counter",
+   "shake",
+   "shakes",
+   "shaking",
+   "motion counter",
    "motion",
-   "step tracker",
-   "daily steps",
-   "10000 steps",
-   "stride",
-   "hiking"
+   "wobble",
+   "jiggle",
+   "gesture"
   ],
   "language": "en",
   "listed": false,
   "capsule": {
    "schemaVersion": 1,
    "id": "walking-step-counter",
-   "name": "Step counter",
+   "name": "Shake counter",
    "permissions": [
     "motion"
    ],
    "ui": [
     {
      "type": "counter",
-     "id": "steps",
-     "label": "Steps",
+     "id": "shakes",
+     "label": "Shakes",
      "source": "motion"
     },
     {
      "type": "text",
-     "text": "Goal: 10000 steps. Keep the phone with you while you walk."
+     "text": "Shake the phone while this capsule is open."
     },
     {
      "type": "row",
      "items": [
       {
        "type": "button",
-       "label": "+1 step",
-       "action": "increment:steps"
+       "label": "+1 shake",
+       "action": "increment:shakes"
       },
       {
        "type": "button",
-       "label": "Reset steps",
-       "action": "reset:steps"
+       "label": "Reset shakes",
+       "action": "reset:shakes"
       }
      ]
     }
