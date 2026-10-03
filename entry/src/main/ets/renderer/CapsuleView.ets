@@ -240,19 +240,18 @@ struct CapsuleNode {
 
   @Builder
   inputItem(c: InputComponent) {
-    Column({ space: 4 }) {
-      Row() {
-        Text(c.label)
-          .fontSize($r('sys.float.Subtitle_M'))
-          .fontColor($r('sys.color.font_primary'))
-          .layoutWeight(1)
-        TextInput({ text: this.runtime.inputValue(c.bind), placeholder: c.kind === 'number' ? '0' : '' })
-          .type(c.kind === 'number' ? InputType.NUMBER_DECIMAL : InputType.Normal)
-          .width(c.kind === 'number' ? 120 : 180)
-          .textAlign(c.kind === 'number' ? TextAlign.End : TextAlign.Start)
-          .onChange((value: string) => this.runtime.setInputValue(c.bind, value))
-      }
-      .width('100%')
+    // Label above the field: inside a narrow row a side-by-side label wrapped one letter per line.
+    Column({ space: 8 }) {
+      Text(c.label)
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_secondary'))
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+      TextInput({ text: this.runtime.inputValue(c.bind), placeholder: c.kind === 'number' ? '0' : '' })
+        .type(c.kind === 'number' ? InputType.NUMBER_DECIMAL : InputType.Normal)
+        .width('100%')
+        .onChange((value: string) => this.runtime.setInputValue(c.bind, value))
       if (this.runtime.inputError(c.bind).length > 0) {
         Text(this.runtime.inputError(c.bind))
           .fontSize($r('sys.float.Caption_M'))
