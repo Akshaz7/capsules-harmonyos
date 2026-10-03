@@ -27,8 +27,8 @@ As of 2026-10-03.
 | | State |
 | --- | --- |
 | Mock server | Passes `test_api.sh` (72 checks) and its unit tests. |
-| Host unit tests | `make -C tests test`: 1,619 checks in C on the firmware's own source files, 19 Python tests on the mock and 36 on the fake relay. All pass. |
-| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,717,552 bytes, 80% of the app partition free. |
+| Host unit tests | `make -C tests test`: 1,646 checks in C on the firmware's own source files, 19 Python tests on the mock and 37 on the fake relay. All pass. |
+| Firmware build | Builds without compiler warnings on ESP-IDF v5.5. 1,717,936 bytes, 80% of the app partition free. |
 | Boot on hardware | One board (revision V2): boots, display and touch drivers start, accelerometer and audio codec answer, HTTP server starts. |
 | Wi-Fi on hardware | Joins the phone hotspot (WPA3) and the venue network `HackYeah2026`, which it sees on 2.4 GHz channel 1. Joining the venue network often takes several attempts. |
 | HTTP API on hardware | **Confirmed**: `./test_api.sh http://<board ip>` passes 72 of 72 against the board over the venue Wi-Fi. JSON nested 300 and 1024 levels deep gets a 400 and the board keeps running (it used to reboot). |

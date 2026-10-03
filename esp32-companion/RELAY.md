@@ -45,12 +45,12 @@ board                           relay                              user (app or 
 Called when the board has no stored token (first boot, or after a 401).
 
 ```json
-{"hw":"3f9c2a7be01d4c55","kind":"wrist","fw":"8a14f2c"}
+{"hw":"3f9c2a7be01d4c55a0c41e7d92b6f803","kind":"wrist","fw":"8a14f2c"}
 ```
 
 | Field | Meaning |
 | --- | --- |
-| `hw` | Stable id of the board: 16 hex digits, the first 8 bytes of SHA-256 over `"harmoniser-wrist:"` followed by the 6 bytes of the Wi-Fi MAC. A salted hash rather than the MAC itself, and it is sent to the relay only. Somebody who never sees it learns nothing from it, but it is not a secret and no strong protection: whoever holds an `hw` and a list of candidate MAC addresses can test them against it. 1 to 64 characters of `A-Z a-z 0-9 _ -`. |
+| `hw` | Stable id of the board: 32 hex digits, the first 128 bits of SHA-256 over `"harmoniser-wrist:"`, a 16-byte secret and the 6 bytes of the Wi-Fi MAC. The secret is random, made on the board the first time it registers, kept in its flash (NVS), and never sent or logged. The MAC can be seen by anyone in radio range; without the secret it does not give `hw`. **Treat `hw` like a credential**: only the board and the relay know it, so do not log it or return it from any route. The relay accepts 1 to 64 characters of `A-Z a-z 0-9 _ -`. |
 | `kind` | `"wrist"`. Room for other devices later. |
 | `fw` | Firmware version, free text up to 64 characters. |
 
@@ -73,6 +73,11 @@ request. A `pair_url` that breaks its limits is ignored.
 Registering the same `hw` again gives the same `id` with a new `token`, `code` and
 `pair_url`. The old token and code stop working, the device is unclaimed again, and its
 capsule and pending action are dropped. (A board that lost its token may have changed hands.)
+Only somebody who knows `hw` can do that, which now means the board itself.
+
+Erasing the board's NVS erases the secret: the board then registers as a **new device**
+with a new `hw` and `id`. The old device record stays with its owner, never seen again,
+until the owner unpairs it or the backend purges devices that stopped polling.
 
 The board keeps `id` and `token` in flash (NVS), written once per registration. `code` and
 `pair_url` are held in RAM only: after a restart the board has neither until its first
@@ -295,10 +300,15 @@ The board draws `pair_url` as a QR code, with the phrase under it as the fallbac
 - **Unpairing leaves the capsule.** After `DELETE` the board gets a new code, but a capsule
   that is on its screen stays there (with "pair: …" in the small line at the top) until
   somebody sends another; the QR code is on the idle screen only. The board has no "clear".
-- **Registering again unclaims.** A board that registers its `hw` again is unpaired from
-  its owner. `hw` is derived from the MAC and is not a secret, so anyone who knows it can
-  knock a device off its owner (they cannot read what was sent to it, and get no access to
-  the owner's token). The backend may want to keep the claim, or ask for the old token.
+- **Registering again unclaims, for whoever knows `hw`.** A registration under a known
+  `hw` unpairs that device from its owner. `hw` used to be derived from the MAC alone,
+  which anyone nearby can read off the air; it now also depends on a secret that stays on
+  the board, so an outsider cannot work it out. What is left: a relay that leaks `hw` (a
+  log, a debug route) gives that power away, and `register` itself is open to anyone, so
+  it wants a rate limit. Boards flashed before this change keep their old registration
+  until they next get a 401, and then register under the new `hw` as a new device.
+- **Erased NVS orphans the old record.** See `register`: the board comes back as a new
+  device and the old one lingers on its owner's list.
 - **HTTPS is not soak-tested.** On the board, TLS was checked as a handshake against the
   certificate bundle (`vercel.com`, `harmoniser-web.vercel.app`, `example.com`; a
   self-signed certificate was refused), with about 50 KB of internal RAM free while the
