@@ -26,12 +26,14 @@ from mock_relay import Handler, Relay  # noqa: E402
 SQUATS = {"type": "counter", "label": "Squats", "count": 3}
 STATE = {"type": "counter", "label": "Squats", "count": 4, "seconds": 0, "remaining_seconds": 0,
          "running": False, "done": False, "motion": False, "version": 1}
+INSTALL_ONE = "install-one-" + "a" * 24  # what the app sends in X-Harmoniser-Token: 32+ characters
+INSTALL_TWO = "install-two-" + "b" * 24
 Answer = Tuple[int, Any]
 
 
 class RelayCase(unittest.TestCase):
     server: ThreadingHTTPServer
-    install: Optional[str] = "install-one"  # the app's install token; None: send no Authorization
+    install: Optional[str] = INSTALL_ONE  # the app's token; None: send no X-Harmoniser-Token
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -57,9 +59,9 @@ class RelayCase(unittest.TestCase):
                 headers: Optional[Dict[str, str]] = None) -> Answer:
         raw = body if isinstance(body, bytes) or body is None else json.dumps(body).encode()
         sent = dict(headers or {})
-        if token is None and "Authorization" not in sent and self.install:
-            token = self.install  # a request from the app; the board's requests pass its own token
-        if token is not None:
+        if token is None and "Authorization" not in sent and "X-Harmoniser-Token" not in sent and self.install:
+            sent["X-Harmoniser-Token"] = self.install  # a request from the app
+        if token is not None:  # a request from the board
             sent["Authorization"] = "Bearer " + token
         try:
             self.connection.request(method, path, raw, sent)
@@ -138,7 +140,7 @@ class Registration(RelayCase):
             ({"hw": "abc", "kind": "wrist", "fw": 1}, mock_relay.ERR_BAD_FW),
         ):
             with self.subTest(body=body):
-                self.assertEqual(self.request("POST", "/api/devices/register", body), (400, {"error": message}))
+                self.assertEqual(self.request("POST", "/api/devices/register", body), (400, mock_relay.error_body(400, message)))
         self.assertEqual(self.request("POST", "/api/devices/register", b"[1]")[0], 400)
         self.assertEqual(self.request("POST", "/api/devices/register", b"{" * 300)[0], 400)
         self.assertEqual(self.request("POST", "/api/devices/register", b"x" * 1025)[0], 413)
@@ -148,7 +150,7 @@ class DeviceSide(RelayCase):
     def test_unknown_id_or_token_is_401(self) -> None:
         device = self.register()
         path = f"/api/devices/{device['id']}/capsule"
-        unauthorized = (401, {"error": mock_relay.ERR_UNAUTHORIZED})
+        unauthorized = (401, mock_relay.error_body(401, mock_relay.ERR_UNAUTHORIZED))
         self.assertEqual(self.request("GET", path, headers={"Authorization": ""}), unauthorized)
         self.assertEqual(self.request("GET", path, token="wrong"), unauthorized)
         self.assertEqual(self.request("GET", path, token=self.install), unauthorized)  # the app is not the board
@@ -195,13 +197,13 @@ class UserSide(RelayCase):
     def test_claim(self) -> None:
         device = self.register()
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": "not-the-code"}),
-                         (404, {"error": mock_relay.ERR_UNKNOWN_CODE}))
+                         (404, mock_relay.error_body(404, mock_relay.ERR_UNKNOWN_CODE)))
         for bad in ({"code": 123456}, {"code": "123456"}, {"code": "brave-otter"}, {"code": "a-b-c"},
                     {"code": "brave-otter-lamp-drum"}, {"code": "brave_otter_lamp"}, {"code": ""},
                     {"code": "x" * 200}, {}):
             with self.subTest(body=bad):
                 self.assertEqual(self.request("POST", "/api/devices/claim", bad),
-                                 (400, {"error": mock_relay.ERR_BAD_CODE}))
+                                 (400, mock_relay.error_body(400, mock_relay.ERR_BAD_CODE)))
         self.assertFalse(self.poll(device)["claimed"])
         Handler.relay.failed_claims.clear()  # that was ten wrong codes: see test_too_many_wrong_codes_get_429
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": device["code"]}),
@@ -227,7 +229,7 @@ class UserSide(RelayCase):
         self.assertEqual(self.poll(device)["code"], device["code"])  # 5 seconds left: still the same
         relay_device.code_issued -= 5
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": device["code"]}),
-                         (404, {"error": mock_relay.ERR_UNKNOWN_CODE}))
+                         (404, mock_relay.error_body(404, mock_relay.ERR_UNKNOWN_CODE)))
         fresh = self.poll(device)["code"]
         self.assertNotEqual(fresh, device["code"])
         self.assertRegex(fresh, r"^[a-z]{3,5}-[a-z]{3,5}-[a-z]{3,5}$")
@@ -245,7 +247,7 @@ class UserSide(RelayCase):
     def test_user_routes_need_a_device_this_install_claimed(self) -> None:
         device = self.register()
         base = f"/api/devices/{device['id']}"
-        no_device = (404, {"error": mock_relay.ERR_UNKNOWN_DEVICE})
+        no_device = (404, mock_relay.error_body(404, mock_relay.ERR_UNKNOWN_DEVICE))
 
         def refused_everywhere(what: str) -> None:
             with self.subTest(what=what):
@@ -259,7 +261,7 @@ class UserSide(RelayCase):
         self.assertEqual(self.poll(device)["version"], 0)
         self.request("POST", "/api/devices/claim", {"code": device["code"]})
         self.assertEqual(self.request("PUT", base + "/capsule", SQUATS), (200, {"version": 1}))
-        self.install = "install-two"
+        self.install = INSTALL_TWO
         refused_everywhere("claimed by another install")  # and it looks no different from "no such device"
         self.assertEqual(self.poll(device)["version"], 1)
         base = "/api/devices/dev_gone"
@@ -269,15 +271,24 @@ class UserSide(RelayCase):
         device = self.claimed_device()
         base = f"/api/devices/{device['id']}"
         self.install = None
-        missing = (401, {"error": mock_relay.ERR_NO_INSTALL_TOKEN})
+        missing = (401, mock_relay.error_body(401, mock_relay.ERR_NO_INSTALL_TOKEN))
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": "brave-otter-lamp"}), missing)
         self.assertEqual(self.request("GET", "/api/devices"), missing)
         self.assertEqual(self.request("PUT", base + "/capsule", SQUATS), missing)
         self.assertEqual(self.request("POST", base + "/action", {"action": "reset"}), missing)
         self.assertEqual(self.request("GET", base + "/state"), missing)
         self.assertEqual(self.request("DELETE", base), missing)
-        self.assertEqual(self.request("GET", base + "/state", headers={"Authorization": "Bearer "}), missing)
-        self.assertEqual(self.request("GET", base + "/state", headers={"Authorization": "Basic abc"}), missing)
+        # The old way, and the board's token, are not the app's token.
+        self.assertEqual(self.request("GET", base + "/state", headers={"Authorization": "Bearer " + INSTALL_ONE}),
+                         missing)
+        self.assertEqual(self.request("GET", base + "/state", token=device["token"]), missing)
+        for malformed in ("", "short", "a" * 31, "a" * 257, "a" * 31 + "!", "a" * 20 + " " + "a" * 20):
+            with self.subTest(token=malformed):
+                self.assertEqual(self.request("GET", base + "/state", headers={"X-Harmoniser-Token": malformed}),
+                                 missing)
+        for fine in ("a" * 32, "A-b_9" * 51 + "x"):  # 32 and 256 characters
+            with self.subTest(token=fine):  # well-formed, but not the one that claimed the device
+                self.assertEqual(self.request("GET", base + "/state", headers={"X-Harmoniser-Token": fine})[0], 404)
 
     def test_list_devices(self) -> None:
         first = self.claimed_device()
@@ -289,7 +300,7 @@ class UserSide(RelayCase):
         self.assertEqual([(device["id"], device["kind"]) for device in answer["devices"]],
                          [(first["id"], "wrist"), (second["id"], "wrist")])
         self.assertGreaterEqual(answer["devices"][0]["last_seen_ms_ago"], 0)
-        self.install = "install-two"
+        self.install = INSTALL_TWO
         self.assertEqual(self.request("GET", "/api/devices"), (200, {"devices": []}))
 
     def test_unpair_gives_the_board_a_fresh_code(self) -> None:
@@ -306,7 +317,7 @@ class UserSide(RelayCase):
         self.assertEqual(self.request("GET", "/api/devices"), (200, {"devices": []}))
         self.assertEqual(self.request("DELETE", base)[0], 404)
         # Anyone can pair it again with the new code.
-        self.install = "install-two"
+        self.install = INSTALL_TWO
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": answer["code"]}),
                          (200, {"id": device["id"], "kind": "wrist"}))
 
@@ -314,16 +325,16 @@ class UserSide(RelayCase):
         device = self.register()
         for _ in range(mock_relay.MAX_FAILED_CLAIMS):
             self.assertEqual(self.request("POST", "/api/devices/claim", {"code": "not-the-code"})[0], 404)
-        too_many = (429, {"error": mock_relay.ERR_TOO_MANY_CLAIMS})
+        too_many = (429, mock_relay.error_body(429, mock_relay.ERR_TOO_MANY_CLAIMS))
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": "not-the-code"}), too_many)
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": device["code"]}), too_many)  # even the right one
         self.assertFalse(self.poll(device)["claimed"])
         # Another install is not held up, and the first is let in again after the window.
-        self.install = "install-two"
+        self.install = INSTALL_TWO
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": "not-the-code"})[0], 404)
-        self.install = "install-one"
-        Handler.relay.failed_claims["install-one"] = [
-            at - mock_relay.CLAIM_WINDOW_SECONDS for at in Handler.relay.failed_claims["install-one"]]
+        self.install = INSTALL_ONE
+        Handler.relay.failed_claims[INSTALL_ONE] = [
+            at - mock_relay.CLAIM_WINDOW_SECONDS for at in Handler.relay.failed_claims[INSTALL_ONE]]
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": device["code"]})[0], 200)
 
     def test_put_capsule_bumps_the_version_and_reaches_the_board(self) -> None:
@@ -355,7 +366,7 @@ class UserSide(RelayCase):
             ({"type": "timer", "seconds": 5, "running": "yes"}, mock_relay.mock_esp32.ERR_BAD_RUNNING),
         ):
             with self.subTest(body=body):
-                self.assertEqual(self.request("PUT", path, body), (400, {"error": message}))
+                self.assertEqual(self.request("PUT", path, body), (400, mock_relay.error_body(400, message)))
         self.assertEqual(self.request("PUT", path, b'{"type":"counter","x":[[[[[[[[1]]]]]]]]}')[0], 400)
         answer = self.poll(device)
         self.assertEqual((answer["version"], answer["capsule"]), (1, SQUATS))  # a refused PUT changes nothing
@@ -420,6 +431,9 @@ class PairPage(RelayCase):
         self.assertIn("Pair this device", page)
         self.assertIn(f'data-code="{device["code"]}"', page)
         self.assertIn('fetch("/api/devices/claim"', page)
+        self.assertIn('"X-Harmoniser-Token": deviceToken()', page)
+        self.assertIn('localStorage.getItem("harmoniser.deviceToken")', page)
+        self.assertNotIn("Bearer", page)
         self.assertFalse(self.poll(device)["claimed"])  # opening the page pairs nothing; the button does
         # What the button sends:
         self.assertEqual(self.request("POST", "/api/devices/claim", {"code": device["code"]}),
@@ -440,7 +454,7 @@ class PairPage(RelayCase):
                 self.assertNotIn("onmouseover", page)
                 self.assertNotIn("Pair this device", page)
         self.assertEqual(self.request("POST", "/pair?code=brave-otter-lamp", {}),
-                         (405, {"error": "method not allowed"}))
+                         (405, mock_relay.error_body(405, "method not allowed")))
 
 
 class Words(unittest.TestCase):
@@ -463,11 +477,48 @@ class Words(unittest.TestCase):
             self.assertEqual(mock_relay.normalise_code(typed), "brave-otter-lamp")
 
 
+class ErrorShape(RelayCase):
+    def test_errors_use_the_backends_envelope_and_codes(self) -> None:
+        device = self.claimed_device()
+        base = f"/api/devices/{device['id']}"
+        other = self.register("board-two")
+        for expected_status, code, method, path, body in (
+            (400, "invalid_code", "POST", "/api/devices/claim", {"code": "nope"}),
+            (404, "code_not_found", "POST", "/api/devices/claim", {"code": "not-the-code"}),
+            (400, "invalid_capsule", "PUT", base + "/capsule", {"type": "timer"}),
+            (400, "invalid_capsule", "PUT", base + "/capsule", {"type": "stopwatch"}),
+            (400, "invalid_json", "PUT", base + "/capsule", b"[1]"),
+            (400, "invalid_json", "PUT", base + "/capsule", b"{" * 300),
+            (413, "payload_too_large", "PUT", base + "/capsule", b"x" * 2000),
+            (400, "invalid_action", "POST", base + "/action", {"action": "explode"}),
+            (404, "not_found", "GET", f"/api/devices/{other['id']}/state", None),
+            (404, "not_found", "GET", "/nope", None),
+            (405, "method_not_allowed", "PATCH", base + "/capsule", None),
+            (400, "invalid_registration", "POST", "/api/devices/register", {"hw": "", "kind": "wrist", "fw": "1"}),
+        ):
+            with self.subTest(code=code, path=path):
+                status, answer = self.request(method, path, body)
+                self.assertEqual((status, answer["error"]["code"]), (expected_status, code))
+                self.assertEqual(sorted(answer["error"]), ["code", "message"])
+                self.assertIsInstance(answer["error"]["message"], str)
+        self.install = None
+        status, answer = self.request("GET", base + "/state")
+        self.assertEqual((status, answer["error"]["code"]), (401, "unauthorized"))
+        status, answer = self.request("GET", base + "/capsule", token="wrong")  # the board's side too
+        self.assertEqual((status, answer["error"]["code"]), (401, "unauthorized"))
+
+    def test_too_many_wrong_codes_is_rate_limited(self) -> None:
+        for _ in range(mock_relay.MAX_FAILED_CLAIMS):
+            self.request("POST", "/api/devices/claim", {"code": "not-the-code"})
+        status, answer = self.request("POST", "/api/devices/claim", {"code": "not-the-code"})
+        self.assertEqual((status, answer["error"]["code"]), (429, "rate_limited"))
+
+
 class Routing(RelayCase):
     def test_unknown_paths_and_wrong_methods(self) -> None:
         device = self.register()
-        not_found = (404, {"error": "not found"})
-        wrong_method = (405, {"error": "method not allowed"})
+        not_found = (404, mock_relay.error_body(404, "not found"))
+        wrong_method = (405, mock_relay.error_body(405, "method not allowed"))
         for path in ("/", "/state", "/api/device", "/api/devices/", f"/api/devices/{device['id']}/nope", f"/api/devices/{device['id']}/capsule/x"):
             with self.subTest(path=path):
                 self.assertEqual(self.request("GET", path), not_found)

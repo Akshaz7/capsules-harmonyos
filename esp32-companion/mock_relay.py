@@ -9,9 +9,9 @@ Device side (the board calls these):
                                                            "code","pair_url"}
     POST /api/devices/{id}/state      Bearer token, the board's state + "version" -> 204
 
-User side (the app calls these, with Authorization: Bearer <install token>; the fake takes
-any non-empty token as an install of the app, and a device belongs to the install that
-claimed it):
+User side (the app calls these, with X-Harmoniser-Token: <token>, the anonymous token the
+app or browser made up itself: 32 to 256 characters of A-Z a-z 0-9 _ -, as on the real
+backend. A device belongs to the token that claimed it):
 
     POST   /api/devices/claim         {"code":"brave-otter-lamp"} -> 200 {"id","kind"}
     GET    /api/devices               -> 200 {"devices":[{"id","kind","last_seen_ms_ago"}]}
@@ -59,6 +59,8 @@ CODE_PATTERN = re.compile(r"[a-z]{3,5}(-[a-z]{3,5}){2}")
 CODE_TTL_SECONDS = 600.0
 MAX_FAILED_CLAIMS = 10  # wrong codes one install may send ...
 CLAIM_WINDOW_SECONDS = 60.0  # ... within this time, before it gets 429
+USER_TOKEN_HEADER = "X-Harmoniser-Token"
+USER_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{32,256}")  # the real backend's lib/ownership.ts
 HOST_PATTERN = re.compile(r"[A-Za-z0-9.\-\[\]:]{1,100}")
 ACTIONS = mock_esp32.TIMER_ACTIONS + mock_esp32.COUNTER_ACTIONS
 
@@ -69,7 +71,7 @@ ERR_BAD_CODE = "code must be three words"
 ERR_BAD_STATE = "state must have a type and a numeric version"
 ERR_UNKNOWN_CODE = "no unclaimed device has this code (it works once, for 10 minutes)"
 ERR_UNKNOWN_DEVICE = "no such device"
-ERR_NO_INSTALL_TOKEN = "Authorization: Bearer <install token> is required"
+ERR_NO_INSTALL_TOKEN = "Send your device token in the X-Harmoniser-Token header."
 ERR_TOO_MANY_CLAIMS = "too many wrong codes, wait a minute"
 ERR_UNAUTHORIZED = "unknown device or token"
 
@@ -105,8 +107,39 @@ WORDS = (
     "drift", "march", "study", "learn", "teach",
 )
 
+# Error codes, as in the real backend's lib/devices/errors.ts. Where a message is not listed,
+# the status decides; a 400 that is not listed is a capsule the board would refuse.
+ERROR_CODES_BY_MESSAGE = {
+    ERR_BAD_HW: "invalid_registration",
+    ERR_BAD_KIND: "invalid_registration",
+    ERR_BAD_FW: "invalid_registration",
+    ERR_BAD_CODE: "invalid_code",
+    ERR_BAD_STATE: "invalid_state",
+    ERR_UNKNOWN_CODE: "code_not_found",
+    mock_esp32.ERR_BAD_ACTION: "invalid_action",
+    mock_esp32.ERR_BAD_JSON: "invalid_json",
+    mock_esp32.ERR_TOO_DEEP: "invalid_json",
+    mock_esp32.ERR_HAS_NUL: "invalid_json",
+    mock_esp32.ERR_BAD_LENGTH: "invalid_json",
+}
+ERROR_CODES_BY_STATUS = {
+    400: "invalid_capsule",
+    401: "unauthorized",
+    404: "not_found",
+    405: "method_not_allowed",
+    413: "payload_too_large",
+    429: "rate_limited",
+    500: "internal_error",
+}
+
 Json = Dict[str, Any]
 log = logging.getLogger("mock_relay")
+
+
+def error_body(status: int, message: str) -> Json:
+    """The error envelope of the real backend: {"error":{"code","message"}}."""
+    code = ERROR_CODES_BY_MESSAGE.get(message) or ERROR_CODES_BY_STATUS.get(status, "error")
+    return {"error": {"code": code, "message": message}}
 
 
 class Device:
@@ -246,20 +279,21 @@ class Relay:
     # ---- user side ----
 
     @staticmethod
-    def install_token(authorization: Optional[str]) -> str:
-        """Who a user-side request comes from. There are no accounts: any non-empty bearer
-        token is an install of the app, and a device belongs to the install that claimed it."""
-        scheme, _, token = (authorization or "").partition(" ")
-        if scheme.lower() != "bearer" or not token.strip():
+    def install_token(header: Optional[str]) -> str:
+        """Who a user-side request comes from: the value of X-Harmoniser-Token. There are no
+        accounts; the app (or a browser) made the token up, and a device belongs to the token
+        that claimed it. Missing or not of the right shape: 401."""
+        token = (header or "").strip()
+        if not USER_TOKEN_PATTERN.fullmatch(token):
             raise ApiError(401, ERR_NO_INSTALL_TOKEN)
-        return token.strip()
+        return token
 
     def _count_failed_claim(self, user: str) -> None:
         """The lock must be held."""
         self.failed_claims.setdefault(user, []).append(time.monotonic())
 
-    def claim(self, authorization: Optional[str], read_body: Callable[[], Json]) -> Json:
-        user = self.install_token(authorization)
+    def claim(self, user_token: Optional[str], read_body: Callable[[], Json]) -> Json:
+        user = self.install_token(user_token)
         with self.lock:
             now = time.monotonic()
             recent = [at for at in self.failed_claims.get(user, []) if now - at < CLAIM_WINDOW_SECONDS]
@@ -289,8 +323,8 @@ class Relay:
             raise ApiError(404, ERR_UNKNOWN_DEVICE)
         return device
 
-    def list_devices(self, authorization: Optional[str]) -> Json:
-        user = self.install_token(authorization)
+    def list_devices(self, user_token: Optional[str]) -> Json:
+        user = self.install_token(user_token)
         with self.lock:
             now = time.monotonic()
             return {"devices": [
@@ -298,8 +332,8 @@ class Relay:
                 for device in self.by_id.values() if device.claimed and device.owner == user
             ]}
 
-    def put_capsule(self, device_id: str, authorization: Optional[str], read_body: Callable[[], Json]) -> Json:
-        user = self.install_token(authorization)
+    def put_capsule(self, device_id: str, user_token: Optional[str], read_body: Callable[[], Json]) -> Json:
+        user = self.install_token(user_token)
         with self.lock:
             self._owned(device_id, user)  # 404 before the body is looked at
         capsule = clean_capsule(read_body())
@@ -310,8 +344,8 @@ class Relay:
             device.action = None  # an action meant for the previous capsule must not hit this one
             return {"version": device.version}
 
-    def post_action(self, device_id: str, authorization: Optional[str], read_body: Callable[[], Json]) -> Json:
-        user = self.install_token(authorization)
+    def post_action(self, device_id: str, user_token: Optional[str], read_body: Callable[[], Json]) -> Json:
+        user = self.install_token(user_token)
         with self.lock:
             self._owned(device_id, user)
         action = read_body().get("action")
@@ -323,18 +357,18 @@ class Relay:
             device.action = action
             return {"action_seq": device.action_seq}
 
-    def get_state(self, device_id: str, authorization: Optional[str]) -> Json:
-        user = self.install_token(authorization)
+    def get_state(self, device_id: str, user_token: Optional[str]) -> Json:
+        user = self.install_token(user_token)
         with self.lock:
             device = self._owned(device_id, user)
             answer = dict(device.state or {})
             answer["last_seen_ms_ago"] = int((time.monotonic() - device.last_seen) * 1000)
             return answer
 
-    def unpair(self, device_id: str, authorization: Optional[str], host: Optional[str]) -> None:
+    def unpair(self, device_id: str, user_token: Optional[str], host: Optional[str]) -> None:
         """The device keeps its id and token, loses its owner and what was queued for it, and
         gets a new code: the board shows a fresh QR code after its next poll."""
-        user = self.install_token(authorization)
+        user = self.install_token(user_token)
         with self.lock:
             device = self._owned(device_id, user)
             device.claimed = False
@@ -363,13 +397,15 @@ PAIR_PAGE = """<!doctype html>
 <script>
   const button = document.getElementById("pair");
   const result = document.getElementById("result");
-  // The app sends its install token. A browser has none, so it makes one up and keeps it.
-  function installToken() {{
+  // The app sends its own token. A browser makes one up and keeps it, under the same key
+  // and of the same shape as the real site (32 random bytes, base64url).
+  function deviceToken() {{
     let token = null;
-    try {{ token = localStorage.getItem("installToken"); }} catch (error) {{}}
-    if (!token) {{
-      token = "web-" + Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
-      try {{ localStorage.setItem("installToken", token); }} catch (error) {{}}
+    try {{ token = localStorage.getItem("harmoniser.deviceToken"); }} catch (error) {{}}
+    if (!token || !/^[A-Za-z0-9_-]{{32,256}}$/.test(token)) {{
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      token = btoa(String.fromCharCode(...bytes)).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "");
+      try {{ localStorage.setItem("harmoniser.deviceToken", token); }} catch (error) {{}}
     }}
     return token;
   }}
@@ -379,7 +415,7 @@ PAIR_PAGE = """<!doctype html>
     try {{
       const response = await fetch("/api/devices/claim", {{
         method: "POST",
-        headers: {{"Content-Type": "application/json", "Authorization": "Bearer " + installToken()}},
+        headers: {{"Content-Type": "application/json", "X-Harmoniser-Token": deviceToken()}},
         body: JSON.stringify({{code: document.getElementById("code").dataset.code}}),
       }});
       const answer = await response.json();
@@ -387,7 +423,7 @@ PAIR_PAGE = """<!doctype html>
         result.textContent = "Paired. The code on the wrist goes away within a few seconds.";
         return;
       }}
-      result.textContent = "Not paired: " + answer.error;
+      result.textContent = "Not paired: " + answer.error.message;
     }} catch (error) {{
       result.textContent = "Not paired: the relay did not answer.";
     }}
@@ -456,29 +492,30 @@ class Handler(BaseHTTPRequestHandler):
     def _routes(self, parts: List[str]) -> Dict[str, Tuple[int, Callable[[], Optional[Json]]]]:
         """Method -> (status on success, handler) for a path below /api/devices/."""
         relay, read = self.relay, self._read_json_object
-        authorization = self.headers.get("Authorization")
+        authorization = self.headers.get("Authorization")  # the board's
+        user_token = self.headers.get(USER_TOKEN_HEADER)  # the app's
         host = self.headers.get("Host")
         if parts == ["register"]:
             return {"POST": (201, lambda: relay.register(read(), host))}
         if parts == ["claim"]:
-            return {"POST": (200, lambda: relay.claim(authorization, read))}
+            return {"POST": (200, lambda: relay.claim(user_token, read))}
         if len(parts) == 1 and parts[0]:
-            return {"DELETE": (204, lambda: relay.unpair(parts[0], authorization, host))}
+            return {"DELETE": (204, lambda: relay.unpair(parts[0], user_token, host))}
         if len(parts) != 2:
             return {}
         device_id, leaf = parts
         if leaf == "capsule":  # the board reads it, the user writes it
             return {
                 "GET": (200, lambda: relay.poll(device_id, authorization, host)),
-                "PUT": (200, lambda: relay.put_capsule(device_id, authorization, read)),
+                "PUT": (200, lambda: relay.put_capsule(device_id, user_token, read)),
             }
         if leaf == "state":  # the board writes it, the user reads it
             return {
-                "GET": (200, lambda: relay.get_state(device_id, authorization)),
+                "GET": (200, lambda: relay.get_state(device_id, user_token)),
                 "POST": (204, lambda: relay.report(device_id, authorization, read)),
             }
         if leaf == "action":
-            return {"POST": (200, lambda: relay.post_action(device_id, authorization, read))}
+            return {"POST": (200, lambda: relay.post_action(device_id, user_token, read))}
         return {}
 
     def _route(self) -> None:
@@ -494,7 +531,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_bytes(status, "text/html; charset=utf-8", page.encode())
                 return
             if path == "/api/devices":
-                routes = {"GET": (200, lambda: self.relay.list_devices(self.headers.get("Authorization")))}
+                routes = {"GET": (200, lambda: self.relay.list_devices(self.headers.get(USER_TOKEN_HEADER)))}
             elif path.startswith("/api/devices/"):
                 routes = self._routes(path[len("/api/devices/"):].split("/"))
             else:
@@ -509,11 +546,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(status, payload)
         except ApiError as error:
             self._drop_unread_body()
-            self._send(error.status, {"error": error.message})
+            self._send(error.status, error_body(error.status, error.message))
         except Exception:  # a bug in the mock: say so instead of dropping the connection
             log.exception("%s %s failed", self.command, self.path)
             self.close_connection = True
-            self._send(500, {"error": "internal error"})
+            self._send(500, error_body(500, "internal error"))
 
     def _drop_unread_body(self) -> None:
         # On a kept-alive connection an unread body would be taken for the next request.

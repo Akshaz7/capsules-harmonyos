@@ -5,13 +5,14 @@
 #   ./test_relay.sh                          # http://localhost:8090 (mock_relay.py)
 #   ./test_relay.sh https://example.vercel.app
 #
-# The user-side requests carry "Authorization: Bearer <install token>". The fake takes any
-# token; the script makes one up per run. For a backend that wants a real one:
+# The user-side requests carry "X-Harmoniser-Token: <token>": 32 to 256 characters of
+# A-Z a-z 0-9 _ -, made up by the app itself. The script makes one up per run; to use a
+# particular one:
 #
 #   RELAY_INSTALL_TOKEN=... ./test_relay.sh https://...
 #
-# RELAY_OTHER_TOKEN is a second install, used to check that it cannot see the first one's
-# device; set it to empty to skip those checks where a second real token is not at hand.
+# RELAY_OTHER_TOKEN is a second app, used to check that it cannot see the first one's
+# device; set it to empty to skip those checks.
 #
 # Not covered: a pairing code running out after 10 minutes, and the 429 after too many wrong
 # codes (tests/test_mock_relay.py does both for the fake). The simulated board registers under a hardware id of its own (RELAY_TEST_HW, default
@@ -22,8 +23,8 @@ BASE=${1:-http://localhost:8090}
 BASE=${BASE%/}
 API=$BASE/api/devices
 HW=${RELAY_TEST_HW:-test-relay-sh}
-INSTALL_TOKEN=${RELAY_INSTALL_TOKEN:-test-relay-sh-$$-$RANDOM}
-OTHER_TOKEN=${RELAY_OTHER_TOKEN-test-relay-sh-other-$$-$RANDOM}
+INSTALL_TOKEN=${RELAY_INSTALL_TOKEN:-test-relay-sh-app-one-0000000000-$$-$RANDOM}
+OTHER_TOKEN=${RELAY_OTHER_TOKEN-test-relay-sh-app-two-0000000000-$$-$RANDOM}
 BODY_FILE=$(mktemp)
 trap 'rm -f "$BODY_FILE"' EXIT
 PASSED=0
@@ -32,14 +33,16 @@ STATUS=""
 BODY=""
 
 # call WHO METHOD PATH [JSON]: runs curl, prints the exchange, sets STATUS and BODY.
-# WHO is "user", "other" (a second install of the app), "none" (no credentials at all) or a
-# device token.
+# WHO is "user", "other" (a second app), "short" or "bearer" (the app's token malformed or in
+# the wrong header), "none" (no credentials at all) or a device token.
 call() {
     local who=$1 method=$2 path=$3 json=${4-}
     local header shown
     case $who in
-    user) header="Authorization: Bearer $INSTALL_TOKEN" shown="app" ;;
-    other) header="Authorization: Bearer $OTHER_TOKEN" shown="another app" ;;
+    user) header="X-Harmoniser-Token: $INSTALL_TOKEN" shown="app" ;;
+    other) header="X-Harmoniser-Token: $OTHER_TOKEN" shown="another app" ;;
+    short) header="X-Harmoniser-Token: too-short" shown="app, malformed token" ;;
+    bearer) header="Authorization: Bearer $INSTALL_TOKEN" shown="app, token in the wrong header" ;;
     none) header="X-Relay-Test: 1" shown="nobody" ;;
     *) header="Authorization: Bearer $who" shown="board" ;;
     esac
@@ -78,6 +81,14 @@ expect_field() { expect "$1" "$(field "$1")" "$2"; }
 
 expect_differs() { # expect_differs WHAT ACTUAL OTHER
     if [ -n "$2" ] && [ "$2" != "$3" ]; then ok "$1 changed"; else bad "$1 did not change"; fi
+}
+
+expect_error() { # expect_error STATUS CODE: the envelope {"error":{"code","message"}}
+    expect_status "$1"
+    case $BODY in
+    '{"error":{"code":"'"$2"'","message":"'*) ok "error code = $2" ;;
+    *) bad "error is not {\"error\":{\"code\":\"$2\",\"message\":...}}" ;;
+    esac
 }
 
 expect_has() { # expect_has TEXT
@@ -143,15 +154,19 @@ expect_field claimed false
 echo
 echo "== Claim"
 call user POST /claim '{"code":"not-the-code"}'
-expect_status 404
+expect_error 404 code_not_found
 call user POST /claim '{"code":"123456"}'
-expect_status 400
+expect_error 400 invalid_code
 call user POST /claim '{"code":"only-two"}'
-expect_status 400
+expect_error 400 invalid_code
 # As a person types it: capitals, spaces instead of hyphens.
 TYPED=$(printf '%s' "$CODE" | tr 'a-z-' 'A-Z ')
 call none POST /claim "{\"code\":\"$CODE\"}"
-expect_status 401
+expect_error 401 unauthorized
+call short POST /claim "{\"code\":\"$CODE\"}"
+expect_error 401 unauthorized
+call bearer POST /claim "{\"code\":\"$CODE\"}"
+expect_error 401 unauthorized
 call user POST /claim "{\"code\":\"  $TYPED \"}"
 expect_status 200
 expect_field id "$ID"
@@ -181,11 +196,11 @@ expect_field count 3
 call "$TOKEN" GET "/$ID/capsule"
 expect_field version "$VERSION"
 call user PUT "/$ID/capsule" '{"type":"timer","label":"No seconds"}'
-expect_status 400
+expect_error 400 invalid_capsule
 call user PUT "/$ID/capsule" '{"type":"counter","count":-1}'
-expect_status 400
+expect_error 400 invalid_capsule
 call user PUT "/$ID/capsule" '{"type":"counter","x":[[[[[[[[1]]]]]]]]}'
-expect_status 400
+expect_error 400 invalid_json
 call "$TOKEN" GET "/$ID/capsule"
 expect_field version "$VERSION"
 expect_field label Squats
@@ -201,7 +216,7 @@ expect_field action_seq "$SEQ"
 expect_field action increment
 expect_field version "$VERSION"
 call user POST "/$ID/action" '{"action":"explode"}'
-expect_status 400
+expect_error 400 invalid_action
 call "$TOKEN" GET "/$ID/capsule"
 expect_field action_seq "$SEQ"
 
@@ -226,7 +241,7 @@ if [ -n "$OTHER_TOKEN" ]; then
     echo
     echo "== Another install cannot see or touch the device"
     call other GET "/$ID/state"
-    expect_status 404
+    expect_error 404 not_found
     call other PUT "/$ID/capsule" '{"type":"counter","label":"Not mine","count":1}'
     expect_status 404
     call other POST "/$ID/action" '{"action":"reset"}'
@@ -240,7 +255,9 @@ if [ -n "$OTHER_TOKEN" ]; then
     expect_field version "$VERSION"
 fi
 call none GET "/$ID/state"
-expect_status 401
+expect_error 401 unauthorized
+call bearer GET "/$ID/state"
+expect_error 401 unauthorized
 call none PUT "/$ID/capsule" '{"type":"counter","label":"Nobody","count":1}'
 expect_status 401
 
