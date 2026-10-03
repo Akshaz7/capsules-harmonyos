@@ -14,7 +14,7 @@
  * ("me vs Sam") and items ("shopping: milk, eggs"); slots it could not fill keep their default.
  * Pure logic: loading the rawfile and caching live in index.ets and RequestCache.ets.
  */
-import { Capsule } from '../CapsuleTypes';
+import { Capsule, MAX_TRIGGERS } from '../CapsuleTypes';
 import { validateCapsule } from '../CapsuleValidator';
 
 export type SlotKind = 'text' | 'number' | 'list';
@@ -95,7 +95,7 @@ export function foldText(text: string): string {
 const STOPWORDS: string[] = [
   'a', 'an', 'the', 'for', 'me', 'my', 'mine', 'i', 'we', 'us', 'our', 'you', 'vs', 'versus', 'against', 'and', 'or',
   'with', 'of', 'to', 'in', 'on', 'at', 'by', 'from', 'that', 'this', 'it', 'is', 'are', 'be', 'some', 'want', 'need',
-  'please', 'make', 'create', 'build', 'give', 'get', 'new', 'simple', 'quick', 'little', 'small', 'app', 'apps',
+  'please', 'remind', 'reminder', 'daily', 'make', 'create', 'build', 'give', 'get', 'new', 'simple', 'quick', 'little', 'small', 'app', 'apps',
   'application', 'capsule', 'just', 'can', 'could', 'would', 'like', 'let', 'lets', 'help', 'between', 'each', 'one',
   'two', 'min', 'mins', 'minute', 'minutes', 'm', 'x', 'per', 'every', 'all', 'about', 'how', 'many', 'much'
 ];
@@ -123,6 +123,89 @@ function stem(word: string): string {
 /** Same word, or the same word in the plural: "scoreboards" = "scoreboard". */
 function similar(a: string, b: string): boolean {
   return a === b || stem(a) === stem(b);
+}
+
+// ---- Times of day ----
+// Minimal parser until T4-16's shared one lands (T6-4): "8am", "8:30 pm", "20:00", "at 8" ("at 8" in the evening
+// or at night means 20:00). Bare words like "morning" are not times.
+
+const TIME_RE: RegExp = /\b(\d{1,2}):(\d{2})\s*(am|pm)?\b|\b(\d{1,2})\s*(am|pm)\b|\bat\s+(\d{1,2})\b(?![:.]?\d)/g;
+
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
+}
+
+/** Times of day in the request as "HH:MM", in order of appearance, without duplicates (max 5). */
+export function parseTimes(request: string): string[] {
+  const folded = foldText(request);
+  const evening = /\b(evening|night|tonight|afternoon|pm)\b/.test(folded);
+  const out: string[] = [];
+  const re = new RegExp(TIME_RE.source, 'g');
+  let m = re.exec(folded);
+  while (m !== null) {
+    let h = -1;
+    let min = 0;
+    let half = '';
+    if (m[1] !== undefined) {
+      h = Number(m[1]);
+      min = Number(m[2]);
+      half = m[3] ?? '';
+    } else if (m[4] !== undefined) {
+      h = Number(m[4]);
+      half = m[5];
+    } else if (m[6] !== undefined) {
+      h = Number(m[6]);
+      half = evening && h >= 1 && h <= 11 ? 'pm' : '';
+    }
+    const twelveHour = h <= 12; // "13pm" is not a time
+    if (half === 'pm' && h >= 1 && h <= 11) {
+      h += 12;
+    } else if (half === 'am' && h === 12) {
+      h = 0;
+    }
+    const at = `${pad2(h)}:${pad2(min)}`;
+    if (h >= 0 && h <= 23 && min <= 59 && (half === '' || twelveHour) && out.indexOf(at) < 0) {
+      out.push(at);
+    }
+    m = re.exec(folded);
+  }
+  return out.slice(0, MAX_TRIGGERS);
+}
+
+/** The request without its times of day, so "at 8" is not read as a count or a goal. */
+function withoutTimes(folded: string): string {
+  return folded.replace(new RegExp(TIME_RE.source, 'g'), ' ');
+}
+
+/** Habit, vitamin and medication templates get daily time triggers when the request names times. */
+export function takesTimeTriggers(t: TemplateEntry): boolean {
+  const text = foldText(`${t.id} ${t.name} ${t.tags.join(' ')}`);
+  return t.category === 'habits' || /\b(vitamins?|medication|medicine|meds|pills?|supplements?)\b/.test(text);
+}
+
+/** Adds one daily "time" trigger per time (a notification), with the permissions and schema version they need. */
+function addTimeTriggers(capsuleJson: string, times: string[], what: string): string {
+  if (times.length === 0) {
+    return capsuleJson;
+  }
+  const c = JSON.parse(capsuleJson) as Record<string, Object>;
+  const perms = Array.isArray(c['permissions']) ? (c['permissions'] as Object[]).map((p: Object) => String(p)) : [];
+  ['reminders', 'notifications'].forEach((p: string) => {
+    if (perms.indexOf(p) < 0) {
+      perms.push(p);
+    }
+  });
+  c['permissions'] = perms;
+  c['schemaVersion'] = 1; // triggers are schema v1.1; every v0 capsule is valid as v1
+  const label = what.length > 40 ? what.substring(0, 40).trim() : what;
+  const existing = Array.isArray(c['triggers']) ? c['triggers'] as Object[] : [];
+  const triggers: Object[] = existing.slice();
+  times.slice(0, Math.max(0, MAX_TRIGGERS - existing.length)).forEach((at: string) => {
+    const t: Record<string, Object> = { 'on': 'time', 'at': at, 'do': [`notify:Time for ${label}`], 'label': `${label} at ${at}` };
+    triggers.push(t);
+  });
+  c['triggers'] = triggers;
+  return JSON.stringify(c);
 }
 
 // ---- Search ----
@@ -265,7 +348,7 @@ export function extractItems(request: string): string[] {
 export function parseTemplateRequest(request: string): ParsedRequest {
   const names = extractNames(request);
   const items = extractItems(request);
-  const folded = foldText(request);
+  const folded = withoutTimes(foldText(request)); // times of day become triggers (T6-4), not numbers or words
   // "50/10", "3x10", "25-5" -> separate numbers
   const ws = numberWords(folded);
   const numbers: NumberToken[] = [];
@@ -586,7 +669,17 @@ export function fillTemplate(template: TemplateEntry, request: string, given?: R
   const unexplained = leftovers(template, request) > 0;
   const unclear = template.slots.map((s: TemplateSlot) => s.name)
     .filter((n: string) => unexplained && filled.indexOf(n) < 0);
-  const v = validateCapsule(applySlots(template, values));
+  let json = applySlots(template, values);
+  if (takesTimeTriggers(template)) {
+    try {
+      const named = JSON.parse(json) as Record<string, Object>;
+      json = addTimeTriggers(json, parseTimes(request), typeof named['name'] === 'string' ? named['name'] as string :
+        template.name);
+    } catch (e) {
+      // not an object: the validator below reports it
+    }
+  }
+  const v = validateCapsule(json);
   if (!v.ok) {
     return { values: values, filled: filled, unclear: unclear, error: v.errors.join('; ') };
   }

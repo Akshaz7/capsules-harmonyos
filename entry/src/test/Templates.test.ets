@@ -4,8 +4,8 @@ import { allComponents } from '../main/ets/core/CapsuleProgram';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import { CORE_TEMPLATES } from '../main/ets/core/templates/CoreTemplates';
 import {
-  applySlots, extractItems, extractNames, fillTemplate, foldText, matchTemplateIn, TemplateEntry, TemplateLibrary,
-  TemplateMatch
+  applySlots, extractItems, extractNames, fillTemplate, foldText, matchTemplateIn, parseTimes, TemplateEntry,
+  TemplateLibrary, TemplateMatch
 } from '../main/ets/core/templates/TemplateLibrary';
 import { fillUnclearSlots, parseSlotReply, slotPrompt } from '../main/ets/core/templates/SlotFill';
 import { MemoryStore, normaliseRequest, RequestCache } from '../main/ets/core/templates/RequestCache';
@@ -54,6 +54,20 @@ class CountingSource implements CapsuleSource {
 }
 
 const library = new TemplateLibrary(CORE_TEMPLATES);
+
+const VITAMINS: TemplateEntry = {
+  id: 'vitamins', name: 'Vitamins', description: 'Tick off vitamins.', category: 'health',
+  tags: ['vitamins', 'vitamin d', 'supplements', 'pills'], slots: [],
+  capsule: JSON.parse('{"schemaVersion":0,"id":"vitamins","name":"Vitamins","permissions":[],' +
+    '"ui":[{"type":"checklist","id":"c","items":["Vitamin D"]}]}') as Object
+};
+const WATER: TemplateEntry = {
+  id: 'water', name: 'Water tracker', description: 'Glasses of water.', category: 'habits',
+  tags: ['water', 'drink water', 'glasses'], slots: [{ name: 'goal', kind: 'number', default: 8, hints: ['glasses', 'goal'] }],
+  capsule: JSON.parse('{"schemaVersion":1,"id":"water","name":"Water: @{goal} glasses","permissions":[],' +
+    '"state":{"n":{"type":"number","initial":0}},"ui":[{"type":"display","text":"{n} / @{goal}"},' +
+    '{"type":"button","label":"+1","do":[{"set":"n","to":"n + 1"}]}]}') as Object
+};
 
 function match(request: string): TemplateMatch {
   const m = matchTemplateIn(library, request);
@@ -272,6 +286,38 @@ export default function templatesTest() {
       const local: LocalSources = { library: library, market: { baseUrl: 'https://m.example', transport: m } };
       const r = await generateCapsuleWith('pomodoro streak', [], '', new CountingSource(), undefined, local);
       expect(r.origin).assertEqual('community');
+    });
+  it('time triggers: parses times of day', 0, () => {
+      expect(JSON.stringify(parseTimes('vitamin D every morning at 8'))).assertEqual('["08:00"]');
+      expect(JSON.stringify(parseTimes('meds at 8am and 8pm'))).assertEqual('["08:00","20:00"]');
+      expect(JSON.stringify(parseTimes('water every evening at 9'))).assertEqual('["21:00"]');
+      expect(JSON.stringify(parseTimes('stretch 7:30 and 12pm and 12am'))).assertEqual('["07:30","12:00","00:00"]');
+      expect(JSON.stringify(parseTimes('pomodoro 50/10'))).assertEqual('[]');
+      expect(JSON.stringify(parseTimes('vitamins every morning'))).assertEqual('[]');
+    });
+
+    it('time triggers: vitamins and medication get one daily trigger per time, valid', 0, () => {
+      const one = fillTemplate(VITAMINS, 'vitamin D every morning at 8');
+      expect(one.error === undefined).assertTrue();
+      expect(one.capsule?.schemaVersion).assertEqual(1);
+      expect(JSON.stringify(one.capsule?.triggers)).assertEqual(
+        '[{"on":"time","do":["notify:Time for Vitamins"],"at":"08:00","label":"Vitamins at 08:00"}]');
+      expect(JSON.stringify(one.capsule?.permissions)).assertEqual('["reminders","notifications"]');
+      const two = fillTemplate(VITAMINS, 'meds at 8am and 8pm');
+      expect(two.capsule?.triggers?.length).assertEqual(2);
+      const none = fillTemplate(VITAMINS, 'vitamins checklist');
+      expect(none.capsule?.triggers === undefined).assertTrue();
+      expect(none.capsule?.schemaVersion).assertEqual(0);
+    });
+
+    it('time triggers: habit templates too, and times are not read as goals', 0, () => {
+      const f = fillTemplate(WATER, 'drink water 10 glasses, remind me at 9am and 3pm');
+      expect(f.values['goal']).assertEqual(10);
+      expect(JSON.stringify(f.capsule?.triggers?.map((t) => t.at))).assertEqual('["09:00","15:00"]');
+      const plain = fillTemplate(WATER, 'water at 9am');
+      expect(plain.values['goal']).assertEqual(8); // 9 is a time, not a goal
+      expect(fillTemplate(WATER, 'water tracker').capsule?.triggers === undefined).assertTrue();
+      expect(fillTemplate(CORE_TEMPLATES[1], 'pomodoro at 9am').capsule?.triggers === undefined).assertTrue();
     });
 });
 }
