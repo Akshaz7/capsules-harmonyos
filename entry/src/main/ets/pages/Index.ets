@@ -10,6 +10,7 @@ import {
   StateValues,
   Permission,
   generateCapsule,
+  generateCapsuleFromImage,
   getModelStatus,
   isNotEnglish,
   matchTemplate,
@@ -67,6 +68,7 @@ import { getInstallToken, getMarketplaceToken } from '../adapters/InstallToken';
 import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
+import { copyToCache, pickPhoto, removeSnap, SNAP_HINT, SNAP_NEEDS_CLOUD, takePhoto } from './SnapPhoto';
 import { CapsuleState, TimerRun } from '../core/WidgetModel';
 
 /** The version before the last applied change, with its state, for "Undo last change". */
@@ -226,6 +228,8 @@ struct Index {
   private market: MarketplaceClient = new MarketplaceClient('', '', '');
   @Local marketConfigured: boolean = false;
   /** "Change it…" (T3-16): which capsule the card's state belongs to, and what it shows. */
+  /** Snap (T3-2): the phone could not read the photo and the cloud was not used. */
+  @Local snapNeedsCloud: boolean = false;
   @Local changeId: string = '';
   @Local changeBusy: boolean = false;
   @Local changeSummary: string[] = [];
@@ -626,8 +630,7 @@ struct Index {
       this.request = this.share.text;
       this.create();
     } else if (this.share.imageUri.length > 0) {
-      // TODO(T3-2): send the image to generateCapsuleFromImage once core exports it (T5-3).
-      this.toast("Harmoniser can't build from photos yet. Describe it in words instead.");
+      this.createFromPhoto(this.share.imageUri);
     }
   }
 
@@ -831,6 +834,7 @@ struct Index {
 
   private async createFrom(text: string): Promise<void> {
     this.busy = true;
+    this.snapNeedsCloud = false;
     this.message = '';
     this.failed = false;
     this.unsupported = [];
@@ -1100,6 +1104,118 @@ struct Index {
   private toggleHint(id: string): void {
     this.hintOpenIds = this.hintOpenIds.includes(id) ? this.hintOpenIds.filter((x: string) => x !== id) :
       this.hintOpenIds.concat([id]);
+  }
+
+  /** Snap: camera or gallery, then the photo path. The pickers are system UIs (no permission needed). */
+  private snap(): void {
+    this.getUIContext().showActionSheet({
+      title: 'Snap',
+      message: SNAP_HINT,
+      autoCancel: true,
+      confirm: {
+        value: 'Cancel',
+        action: () => {
+        }
+      },
+      sheets: [
+        {
+          title: 'Take a photo',
+          action: () => {
+            if (this.ctx) {
+              takePhoto(this.ctx).then((uri: string) => this.createFromPhoto(uri));
+            }
+          }
+        },
+        {
+          title: 'Choose from gallery',
+          action: () => {
+            pickPhoto().then((uri: string) => this.createFromPhoto(uri));
+          }
+        }
+      ]
+    });
+  }
+
+  /**
+   * Photo -> capsule via core (on-device text reading first, the cloud only under the usual consent).
+   * The "needs cloud" note shows only when core says the phone could not do it (needsCloud). Never throws.
+   */
+  private async createFromPhoto(uri: string, allowCloud?: boolean): Promise<void> {
+    const ctx = this.ctx;
+    if (!ctx || uri.length === 0 || this.busy) {
+      return;
+    }
+    this.failed = false;
+    this.unsupported = [];
+    this.languageFailed = false;
+    this.templateOffer = undefined;
+    this.snapNeedsCloud = false;
+    const path = copyToCache(ctx, uri);
+    if (path.length === 0) {
+      this.toast("Couldn't open that photo");
+      return;
+    }
+    this.busy = true;
+    const smart = this.settings.aiMode === 'smart';
+    const consent = this.settings.hasCloudConsent(this.cloudKey());
+    let result: GenerateResult;
+    try {
+      result = await generateCapsuleFromImage(path, {
+        mode: smart ? 'smart' : 'on-device-only',
+        allowNonEu: this.settings.allowNonEu,
+        allowCloud: allowCloud ?? (smart && consent)
+      });
+    } catch (e) {
+      result = { ok: false, error: `generateCapsuleFromImage threw: ${(e as Error).message}`, details: [] };
+    }
+    removeSnap(path);
+    this.busy = false;
+    hilog.info(0x0001, 'Index', 'photo -> ok %{public}s origin %{public}s needsCloud %{public}s', String(result.ok),
+      result.origin ?? '-', String(result.needsCloud === true));
+    if (!result.ok && result.needsCloud === true) {
+      if (smart && !consent && this.cloudUsable()) {
+        this.showCloudNotice(() => this.createFromPhoto(uri, true), () => {
+          this.snapNeedsCloud = true;
+        });
+      } else {
+        this.snapNeedsCloud = true;
+      }
+      return;
+    }
+    try {
+      this.finishCreate('', result); // the consent sheet shows the origin badge (on your phone / cloud)
+    } catch (e) {
+      hilog.error(0x0001, 'Index', 'finishCreate crashed: %{public}s', (e as Error).message);
+      this.failed = true;
+    }
+  }
+
+  @Builder
+  snapCloudNote() {
+    Row({ space: 12 }) {
+      SymbolGlyph($r('sys.symbol.camera'))
+        .fontSize(20)
+        .fontColor([$r('sys.color.icon_secondary')])
+      Column({ space: 4 }) {
+        Text(SNAP_NEEDS_CLOUD)
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_primary'))
+          .width('100%')
+        if (this.settings.aiMode === 'on-device') {
+          Text('Switch AI mode to Smart in Settings')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.brand'))
+            .fontWeight(FontWeight.Medium)
+            .onClick(() => this.nav.pushPath({ name: SETTINGS_PAGE }))
+        }
+      }
+      .layoutWeight(1)
+    }
+    .alignItems(VerticalAlign.Top)
+    .width('100%')
+    .padding(16)
+    .borderRadius(20)
+    .backgroundColor($r('sys.color.comp_background_primary'))
   }
 
   /** T3-16: the card's state is per capsule; opening another one starts clean. */
@@ -1408,6 +1524,17 @@ struct Index {
           this.request = value;
         })
       Row() {
+        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+          SymbolGlyph($r('sys.symbol.camera'))
+            .fontSize(20)
+            .fontColor([$r('sys.color.icon_primary')])
+        }
+        .width(40)
+        .height(40)
+        .enabled(!this.busy)
+        .accessibilityText('Snap')
+        .accessibilityDescription(SNAP_HINT)
+        .onClick(() => this.snap())
         Blank()
         Button() {
           Row({ space: 6 }) {
@@ -1723,7 +1850,9 @@ struct Index {
           .fontColor($r('sys.color.font_secondary'))
           .width('100%')
           .padding({ left: 4 })
-        if (this.templateOffer !== undefined) {
+        if (this.snapNeedsCloud) {
+          this.snapCloudNote()
+        } else if (this.templateOffer !== undefined) {
           this.templateCard(this.templateOffer)
         } else if (this.languageFailed) {
           this.languageCard()
