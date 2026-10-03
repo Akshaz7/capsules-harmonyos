@@ -2,7 +2,7 @@
 
 Checked against the official [`hackathon_challenge.md`](https://github.com/onirodeveloper/hackyeah2026-challenge/blob/main/hackathon_challenge.md) on 2026-10-03 at about 20:00, at commit `a9d853e` (main, local). Owners: **Ash** (team lead), **T1** (coordination, builds, phones), **T2** (docs), **T3** (app UI), **T4** (core), **T5** (Cactus).
 
-Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing.
+Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing. Updated after T2-5..T2-7: the AI integration doc, the `AI_WORKFLOW.md` sections and the `CLAUDE.md` signing fix are done; the recorded demo is still missing.
 
 ## Technical requirements
 
@@ -13,7 +13,7 @@ Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing.
 | API 20+, with API 20 as the minimum | ✅ | `compatibleSdkVersion: 6.0.0(20)`, `targetSdkVersion: 6.1.1(24)` | – |
 | Compatible SDK and dev environment | ✅ | DevEco Studio 6.1.1, SDK API 24, hvigor, hdc | – |
 | Runs on an emulator or a compatible device | ✅ emulator / ⚠️ device | Emulator runs are recorded throughout `AI_WORKFLOW.md` | Physical device: no run is recorded in the repo yet. **T1**: once the phones are flashed, add one line to `AI_WORKFLOW.md` (device model, build, what was checked). Calendar alerts with the app closed have never been seen working (they don't fire on the emulator). |
-| Reproducible setup, build and launch instructions | ✅ | README "Setup, build, install, launch" | `CLAUDE.md` still says to use `devecocli signature generate`, which is mainland-China only (README already corrected). **T1/Ash**: fix `CLAUDE.md`. |
+| Reproducible setup, build and launch instructions | ✅ | README "Setup, build, install, launch" | Fixed: `CLAUDE.md` now points to DevEco Signing Configs (T2-7). |
 | Uses or improves a platform capability | ✅ | Calendar Kit, Notification Kit, Form Kit widget, Share Kit, Scan Kit, Core File Kit, Preferences, on-device inference through Node-API | – |
 
 ## Required deliverables
@@ -25,16 +25,16 @@ Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing.
 | 3 | Working `.hap` | ⚠️ | Pre-release `test-1` has `harmoniser-test-1.hap`, which I byte-scanned: no API key (the only match is the error string `"apiKey" is missing`) | It was built from `e493911`, which is many features behind, and it is unsigned, so emulator only. **T1**: publish a final release from the submission commit. Keep an unsigned emulator HAP, because judges default to the emulator, and add a signed one if it is meant for real devices. Byte-scan both for keys before uploading. |
 | 4 | Brief recorded demonstration | ❌ | None in the repo or releases | **Ash/T1**: record it following `docs/DEMO_SCRIPT.md` (T2-2), then link it from the README |
 | 5 | Architecture and implementation description | ✅ | README "Architecture", stage table, Mermaid diagram, Cactus port section | – |
-| 6 | `AI_WORKFLOW.md` | ⚠️ | Tools table, prompts, detailed work log, and some unsuccessful approaches and lessons | The template placeholders are still there: "Ideation and architecture", "Implementation" and "Testing and debugging" are `[Describe …]`, and there are placeholder bullets under Unsuccessful approaches, Known limitations and Lessons learned. The challenge explicitly asks for the workflow "from ideation and architecture through implementation, testing and debugging" and for how output was reviewed. **T1** (or whoever owns `AI_WORKFLOW.md`): fill these in from the work log and delete the placeholders. |
-| 7 | AI integration documentation (the product has AI features) | ❌ | The `AI_WORKFLOW.md` "AI feature disclosure" section is still all placeholders (`[Name/version/provider]` …). README and `docs/THIRD_PARTY.md` cover parts. | The challenge requires the model or service, inference flow, data handling, limitations, validation approach and privacy. **T2** can write `docs/AI_INTEGRATION.md` (docs/ is T2's) from the existing material if T1 assigns it. `AI_WORKFLOW.md` should then link to it instead of the placeholders. |
+| 6 | `AI_WORKFLOW.md` | ✅ (T2-7, `61d05d7`) | Tools table, prompts, detailed work log, and some unsuccessful approaches and lessons | The template placeholders are still there: "Ideation and architecture", "Implementation" and "Testing and debugging" are `[Describe …]`, and there are placeholder bullets under Unsuccessful approaches, Known limitations and Lessons learned. The challenge explicitly asks for the workflow "from ideation and architecture through implementation, testing and debugging" and for how output was reviewed. **T1** (or whoever owns `AI_WORKFLOW.md`): fill these in from the work log and delete the placeholders. |
+| 7 | AI integration documentation (the product has AI features) | ✅ (T2-6: `docs/AI_INTEGRATION.md`) | The `AI_WORKFLOW.md` "AI feature disclosure" section is still all placeholders (`[Name/version/provider]` …). README and `docs/THIRD_PARTY.md` cover parts. | The challenge requires the model or service, inference flow, data handling, limitations, validation approach and privacy. **T2** can write `docs/AI_INTEGRATION.md` (docs/ is T2's) from the existing material if T1 assigns it. `AI_WORKFLOW.md` should then link to it instead of the placeholders. |
 
 ## Use of AI rules
 
 | Rule | Status | Notes and owner |
 | --- | --- | --- |
-| List all models, agents, MCP servers, skills and tools | ⚠️ | The tools table lists Claude Code (Opus 5.5), a Sonnet subagent, `deveco-cli` and the hmos skills. Not listed: the product's own runtime models (LFM2-VL-450M with Cactus, Mistral `ministral-14b-latest`, Claude `claude-sonnet-5-5`), and `GEMINI.md` exists without saying whether Gemini was used. **T1**: add rows, or state that Gemini was not used. |
+| List all models, agents, MCP servers, skills and tools | ✅ (T2-7) | The tools table lists Claude Code (Opus 5.5), a Sonnet subagent, `deveco-cli` and the hmos skills. Not listed: the product's own runtime models (LFM2-VL-450M with Cactus, Mistral `ministral-14b-latest`, Claude `claude-sonnet-5-5`), and `GEMINI.md` exists without saying whether Gemini was used. **T1**: add rows, or state that Gemini was not used. |
 | Main prompts and reusable instructions | ✅ | Session briefs and `AGENTS.md` are summarised; the product prompt is in `core/CapsuleModel.ets` | – |
-| How output was reviewed and tested | ⚠️ | Covered row by row in the work log, but the "Implementation" and "Testing and debugging" sections are placeholders | Same owner as deliverable 6 |
+| How output was reviewed and tested | ✅ (T2-7) | Covered row by row in the work log, but the "Implementation" and "Testing and debugging" sections are placeholders | Same owner as deliverable 6 |
 | No keys, credentials or personal data | ✅ | History scan for key patterns (`sk-ant-…`, long `apiKey` values, private keys, signing passwords) found nothing. `config.local.json`, `*.p12`, `*.cer`, `*.p7b` and `local.properties` are git-ignored and untracked. The release HAP is clean. | Commit author emails include a university address and a contributor noreply address (public, not secret). Re-run the scan before the final push. |
 
 ## Evaluation risks (claims vs code)

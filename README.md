@@ -4,7 +4,7 @@
 
 **Describe a tiny app in one sentence and get it running natively on HarmonyOS. The app is plain JSON, checked against a strict schema, and can only use the device features you allow.**
 
-**Built at HackYeah 2026.** The project started from the HackYeah Hackathon Template, which gave the empty ArkTS project, `AGENTS.md`, `AI_WORKFLOW.md` and `hackathon-resources/`. Everything else was built during the hackathon; the commit history shows how. More docs: [compliance audit](docs/COMPLIANCE.md), [demo script](docs/DEMO_SCRIPT.md), [pitch outline](docs/SLIDES_OUTLINE.md), [third-party notes](docs/THIRD_PARTY.md).
+**Built at HackYeah 2026.** The project started from the HackYeah Hackathon Template, which gave the empty ArkTS project, `AGENTS.md`, `AI_WORKFLOW.md` and `hackathon-resources/`. Everything else was built during the hackathon; the commit history shows how. More docs: [AI integration](docs/AI_INTEGRATION.md), [compliance audit](docs/COMPLIANCE.md), [demo script](docs/DEMO_SCRIPT.md), [pitch outline](docs/SLIDES_OUTLINE.md), [third-party notes](docs/THIRD_PARTY.md).
 
 Each app Harmoniser makes is a *capsule*: a small single-purpose app, such as a set of cooking timers, a squat counter or a medication checklist. It is described as JSON under the contract in [`SCHEMA.md`](SCHEMA.md). A capsule contains no code. Harmoniser reads it, rejects anything outside the schema, and draws it with native ArkUI components backed by real system services.
 
