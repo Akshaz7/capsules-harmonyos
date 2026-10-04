@@ -85,6 +85,7 @@ import { Palette } from '../theme/Tokens';
 import { storeWidthClass } from '../theme/Breakpoint';
 import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../components';
 import { PromptBar } from '../components/PromptBar';
+import { BuildCard, BuildStep } from '../components/BuildCard';
 import { RecentRow, RecentTile, SuggestionChips } from '../components/CreateParts';
 import { shareCapsule } from '../sharing';
 import { MiniPreview } from './MiniPreview';
@@ -2288,6 +2289,12 @@ struct Index {
           }
           .padding({ left: 20, right: 20 })
           Column({ space: 14 }) {
+            if (Flags.NEW_PROGRESS && this.busy) {
+              BuildCard({
+                request: this.request.trim().length > 0 ? this.request.trim() : 'Reading your photo',
+                steps: this.buildSteps()
+              })
+            }
             this.createNotices()
             RecentRow({ tiles: this.recentTiles(), onOpen: (id: string) => this.open(id) })
             if (this.request.trim().length === 0) {
@@ -2345,6 +2352,16 @@ struct Index {
       };
       return t;
     });
+  }
+
+  /** The order the core tries sources (core/CapsuleGenerator.ets), as the build card lists it. */
+  private buildSteps(): BuildStep[] {
+    const steps: BuildStep[] = [{ label: 'On your phone', detail: 'Built-in rules and templates, no internet' }];
+    steps.push({ label: 'On-device AI', detail: this.onDeviceStatus });
+    if (this.settings.aiMode === 'smart' && this.cloudUsable()) {
+      steps.push({ label: this.cloudName(), detail: 'Only when your phone cannot build it' });
+    }
+    return steps;
   }
 
   /** The existing rotating examples, without their "Try: " prefix. */
@@ -2857,6 +2874,15 @@ struct Index {
   frameAddToHome(entry: CapsuleEntry) {
     // PROTECTED: owned by T4. Do not remove or modify. See /tmp/hy-tasks.
     AddToHomeButton({ capsuleId: entry.capsule.id, capsuleName: entry.capsule.name })
+  }
+
+  /** System back on an open capsule closes it (redesign frame); pushed pages and the tabs behave as before. */
+  onBackPress(): boolean {
+    if (Flags.NEW_FRAME && this.nav.size() === 0 && this.openEntry() !== undefined) {
+      this.close();
+      return true;
+    }
+    return false;
   }
 
   /** Footer Share: the same share panel as SharingBar; if it can't open, point to "Show as QR code". */
