@@ -29,4 +29,10 @@ export class Flags {
   static readonly CREATE_SUGGESTIONS: boolean = false;
   /** Lewis's visual polish pass (polish/visual): every new visual sits behind this. */
   static readonly NEW_POLISH: boolean = true;
+  /**
+   * T4-31 (Ash): Claude is the only cloud provider. Core uses only the anthropic entry of config.local.json
+   * (mistral/openai entries are ignored); the UI hides Mistral / EU-cloud choices. Off: the old provider choice.
+   * Core mirrors this as CLOUD_CLAUDE_ONLY in core/CloudPolicy.ets (core imports nothing from theme/).
+   */
+  static readonly CLOUD_CLAUDE_ONLY: boolean = true;
 }
