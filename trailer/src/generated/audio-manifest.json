@@ -1,0 +1,838 @@
+{
+  "vo": {
+    "s1-phone": {
+      "file": "audio/vo/s1-phone.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 36,
+      "playbackRate": 1.1,
+      "slotFrames": 38,
+      "budgetFrames": 28,
+      "overrun": true,
+      "words": [
+        {
+          "word": "This",
+          "frame": 0
+        },
+        {
+          "word": "is",
+          "frame": 6
+        },
+        {
+          "word": "your",
+          "frame": 10
+        },
+        {
+          "word": "phone.",
+          "frame": 14
+        }
+      ]
+    },
+    "s1-timers": {
+      "file": "audio/vo/s1-timers.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 40,
+      "playbackRate": 1.1,
+      "slotFrames": 42,
+      "budgetFrames": 32,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Three",
+          "frame": 0
+        },
+        {
+          "word": "timer",
+          "frame": 8
+        },
+        {
+          "word": "apps.",
+          "frame": 17
+        }
+      ]
+    },
+    "s1-tips": {
+      "file": "audio/vo/s1-tips.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 44,
+      "playbackRate": 1.1,
+      "slotFrames": 46,
+      "budgetFrames": 36,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Two",
+          "frame": 0
+        },
+        {
+          "word": "tip",
+          "frame": 7
+        },
+        {
+          "word": "calculators.",
+          "frame": 12
+        }
+      ]
+    },
+    "s1-packing": {
+      "file": "audio/vo/s1-packing.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 57,
+      "playbackRate": 1.1,
+      "slotFrames": 60,
+      "budgetFrames": 50,
+      "overrun": true,
+      "words": [
+        {
+          "word": "A",
+          "frame": 0
+        },
+        {
+          "word": "packing",
+          "frame": 5
+        },
+        {
+          "word": "app",
+          "frame": 19
+        },
+        {
+          "word": "from",
+          "frame": 24
+        },
+        {
+          "word": "one",
+          "frame": 30
+        },
+        {
+          "word": "trip.",
+          "frame": 35
+        }
+      ]
+    },
+    "s1-once": {
+      "file": "audio/vo/s1-once.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 38,
+      "playbackRate": 1.053,
+      "slotFrames": 48,
+      "budgetFrames": 38,
+      "overrun": false,
+      "words": [
+        {
+          "word": "All",
+          "frame": 0
+        },
+        {
+          "word": "opened",
+          "frame": 7
+        },
+        {
+          "word": "once.",
+          "frame": 16
+        }
+      ]
+    },
+    "s2-download": {
+      "file": "audio/vo/s2-download.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 65,
+      "playbackRate": 1.1,
+      "slotFrames": 68,
+      "budgetFrames": 58,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Every",
+          "frame": 0
+        },
+        {
+          "word": "little",
+          "frame": 9
+        },
+        {
+          "word": "job",
+          "frame": 16
+        },
+        {
+          "word": "means",
+          "frame": 25
+        },
+        {
+          "word": "another",
+          "frame": 32
+        },
+        {
+          "word": "download.",
+          "frame": 40
+        }
+      ]
+    },
+    "s2-account": {
+      "file": "audio/vo/s2-account.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 36,
+      "playbackRate": 1.1,
+      "slotFrames": 36,
+      "budgetFrames": 26,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Another",
+          "frame": 0
+        },
+        {
+          "word": "account.",
+          "frame": 12
+        }
+      ]
+    },
+    "s2-ad": {
+      "file": "audio/vo/s2-ad.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 31,
+      "playbackRate": 1.1,
+      "slotFrames": 39,
+      "budgetFrames": 29,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Another",
+          "frame": 0
+        },
+        {
+          "word": "ad.",
+          "frame": 11
+        }
+      ]
+    },
+    "s3-meet": {
+      "file": "audio/vo/s3-meet.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 60,
+      "playbackRate": 1.1,
+      "slotFrames": 62,
+      "budgetFrames": 52,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Meet",
+          "frame": 0
+        },
+        {
+          "word": "Harmoniser,",
+          "frame": 8
+        },
+        {
+          "word": "for",
+          "frame": 24
+        },
+        {
+          "word": "Harmony",
+          "frame": 28
+        },
+        {
+          "word": "O",
+          "frame": 37
+        },
+        {
+          "word": "S.",
+          "frame": 41
+        }
+      ]
+    },
+    "s3-ask": {
+      "file": "audio/vo/s3-ask.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 72,
+      "playbackRate": 1,
+      "slotFrames": 88,
+      "budgetFrames": 78,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Don't",
+          "frame": 0
+        },
+        {
+          "word": "search",
+          "frame": 10
+        },
+        {
+          "word": "for",
+          "frame": 18
+        },
+        {
+          "word": "an",
+          "frame": 22
+        },
+        {
+          "word": "app.",
+          "frame": 26
+        },
+        {
+          "word": "Ask",
+          "frame": 36
+        },
+        {
+          "word": "for",
+          "frame": 45
+        },
+        {
+          "word": "one.",
+          "frame": 50
+        }
+      ]
+    },
+    "p-emma": {
+      "file": "audio/vo/p-emma.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 72,
+      "playbackRate": 1,
+      "slotFrames": 114,
+      "budgetFrames": 104,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Emma's",
+          "frame": 0
+        },
+        {
+          "word": "got",
+          "frame": 11
+        },
+        {
+          "word": "a",
+          "frame": 16
+        },
+        {
+          "word": "geography",
+          "frame": 19
+        },
+        {
+          "word": "test",
+          "frame": 38
+        },
+        {
+          "word": "tomorrow.",
+          "frame": 45
+        }
+      ]
+    },
+    "p-judge": {
+      "file": "audio/vo/p-judge.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 139,
+      "playbackRate": 1,
+      "slotFrames": 204,
+      "budgetFrames": 194,
+      "overrun": false,
+      "words": [
+        {
+          "word": "A",
+          "frame": 0
+        },
+        {
+          "word": "judge",
+          "frame": 5
+        },
+        {
+          "word": "tried",
+          "frame": 13
+        },
+        {
+          "word": "to",
+          "frame": 19
+        },
+        {
+          "word": "break",
+          "frame": 22
+        },
+        {
+          "word": "it",
+          "frame": 29
+        },
+        {
+          "word": "with",
+          "frame": 32
+        },
+        {
+          "word": "this.",
+          "frame": 37
+        },
+        {
+          "word": "It",
+          "frame": 60
+        },
+        {
+          "word": "planned",
+          "frame": 66
+        },
+        {
+          "word": "the",
+          "frame": 75
+        },
+        {
+          "word": "day",
+          "frame": 79
+        },
+        {
+          "word": "around",
+          "frame": 84
+        },
+        {
+          "word": "Krah-koof's",
+          "frame": 92
+        },
+        {
+          "word": "forecast.",
+          "frame": 106
+        }
+      ]
+    },
+    "p-tyler": {
+      "file": "audio/vo/p-tyler.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 97,
+      "playbackRate": 1,
+      "slotFrames": 114,
+      "budgetFrames": 104,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Tyler's",
+          "frame": 0
+        },
+        {
+          "word": "running",
+          "frame": 13
+        },
+        {
+          "word": "a",
+          "frame": 21
+        },
+        {
+          "word": "ten",
+          "frame": 23
+        },
+        {
+          "word": "K.",
+          "frame": 33
+        },
+        {
+          "word": "He",
+          "frame": 48
+        },
+        {
+          "word": "only",
+          "frame": 53
+        },
+        {
+          "word": "thinks",
+          "frame": 59
+        },
+        {
+          "word": "in",
+          "frame": 66
+        },
+        {
+          "word": "miles.",
+          "frame": 70
+        }
+      ]
+    },
+    "p-friends": {
+      "file": "audio/vo/p-friends.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 80,
+      "playbackRate": 1,
+      "slotFrames": 114,
+      "budgetFrames": 104,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Four",
+          "frame": 0
+        },
+        {
+          "word": "friends.",
+          "frame": 10
+        },
+        {
+          "word": "One",
+          "frame": 21
+        },
+        {
+          "word": "bill.",
+          "frame": 27
+        },
+        {
+          "word": "Zero",
+          "frame": 42
+        },
+        {
+          "word": "arguments.",
+          "frame": 52
+        }
+      ]
+    },
+    "p-olivia": {
+      "file": "audio/vo/p-olivia.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 68,
+      "playbackRate": 1,
+      "slotFrames": 86,
+      "budgetFrames": 76,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Olivia",
+          "frame": 0
+        },
+        {
+          "word": "works",
+          "frame": 13
+        },
+        {
+          "word": "in",
+          "frame": 21
+        },
+        {
+          "word": "fifty-minute",
+          "frame": 25
+        },
+        {
+          "word": "sprints.",
+          "frame": 41
+        }
+      ]
+    },
+    "p-rose": {
+      "file": "audio/vo/p-rose.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 89,
+      "playbackRate": 1,
+      "slotFrames": 116,
+      "budgetFrames": 106,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Grandma",
+          "frame": 0
+        },
+        {
+          "word": "Rose",
+          "frame": 13
+        },
+        {
+          "word": "promised",
+          "frame": 22
+        },
+        {
+          "word": "eight",
+          "frame": 34
+        },
+        {
+          "word": "glasses.",
+          "frame": 40
+        },
+        {
+          "word": "She's",
+          "frame": 53
+        },
+        {
+          "word": "getting",
+          "frame": 60
+        },
+        {
+          "word": "there.",
+          "frame": 68
+        }
+      ]
+    },
+    "p-mike": {
+      "file": "audio/vo/p-mike.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 70,
+      "playbackRate": 1,
+      "slotFrames": 86,
+      "budgetFrames": 76,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Mike",
+          "frame": 0
+        },
+        {
+          "word": "says",
+          "frame": 9
+        },
+        {
+          "word": "he",
+          "frame": 15
+        },
+        {
+          "word": "won.",
+          "frame": 18
+        },
+        {
+          "word": "Now",
+          "frame": 34
+        },
+        {
+          "word": "there's",
+          "frame": 39
+        },
+        {
+          "word": "proof.",
+          "frame": 46
+        }
+      ]
+    },
+    "s5-pin": {
+      "file": "audio/vo/s5-pin.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 69,
+      "playbackRate": 1,
+      "slotFrames": 142,
+      "budgetFrames": 132,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Seven",
+          "frame": 0
+        },
+        {
+          "word": "apps.",
+          "frame": 11
+        },
+        {
+          "word": "Pin",
+          "frame": 19
+        },
+        {
+          "word": "the",
+          "frame": 26
+        },
+        {
+          "word": "ones",
+          "frame": 29
+        },
+        {
+          "word": "you",
+          "frame": 34
+        },
+        {
+          "word": "actually",
+          "frame": 39
+        },
+        {
+          "word": "use.",
+          "frame": 48
+        }
+      ]
+    },
+    "s6-native": {
+      "file": "audio/vo/s6-native.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 59,
+      "playbackRate": 1.1,
+      "slotFrames": 60,
+      "budgetFrames": 50,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Built",
+          "frame": 0
+        },
+        {
+          "word": "natively",
+          "frame": 9
+        },
+        {
+          "word": "for",
+          "frame": 20
+        },
+        {
+          "word": "Harmony",
+          "frame": 25
+        },
+        {
+          "word": "O",
+          "frame": 34
+        },
+        {
+          "word": "S.",
+          "frame": 38
+        }
+      ]
+    },
+    "s6-tap": {
+      "file": "audio/vo/s6-tap.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 38,
+      "playbackRate": 1.1,
+      "slotFrames": 44,
+      "budgetFrames": 34,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Tap",
+          "frame": 0
+        },
+        {
+          "word": "them",
+          "frame": 7
+        },
+        {
+          "word": "right",
+          "frame": 12
+        },
+        {
+          "word": "there.",
+          "frame": 16
+        }
+      ]
+    },
+    "s6-calendar": {
+      "file": "audio/vo/s6-calendar.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 59,
+      "playbackRate": 1,
+      "slotFrames": 74,
+      "budgetFrames": 64,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Timers",
+          "frame": 0
+        },
+        {
+          "word": "land",
+          "frame": 17
+        },
+        {
+          "word": "in",
+          "frame": 25
+        },
+        {
+          "word": "your",
+          "frame": 28
+        },
+        {
+          "word": "calendar.",
+          "frame": 32
+        }
+      ]
+    },
+    "s7-name": {
+      "file": "audio/vo/s7-name.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 31,
+      "playbackRate": 1.1,
+      "slotFrames": 34,
+      "budgetFrames": 24,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Harmoniser.",
+          "frame": 0
+        }
+      ]
+    },
+    "s7-tagline": {
+      "file": "audio/vo/s7-tagline.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 72,
+      "playbackRate": 1.1,
+      "slotFrames": 76,
+      "budgetFrames": 66,
+      "overrun": true,
+      "words": [
+        {
+          "word": "Tiny",
+          "frame": 0
+        },
+        {
+          "word": "apps",
+          "frame": 15
+        },
+        {
+          "word": "you",
+          "frame": 25
+        },
+        {
+          "word": "don't",
+          "frame": 30
+        },
+        {
+          "word": "need",
+          "frame": 37
+        },
+        {
+          "word": "to",
+          "frame": 43
+        },
+        {
+          "word": "download.",
+          "frame": 45
+        }
+      ]
+    },
+    "s7-built": {
+      "file": "audio/vo/s7-built.mp3",
+      "trimStartFrames": 0,
+      "durationFrames": 51,
+      "playbackRate": 1,
+      "slotFrames": 92,
+      "budgetFrames": 82,
+      "overrun": false,
+      "words": [
+        {
+          "word": "Built",
+          "frame": 0
+        },
+        {
+          "word": "for",
+          "frame": 9
+        },
+        {
+          "word": "Harmony",
+          "frame": 14
+        },
+        {
+          "word": "O",
+          "frame": 25
+        },
+        {
+          "word": "S.",
+          "frame": 29
+        }
+      ]
+    }
+  },
+  "music": {
+    "ok": false,
+    "error": "HTTP 402: {\"detail\":{\"type\":\"payment_required\",\"code\":\"paid_plan_required\",\"message\":\"Music API is not available for free users. Please upgrade to a paid plan to use the API.\",\"status\":\"limited_access\",\"request_id\":\"091dec23785b918bbaee03a9c87695a8\"}}"
+  },
+  "sfx": {
+    "whoosh": {
+      "ok": true,
+      "file": "audio/sfx/whoosh.mp3",
+      "durationFrames": 24
+    },
+    "pop": {
+      "ok": true,
+      "file": "audio/sfx/pop.mp3",
+      "durationFrames": 15
+    },
+    "thunk": {
+      "ok": true,
+      "file": "audio/sfx/thunk.mp3",
+      "durationFrames": 18
+    },
+    "ticks": {
+      "ok": true,
+      "file": "audio/sfx/ticks.mp3",
+      "durationFrames": 36
+    }
+  }
+}

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tennis scoreboard, phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2F5BFF}a:hover{color:#1F45D6}
+button,input{font-family:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: linear-gradient(180deg, #DCE5FF 0px, #EEF2FB 200px, #F2F4F9 360px); color: #1B2236; font-family: 'HarmonyOS Sans', Manrope, system-ui, sans-serif">
+
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 10px 20px; flex-shrink: 0">
+<div style="display: flex; align-items: center; gap: 10px"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><path d="M8 3h16a6 6 0 0 1 6 6v10a6 6 0 0 1-6 6H13l-6 5v-5.3A6 6 0 0 1 2 19V9a6 6 0 0 1 6-6z" fill="#2F5BFF"></path><rect x="7" y="8.5" width="8" height="8" rx="2.2" fill="#FFFFFF"></rect><rect x="17.5" y="8.5" width="7.5" height="3.2" rx="1.6" fill="#FFFFFF"></rect><rect x="17.5" y="13.3" width="4.6" height="3.2" rx="1.6" fill="#FF7A45"></rect></svg><span style="font-size: 19px; font-weight: 700; letter-spacing: -0.2px">Harmoniser</span></div>
+<button aria-label="Scan a QR code" style="width: 44px; height: 44px; border-radius: 22px; border: 0; background: rgba(255,255,255,0.72); display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B2236" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8"></path><path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8"></path><path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16"></path><path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"></path><path d="M7.5 12h9"></path></svg></button>
+</div>
+
+<div style="flex: 1; min-height: 0; margin: 4px 12px 16px; border-radius: 28px; background: rgba(255,255,255,0.94); border: 1px solid rgba(47,91,255,0.12); box-shadow: 0 18px 40px rgba(27,34,54,0.10), 0 1px 2px rgba(27,34,54,0.05); display: flex; flex-direction: column; overflow: hidden">
+
+<div style="display: flex; align-items: center; gap: 12px; padding: 12px 10px 12px 14px; border-bottom: 1px solid #E8ECF4; flex-shrink: 0">
+<div style="width: 42px; height: 42px; border-radius: 13px; background: #EAF0FF; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2F5BFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M5.2 6.8c3.2 2.6 3.2 7.8 0 10.4M18.8 6.8c-3.2 2.6-3.2 7.8 0 10.4"></path></svg></div>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px">
+<div style="max-width: 100%; font-size: 17px; font-weight: 700; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Me vs Sam</div>
+<div style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 6px; border-radius: 10px; background: #EEF2FF; color: #2A47C7; font-size: 12px; font-weight: 600; line-height: 16px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2A47C7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.5"></rect><path d="M11 17.5h2"></path></svg><span>Made on your phone · no internet</span></div>
+</div>
+<button aria-label="Close capsule" style="width: 44px; height: 44px; border-radius: 22px; border: 0; background: #F1F3F8; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B2236" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+
+<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+
+<div style="background: #F5F7FB; border-radius: 18px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; align-items: center; height: 18px"><span style="flex: 1; font-size: 12px; font-weight: 600; color: #5B6478">Sets</span><sc-for list="{{cols}}" as="c" hint-placeholder-count="3"><span style="display: inline-block; width: 56px; text-align: center; font-size: 12px; font-weight: 600; color: #5B6478">{{c.label}}</span></sc-for></div>
+<div style="display: flex; align-items: center; height: 26px"><span style="flex: 1; font-size: 15px; font-weight: 700">Me</span><sc-for list="{{cols}}" as="c" hint-placeholder-count="3"><span style="display: inline-block; width: 56px; text-align: center; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: {{c.ink}}">{{c.a}}</span></sc-for></div>
+<div style="display: flex; align-items: center; height: 26px"><span style="flex: 1; font-size: 15px; font-weight: 700">Sam</span><sc-for list="{{cols}}" as="c" hint-placeholder-count="3"><span style="display: inline-block; width: 56px; text-align: center; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; color: {{c.ink}}">{{c.b}}</span></sc-for></div>
+</div>
+
+<div style="display: flex; justify-content: center"><span aria-live="polite" style="display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 16px; font-size: 14px; font-weight: 700; background: {{statusBg}}; color: {{statusInk}}">{{status}}</span></div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{players}}" as="pl" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 22px; background: {{pl.cardBg}}; border: 1.5px solid {{pl.cardBorder}}">
+<div style="display: flex; align-items: center; justify-content: space-between; height: 22px">
+<span style="font-size: 16px; font-weight: 700">{{pl.name}}</span>
+<sc-if value="{{pl.serving}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: #A8411A"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#FF7A45"></circle><path d="M5.5 6.5c3 2.5 3 8.5 0 11M18.5 6.5c-3 2.5-3 8.5 0 11" fill="none" stroke="#FFFFFF" stroke-width="1.6"></path></svg>Serve</span></sc-if>
+</div>
+<div style="font-size: 76px; font-weight: 800; line-height: 84px; letter-spacing: -2px; font-variant-numeric: tabular-nums; color: {{pl.ptInk}}">{{pl.pts}}</div>
+<div style="font-size: 14px; font-weight: 600; color: #5B6478">{{pl.games}}</div>
+<button aria-label="{{pl.addLabel}}" onClick="{{pl.add}}" style="height: 52px; border-radius: 16px; border: 0; background: #2F5BFF; color: #FFFFFF; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>Point</button>
+</div>
+</sc-for>
+</div>
+
+<div style="display: flex; gap: 10px; margin-top: auto">
+<button onClick="{{undo}}" style="flex: 1; height: 46px; border-radius: 15px; border: 1px solid #DCE2EE; background: #FFFFFF; color: #1B2236; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B2236" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6L4 11l5 5"></path><path d="M4 11h10a5 5 0 0 1 0 10h-3"></path></svg>Undo</button>
+<button onClick="{{newMatch}}" style="flex: 1; height: 46px; border-radius: 15px; border: 1px solid #DCE2EE; background: #FFFFFF; color: #1B2236; font-size: 15px; font-weight: 600; cursor: pointer">New match</button>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid #E8ECF4; flex-shrink: 0">
+<button style="flex: 1; min-width: 0; height: 44px; border-radius: 22px; border: 1px solid #DCE2EE; background: #F5F7FB; display: flex; align-items: center; gap: 8px; padding: 0 16px; color: #5B6478; font-size: 15px; font-weight: 500; cursor: pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2F5BFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L15.5 5.5a2.1 2.1 0 0 1 3 3L8 19z"></path><path d="M13.5 7.5l3 3"></path></svg><span>Change it…</span></button>
+<button aria-label="Share capsule" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #DCE2EE; background: #FFFFFF; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B2236" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><path d="M8 8l4-4 4 4"></path><path d="M6 12v6.5A1.5 1.5 0 0 0 7.5 20h9a1.5 1.5 0 0 0 1.5-1.5V12"></path></svg></button>
+<button aria-label="Add to home screen" style="width: 44px; height: 44px; border-radius: 22px; border: 1px solid #DCE2EE; background: #FFFFFF; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; cursor: pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B2236" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"></rect><rect x="13" y="4" width="7" height="7" rx="2"></rect><rect x="4" y="13" width="7" height="7" rx="2"></rect><path d="M16.5 13.5v6M13.5 16.5h6"></path></svg></button>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(...args) {
+    super(...args);
+    this.state = { sets: [[6, 4]], g: [3, 2], p: [3, 3], hist: [] };
+  }
+  won(sets) {
+    let a = 0, b = 0;
+    sets.forEach(function (s) { if (s[0] > s[1]) a++; else b++; });
+    return [a, b];
+  }
+  point(i) {
+    const s = this.state;
+    const w = this.won(s.sets);
+    if (w[0] === 2 || w[1] === 2) return;
+    const o = 1 - i;
+    const snap = { sets: s.sets, g: s.g, p: s.p };
+    let p = s.p.slice();
+    let g = s.g.slice();
+    let sets = s.sets.slice();
+    p[i] += 1;
+    if (p[i] >= 4 && p[i] - p[o] >= 2) {
+      g[i] += 1;
+      p = [0, 0];
+      if ((g[i] >= 6 && g[i] - g[o] >= 2) || g[i] === 7) {
+        sets = sets.concat([g]);
+        g = [0, 0];
+      }
+    }
+    this.setState({ p: p, g: g, sets: sets, hist: s.hist.concat([snap]) });
+  }
+  undo() {
+    const h = this.state.hist;
+    if (!h.length) return;
+    const last = h[h.length - 1];
+    this.setState({ sets: last.sets, g: last.g, p: last.p, hist: h.slice(0, -1) });
+  }
+  renderVals() {
+    const self = this;
+    const sets = this.state.sets, g = this.state.g, p = this.state.p;
+    const names = ['Me', 'Sam'];
+    const map = ['0', '15', '30', '40'];
+    let pts = [map[Math.min(p[0], 3)], map[Math.min(p[1], 3)]];
+    let status = '';
+    let tone = 'plain';
+    const deuceZone = p[0] >= 3 && p[1] >= 3;
+    if (deuceZone) {
+      if (p[0] === p[1]) { pts = ['40', '40']; status = 'Deuce'; tone = 'hot'; }
+      else {
+        const lead = p[0] > p[1] ? 0 : 1;
+        pts = lead === 0 ? ['AD', '40'] : ['40', 'AD'];
+        status = lead === 0 ? 'Advantage you' : 'Advantage Sam';
+        tone = 'hot';
+      }
+    }
+    const w = this.won(sets);
+    const over = w[0] === 2 || w[1] === 2;
+    const played = sets.reduce(function (n, s) { return n + s[0] + s[1]; }, 0) + g[0] + g[1];
+    const server = played % 2;
+    if (over) { status = w[0] === 2 ? 'You win the match' : 'Sam wins the match'; tone = 'win'; }
+    else if (!status) { status = (server === 0 ? 'You serve' : 'Sam serves') + ', set ' + (sets.length + 1) + ', game ' + (g[0] + g[1] + 1); }
+    const tones = { plain: ['#F1F3F8', '#3D4A66'], hot: ['#FFEFE6', '#A8411A'], win: ['#EAF0FF', '#2A47C7'] };
+    const cols = sets.map(function (s, i) { return { label: 'Set ' + (i + 1), a: String(s[0]), b: String(s[1]), ink: '#1B2236' }; });
+    if (!over) cols.push({ label: 'Set ' + (sets.length + 1), a: String(g[0]), b: String(g[1]), ink: '#2F5BFF' });
+    while (cols.length < 3) cols.push({ label: 'Set ' + (cols.length + 1), a: '', b: '', ink: '#9AA4BA' });
+    const players = [0, 1].map(function (i) {
+      const leading = pts[i] === 'AD' || (!deuceZone && p[i] > p[1 - i]);
+      return {
+        name: names[i],
+        pts: pts[i],
+        games: 'Games ' + g[i],
+        serving: !over && server === i,
+        cardBg: leading ? '#EAF0FF' : '#F5F7FB',
+        cardBorder: leading ? '#2F5BFF' : '#F5F7FB',
+        ptInk: pts[i] === 'AD' ? '#2F5BFF' : '#1B2236',
+        addLabel: 'Point to ' + (i === 0 ? 'me' : 'Sam'),
+        add: function () { self.point(i); }
+      };
+    });
+    return {
+      status: status,
+      statusBg: tones[tone][0],
+      statusInk: tones[tone][1],
+      cols: cols.slice(0, 3),
+      players: players,
+      undo: function () { self.undo(); },
+      newMatch: function () { self.setState({ sets: [], g: [0, 0], p: [0, 0], hist: [] }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

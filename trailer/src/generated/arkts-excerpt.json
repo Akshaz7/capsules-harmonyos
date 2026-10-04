@@ -1,0 +1,30 @@
+{
+  "source": "entry/src/main/ets/widget/pages/HarmoniserCard.ets#L105-L129",
+  "lines": [
+    "let storage = new LocalStorage();",
+    "",
+    "@Entry(storage)",
+    "@Component",
+    "struct HarmoniserCard {",
+    "  @LocalStorageProp('view') viewJson: string = '';",
+    "",
+    "  private openApp(capsuleId: string): void {",
+    "    postCardAction(this, {",
+    "      action: 'router',",
+    "      abilityName: 'EntryAbility',",
+    "      params: { capsuleId: capsuleId, source: 'harmoniser' }",
+    "    });",
+    "  }",
+    "",
+    "  /** A blank widget opens the app's capsule picker for this widget. */",
+    "  private chooseCapsule(formId: string): void {",
+    "    postCardAction(this, {",
+    "      action: 'router',",
+    "      abilityName: 'EntryAbility',",
+    "      params: { source: 'harmoniser', action: 'chooseCapsule', formId: formId }",
+    "    });",
+    "  }",
+    "",
+    "  private onTap(): void {"
+  ]
+}
