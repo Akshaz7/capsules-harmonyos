@@ -119,8 +119,8 @@ export default function widgetModelTest() {
       expect(route.reason).assertContain('motion');
       const view = buildWidgetView(c, initialState(c), gate([], true, false), NOW, false);
       expect(view.rows.length).assertEqual(0);
-      // The redesigned widget card just says "Tap to open" for app-only capsules.
-      expect(view.message).assertEqual('Tap to open');
+      // App-only capsules end with "Tap to open" (the motion widget also says why).
+      expect(view.message).assertContain('Tap to open');
       expect(buildWidgetView(c, initialState(c), gate(['motion'], true, false), NOW, false).rows.length).assertEqual(0);
     });
 
