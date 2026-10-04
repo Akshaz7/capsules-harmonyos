@@ -2247,7 +2247,7 @@ struct Index {
         .height(44)
         Column({ space: 4 }) {
           HomeHero()
-          Text('Tiny apps, made by asking.')
+          Text("Tiny apps you don't need to download.")
             .fontSize($r('sys.float.Body_L'))
             .fontColor($r('sys.color.font_secondary'))
             .width('100%')
@@ -2319,7 +2319,7 @@ struct Index {
               .fontWeight(800)
               .fontColor(Palette.text)
               .width('100%')
-            Text('Tiny apps, made by asking.')
+            Text("Tiny apps you don't need to download.")
               .fontSize(13)
               .fontWeight(500)
               .fontColor(Palette.text2)
