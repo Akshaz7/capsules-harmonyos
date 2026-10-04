@@ -11,6 +11,7 @@ import {
   ButtonStep,
   Capsule,
   CapsuleComponent,
+  ListComponent,
   RowComponent,
   Scalar,
   StateVar,
@@ -367,6 +368,27 @@ export function setInput(capsule: Capsule, state: StateValues, name: string, raw
   } catch (e) {
     return { ok: false, state: state, actions: [], error: errorText(e) };
   }
+}
+
+/**
+ * Finishes (removes) item `index` of the list state var `source`, as a tap on a list item's circle does in
+ * the app and on the widget. Not ok, with the state unchanged, when no list component shows `source` or the
+ * index is out of range. Never modifies `state`.
+ */
+export function finishListItem(capsule: Capsule, state: StateValues, source: string, index: number): ApplyResult {
+  const shown = allComponents(capsule.ui).some((c: CapsuleComponent) => c.type === 'list' &&
+    (c as ListComponent).source === source);
+  const items = state[source];
+  if (!shown || !Array.isArray(items)) {
+    return { ok: false, state: state, actions: [], error: `"${source}" is not a list on this capsule` };
+  }
+  const list = items as Scalar[];
+  if (!Number.isInteger(index) || index < 0 || index >= list.length) {
+    return { ok: false, state: state, actions: [], error: `There is no item ${index} in "${source}"` };
+  }
+  const next = copyState(state);
+  next[source] = list.filter((x: Scalar, n: number) => n !== index);
+  return { ok: true, state: next, actions: [] };
 }
 
 /** Every component, including those nested in when/row, depth first. */
