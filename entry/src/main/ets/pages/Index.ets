@@ -81,7 +81,7 @@ import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
 import { HomeHero } from './HomeHero';
 import { Flags } from '../theme/Flags';
-import { Palette } from '../theme/Tokens';
+import { Palette, Radius } from '../theme/Tokens';
 import { storeWidthClass } from '../theme/Breakpoint';
 import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../components';
 import { PromptBar } from '../components/PromptBar';
@@ -2027,6 +2027,18 @@ struct Index {
   /** Calm, final answer for requests capsules can never do; no suggestions to retry. */
   @Builder
   unsupportedCard() {
+    if (Flags.NEW_ERRORS) {
+      ErrorCard({
+        title: `Harmoniser can't do ${joinWords(this.unsupported)} by design.`,
+        body: `Capsules can only use: ${CAPSULE_ABILITIES}.`
+      })
+    } else {
+      this.unsupportedCardOld()
+    }
+  }
+
+  @Builder
+  unsupportedCardOld() {
     Row({ space: 12 }) {
       SymbolGlyph($r('sys.symbol.lock'))
         .fontSize(20)
@@ -2084,11 +2096,11 @@ struct Index {
     Row({ space: 12 }) {
       SymbolGlyph($r('sys.symbol.character_on_character'))
         .fontSize(20)
-        .fontColor([$r('sys.color.icon_secondary')])
+        .fontColor([Flags.NEW_ERRORS ? Palette.orangeIcon : $r('sys.color.icon_secondary')])
       Text() {
         Span(LANGUAGE_MESSAGE)
         Span(`'${LANGUAGE_EXAMPLE}'`)
-          .fontColor($r('sys.color.font_emphasize'))
+          .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_emphasize'))
           .fontWeight(FontWeight.Medium)
           .onClick(() => this.useLanguageExample())
         Span('.')
@@ -2100,8 +2112,8 @@ struct Index {
     .alignItems(VerticalAlign.Top)
     .width('100%')
     .padding(16)
-    .borderRadius(20)
-    .backgroundColor($r('sys.color.comp_background_primary'))
+    .borderRadius(Flags.NEW_ERRORS ? Radius.card : 20)
+    .backgroundColor(Flags.NEW_ERRORS ? Palette.orangeTintSoft : $r('sys.color.comp_background_primary'))
   }
 
   private useLanguageExample(): void {
@@ -2113,8 +2125,9 @@ struct Index {
   failedCard() {
     Column({ space: 12 }) {
       Text(FAILED_MESSAGE)
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_primary'))
+        .fontSize(Flags.NEW_ERRORS ? 15 : $r('sys.float.Body_M'))
+        .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
+        .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))
         .width('100%')
       Text(LIMITS_TEXT)
         .fontSize($r('sys.float.Body_S'))
@@ -2135,7 +2148,7 @@ struct Index {
           .padding({ left: 14, right: 14 })
           .margin({ right: 8, bottom: 8 })
           .borderRadius(18)
-          .backgroundColor($r('sys.color.comp_background_tertiary'))
+          .backgroundColor(Flags.NEW_ERRORS ? Palette.surface : $r('sys.color.comp_background_tertiary'))
           .onClick(() => {
             this.request = chip.request;
             this.create();
@@ -2150,7 +2163,7 @@ struct Index {
             .fontColor($r('sys.color.font_secondary'))
           Text('switch AI mode to Smart in Settings')
             .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.brand'))
+            .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)
             .onClick(() => this.selectTab(TAB_SETTINGS))
         }
@@ -2159,8 +2172,8 @@ struct Index {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding(16)
-    .borderRadius(20)
-    .backgroundColor($r('sys.color.comp_background_primary'))
+    .borderRadius(Flags.NEW_ERRORS ? Radius.card : 20)
+    .backgroundColor(Flags.NEW_ERRORS ? Palette.orangeTintSoft : $r('sys.color.comp_background_primary'))
   }
 
   @Builder
@@ -2269,8 +2282,8 @@ struct Index {
       this.failedCard()
     } else if (this.message.length > 0) {
       Text(this.message)
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_secondary'))
+        .fontSize(Flags.NEW_ERRORS ? 14 : $r('sys.float.Body_M'))
+        .fontColor(Flags.NEW_ERRORS ? Palette.text2 : $r('sys.color.font_secondary'))
         .width('100%')
     }
   }
