@@ -29,6 +29,30 @@ export function isCloudOrigin(origin: string): boolean {
 }
 
 /** Badge text for a stored GenerateResult.origin; '' for capsules saved before origins were kept. */
+/** Polish: a one-line origin label for capsule tiles ("On phone", "Claude", "Marketplace"). */
+export function originShort(origin: string): string {
+  switch (origin) {
+    case 'rules':
+    case 'on-device':
+    case 'template':
+      return 'On phone';
+    case 'cloud-eu:mistral':
+    case 'cloud':
+      return 'Mistral (EU)';
+    case 'cloud:anthropic':
+      return 'Claude';
+    case 'cloud:openai':
+      return 'OpenAI';
+    case 'imported':
+      return 'Shared';
+    case 'marketplace':
+    case 'community':
+      return 'Marketplace';
+    default:
+      return '';
+  }
+}
+
 export function originBadge(origin: string): string {
   switch (origin) {
     case 'rules':

@@ -54,7 +54,7 @@ import { Alternative, cantBuild, CLOUD_EXPLAINER, failureHelp, FailureHelp, TRY_
 import { SecondaryButton } from '../components/Buttons';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
-import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon } from './CapsuleEntry';
+import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon, originShort } from './CapsuleEntry';
 import { CapsuleStore } from './CapsuleStore';
 import { ConsentView } from './ConsentView';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -2937,6 +2937,7 @@ struct Index {
                   value: entry.runtime.summary(),
                   originText: originBadge(entry.origin),
                   originKind: originKindOf(entry.origin),
+                  shortOrigin: originShort(entry.origin),
                   widget: entry.route.widget,
                   onOpen: () => this.open(entry.capsule.id)
                 })

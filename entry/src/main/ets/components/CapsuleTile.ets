@@ -1,7 +1,7 @@
 import { Effects, Palette, Radius } from '../theme/Tokens';
 import { Flags } from '../theme/Flags';
 import { reduceMotion } from '../pages/Motion';
-import { IconTile, OriginChip, OriginKind } from './Surfaces';
+import { Chip, IconTile, OriginChip, OriginKind, originIconOf } from './Surfaces';
 
 /**
  * Capsules tab tile (NEW_CAPSULES): icon tile, name (2 lines), the capsule's live one-line summary, origin
@@ -9,6 +9,9 @@ import { IconTile, OriginChip, OriginKind } from './Surfaces';
  * tile matches: line 2 of the name is always reserved, and the chip and hint sit at the bottom.
  */
 export const CAPSULE_TILE_HEIGHT: number = 208; // fits a 2-line name, the value, a 2-line chip and the hint
+/** Polish: padding 24 + icon 36 + name 2x19 + value 2x17 + chip 24 + gaps 18 = 174. */
+const POLISH_TILE_MIN_HEIGHT: number = 176;
+
 @ComponentV2
 export struct CapsuleTile {
   @Require @Param name: string;
@@ -17,6 +20,8 @@ export struct CapsuleTile {
   @Param value: string = '';
   @Param originText: string = '';
   @Param originKind: OriginKind = 'phone';
+  /** Polish: one-line origin label for the chip (originShort); originText stays as its spoken label. */
+  @Param shortOrigin: string = '';
   /** True when the capsule fits a home-screen widget ("Add to home screen"); else no hint (T4-19). */
   @Param widget: boolean = false;
   /** Polish: one featured tile (e.g. the last-opened capsule) gets a gradient icon tile. */
@@ -35,61 +40,56 @@ export struct CapsuleTile {
   }
 
   /**
-   * Polish (4.3): icon top-left, live value pill top-right (tabular figures), name 15/700 bottom-left,
-   * origin chip and a small "Widget" badge in the bottom row. Same fixed height; pressed 0.97.
+   * Polish (4.3): sized to its content. Icon, then the name (2 lines), the live value on its own line
+   * (tabular, wraps, not truncated), then a one-line origin chip and a small widget badge. One minimum
+   * height so tiles in a row match; a tile only grows past it for an unusually long value. Pressed 0.97.
    */
   @Builder
   polished() {
-    Column({ space: 8 }) {
-      Row({ space: 8 }) {
-        IconTile({ icon: this.icon, tileSize: 40, iconSize: 22, featured: this.featured })
-        Blank()
-        if (this.value.length > 0) {
-          Text(this.value)
-            .fontSize(12)
-            .fontWeight(700)
-            .fontColor(Palette.blue)
-            .fontFeature('"tnum" on')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .constraintSize({ maxWidth: 96 })
-            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-            .borderRadius(Radius.pill)
-            .backgroundColor(Palette.tint)
-        }
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Top)
-      Blank()
+    Column({ space: 6 }) {
+      IconTile({ icon: this.icon, tileSize: 36, iconSize: 20, featured: this.featured })
       Text(this.name)
         .fontSize(15)
         .fontWeight(700)
         .fontColor(Palette.text)
         .maxLines(2)
-        .lineHeight(20)
+        .lineHeight(19)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
-      OriginChip({ text: this.originText, kind: this.originKind })
-      if (this.widget) {
-        Row({ space: 4 }) {
-          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-            .fontSize(12)
-            .fontColor([Palette.chipText])
-          Text('Widget')
-            .fontSize(11)
-            .fontWeight(700)
-            .fontColor(Palette.chipText)
-        }
-        .padding({ left: 6, right: 8, top: 2, bottom: 2 })
-        .borderRadius(Radius.pill)
-        .border({ width: 1, color: Palette.hairline })
-        .accessibilityText('Can be added to the home screen')
+      if (this.value.length > 0) {
+        Text(this.value)
+          .fontSize(13)
+          .fontWeight(600)
+          .lineHeight(17)
+          .fontColor(Palette.blue)
+          .fontFeature('"tnum" on')
+          .width('100%')
       }
+      Blank()
+      Row({ space: 6 }) {
+        if (this.shortOrigin.length > 0) {
+          Chip({ text: this.shortOrigin, icon: originIconOf(this.originKind) })
+            .accessibilityText(this.originText)
+        }
+        if (this.widget) {
+          // Icon only, so the chip and the badge always fit on one line.
+          Stack() {
+            SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+              .fontSize(12)
+              .fontColor([Palette.chipText])
+          }
+          .width(24)
+          .height(24)
+          .borderRadius(Radius.pill)
+          .border({ width: 1, color: Palette.hairline })
+          .accessibilityText('Can be added to the home screen')
+        }
+      }
+      .width('100%')
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .height(CAPSULE_TILE_HEIGHT)
-    .clip(true)
-    .padding(14)
+    .constraintSize({ minHeight: POLISH_TILE_MIN_HEIGHT })
+    .padding(12)
     .borderRadius(Radius.tileCard)
     .backgroundColor(Palette.surface)
     .linearGradient({ angle: 180, colors: [[Palette.cardTintTop, 0], [Palette.cardTintBottom, 1]] })
