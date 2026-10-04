@@ -108,6 +108,17 @@ function maxButtons(v: CardView): number {
   return sizeOf(v) === 'm' ? 2 : 3;
 }
 
+/**
+ * Mirrors Flags.NEW_POLISH (theme/Flags.ets): this page runs in the form renderer and imports nothing, so the
+ * polish switch is repeated here. false = the pre-polish card.
+ */
+const NEW_POLISH: boolean = true;
+
+/** Polish: 2x2 cards put the header's trailing text (hint, "6/7 done") under the title, not beside it. */
+function subline(v: CardView): boolean {
+  return NEW_POLISH && sizeOf(v) === 'm';
+}
+
 const MAX_TEXT_TIMER_MS: number = 86399000;
 const PAD: number = 16;
 const BIG_BUTTON: number = 48;
@@ -223,6 +234,56 @@ struct HarmoniserCard {
 
   @Builder
   header(v: CardView, trailing: string) {
+    if (subline(v)) {
+      this.stackedHeader(v, trailing.length > 0 ? trailing : (v.hint ?? ''))
+    } else {
+      this.inlineHeader(v, trailing)
+    }
+  }
+
+  /** 2x2 (polish): title on one line, the trailing text on its own line under it, so neither cuts the other. */
+  @Builder
+  stackedHeader(v: CardView, trailing: string) {
+    Row({ space: 8 }) {
+      Stack() {
+        this.icon(v.icon, 16, v.accent)
+      }
+      .width(28)
+      .height(28)
+      .borderRadius(14)
+      .backgroundColor(tint(v.accent))
+
+      Column() {
+        Text(v.title)
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        if (trailing.length > 0) {
+          Text(trailing)
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(v.accent)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      // The widget's own colour (colorTag, T4-12): matches its dot in the app's widget list.
+      Circle({ width: 8, height: 8 }).fill(v.accent)
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 28 })
+    .responseRegion({ x: 0, y: -10, width: '100%', height: BIG_BUTTON })
+    .onClick(() => this.onTap())
+  }
+
+  @Builder
+  inlineHeader(v: CardView, trailing: string) {
     Row({ space: 8 }) {
       Stack() {
         this.icon(v.icon, 16, v.accent)
@@ -240,11 +301,22 @@ struct HarmoniserCard {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
       if (trailing.length > 0 || (v.hint ?? '').length > 0) {
-        Text(trailing.length > 0 ? trailing : (v.hint ?? ''))
-          .fontSize(12)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(v.accent)
-          .maxLines(1)
+        if (NEW_POLISH) {
+          // Capped and ellipsized, so it can never push the title out.
+          Text(trailing.length > 0 ? trailing : (v.hint ?? ''))
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(v.accent)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .constraintSize({ maxWidth: '45%' })
+        } else {
+          Text(trailing.length > 0 ? trailing : (v.hint ?? ''))
+            .fontSize(12)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(v.accent)
+            .maxLines(1)
+        }
       }
       // The widget's own colour (colorTag, T4-12): matches its dot in the app's widget list.
       Circle({ width: 8, height: 8 }).fill(v.accent)
@@ -289,6 +361,47 @@ struct HarmoniserCard {
   /** The value (scaled to the card size) centred with its caption under it. */
   @Builder
   hero(v: CardView, value: string, caption: string) {
+    if (NEW_POLISH && sizeOf(v) === 'm') {
+      this.heroRow(v, value, caption)
+    } else {
+      this.heroColumn(v, value, caption)
+    }
+  }
+
+  /**
+   * 2x2 (polish): value and caption side by side, so with a 48vp button below the caption is never drawn under
+   * the button (the stacked hero was taller than the space left on a 2x2).
+   */
+  @Builder
+  heroRow(v: CardView, value: string, caption: string) {
+    Row({ space: 8 }) {
+      Text(value)
+        .fontSize(34)
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('sys.color.font_primary'))
+        .fontFeature('"tnum" on')
+        .maxLines(1)
+        .minFontSize(18)
+        .maxFontSize(34)
+        .constraintSize({ maxWidth: caption.length > 0 ? '60%' : '100%' })
+      if (caption.length > 0) {
+        Text(caption)
+          .fontSize(12)
+          .fontColor($r('sys.color.font_secondary'))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      }
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .justifyContent(caption.length > 0 ? FlexAlign.Start : FlexAlign.Center)
+    .alignItems(VerticalAlign.Center)
+    .clip(true)
+  }
+
+  @Builder
+  heroColumn(v: CardView, value: string, caption: string) {
     Column({ space: 2 }) {
       Text(value)
         .fontSize(heroSize(v))
@@ -311,6 +424,7 @@ struct HarmoniserCard {
     .width('100%')
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
+    .clip(NEW_POLISH)
   }
 
   /** The capsule's buttons in one full-width row along the bottom: the first filled, the others tinted. */
@@ -326,12 +440,14 @@ struct HarmoniserCard {
         }, (b: CardButton) => `${b.index}:${b.enabled}`)
       }
       .width('100%')
+      .height(BIG_BUTTON)
+      .flexShrink(0)
     }
   }
 
   @Builder
   counterLayout(v: CardView, r: CardRow) {
-    Column({ space: 6 }) {
+    Column({ space: subline(v) ? 4 : 6 }) {
       this.header(v, '')
       this.hero(v, `${r.value}`, v.caption.length > 0 ? v.caption : r.label)
       if (r.canIncrement) {
@@ -343,6 +459,7 @@ struct HarmoniserCard {
         .borderRadius(BIG_BUTTON / 2)
         .justifyContent(FlexAlign.Center)
         .backgroundColor(v.accent)
+        .flexShrink(0)
         .onClick(() => this.send('increment', r.id, -1))
       }
       this.note(v)
@@ -538,7 +655,8 @@ struct HarmoniserCard {
     Text(b.label)
       .fontSize(13)
       .fontWeight(FontWeight.Medium)
-      .fontColor(fill ? $r('sys.color.font_on_primary') : v.accent)
+      .fontColor(!b.enabled && NEW_POLISH ? $r('sys.color.font_secondary') :
+        (fill ? $r('sys.color.font_on_primary') : v.accent))
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .textAlign(TextAlign.Center)
@@ -547,8 +665,8 @@ struct HarmoniserCard {
       .width('100%')
       .constraintSize({ minWidth: 64 })
       .borderRadius(BIG_BUTTON / 2)
-      .backgroundColor(fill ? v.accent : tint(v.accent))
-      .opacity(b.enabled ? 1 : 0.4)
+      .backgroundColor(fill && (b.enabled || !NEW_POLISH) ? v.accent : tint(v.accent))
+      .opacity(b.enabled || NEW_POLISH ? 1 : 0.4)
       .onClick(() => this.press(v, b))
   }
 
@@ -580,6 +698,7 @@ struct HarmoniserCard {
       .width('100%')
       .layoutWeight(1)
       .justifyContent(FlexAlign.Center)
+      .clip(NEW_POLISH)
     }
   }
 
@@ -589,7 +708,7 @@ struct HarmoniserCard {
    */
   @Builder
   logicLayout(v: CardView) {
-    Column({ space: 6 }) {
+    Column({ space: subline(v) ? 4 : 6 }) {
       this.header(v, '')
       if (v.displays.length > 0) {
         this.leadLine(v, v.displays[0])
@@ -1007,7 +1126,7 @@ struct CheckRow {
         .fontSize(14)
         .fontColor(this.item.checked ? $r('sys.color.font_tertiary') : $r('sys.color.font_primary'))
         .decoration({ type: this.item.checked ? TextDecorationType.LineThrough : TextDecorationType.None })
-        .maxLines(1)
+        .maxLines(NEW_POLISH ? 2 : 1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
     }
