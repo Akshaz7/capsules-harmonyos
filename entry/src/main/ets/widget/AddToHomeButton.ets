@@ -10,7 +10,7 @@
  */
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { addCapsuleToHomeScreen, AddToHomeResult, listWidgets, WidgetInfo } from './WidgetService';
+import { addCapsuleToHomeScreen, AddToHomeResult, clearPendingFor, listWidgets, WidgetInfo } from './WidgetService';
 
 @ComponentV2
 export struct AddToHomeButton {
@@ -22,7 +22,7 @@ export struct AddToHomeButton {
   @Local busy: boolean = false;
 
   aboutToAppear(): void {
-    this.refresh();
+    this.refresh(false);
   }
 
   private context(): common.UIAbilityContext | undefined {
@@ -33,10 +33,18 @@ export struct AddToHomeButton {
     }
   }
 
-  private refresh(): void {
+  /**
+   * `back`: the user returned to this screen (e.g. from the add-widget page). Only then is a widget showing
+   * this capsule proof it was added, so the pending capsule is cleared; right after the tap the system's
+   * preview widgets already show it and clearing then would leave the real widget blank.
+   */
+  private refresh(back: boolean): void {
     const ctx = this.context();
     if (ctx !== undefined) {
       this.onHome = listWidgets(ctx).some((w: WidgetInfo) => w.capsuleId === this.capsuleId);
+      if (this.onHome && back) {
+        clearPendingFor(ctx, this.capsuleId); // the widget was added: later widgets start blank again
+      }
     }
   }
 
@@ -72,7 +80,7 @@ export struct AddToHomeButton {
     } else {
       this.showSteps = true; // the add-widget page could not open; the next widget added still shows this capsule
     }
-    this.refresh();
+    this.refresh(false);
   }
 
   build() {
@@ -110,7 +118,7 @@ export struct AddToHomeButton {
     .width('100%')
     .onVisibleAreaChange([0.0, 1.0], (visible: boolean) => {
       if (visible) {
-        this.refresh(); // e.g. back from the add-widget page
+        this.refresh(true); // e.g. back from the add-widget page
       }
     })
   }

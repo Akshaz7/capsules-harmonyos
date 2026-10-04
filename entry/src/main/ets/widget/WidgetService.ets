@@ -25,7 +25,7 @@ import {
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
 import {
   FormBinding, allBindings, getBinding, isFormProcess, loadSeen, loadState, putBinding, saveSeen, saveState,
-  savedCapsules, savedValues, savePending, takePending
+  savedCapsules, savedValues, savePending, peekPending, clearPending
 } from './WidgetStore';
 
 const DOMAIN = 0x0002;
@@ -128,13 +128,14 @@ export function bindForm(ctx: common.Context, formId: string, wide: boolean): Fo
 }
 
 /**
- * Binds a new widget to the capsule whose "Add to home screen" was tapped (the pending capsule), used once.
+ * Binds a new widget to the capsule whose "Add to home screen" was tapped (the pending capsule, kept for the
+ * system's preview widgets and the real one until it is on a widget or expires).
  * Without one the widget starts blank ("Tap to choose a capsule"); it never takes "the latest capsule".
  */
 export function bindNewForm(ctx: common.Context, formId: string, wide: boolean): FormBinding {
   const capsules = savedCapsules(ctx);
   const gate = freshGate(ctx);
-  const pending = takePending(ctx);
+  const pending = peekPending(ctx); // previews and the real widget all show it (see peekPending)
   const chosen = capsuleForNewWidget(pending, Date.now(),
     (id: string) => capsules.some((c: Capsule) => c.id === id) && !gate.isRemoved(id));
   const used = allBindings(ctx).map((b: FormBinding) => colorTagOf(b));
@@ -153,10 +154,19 @@ export function bindNewForm(ctx: common.Context, formId: string, wide: boolean):
   return binding;
 }
 
-/** The capsule the next newly added widget shows (consumed by that widget; expires after 10 minutes). */
+/** The capsule newly added widgets show for the next few minutes (see PENDING_TTL_MS and clearPendingFor). */
 export function setPendingCapsule(ctx: common.Context, capsuleId: string): void {
   savePending(ctx, { capsuleId: capsuleId, at: Date.now() });
   hilog.info(DOMAIN, TAG, 'pending capsule for the next new widget: %{public}s', capsuleId);
+}
+
+/** Clears the pending capsule once a widget shows it (the button calls this when it sees the widget). */
+export function clearPendingFor(ctx: common.Context, capsuleId: string): void {
+  const pending = peekPending(ctx);
+  if (pending !== null && pending.capsuleId === capsuleId) {
+    clearPending(ctx);
+    hilog.info(DOMAIN, TAG, 'pending capsule %{public}s is on a widget now; cleared', capsuleId);
+  }
 }
 
 /** What "Add to home screen" did: already shown, filled a blank widget, opened the add-widget page, or neither. */

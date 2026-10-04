@@ -13,6 +13,7 @@ import {
   RowComponent,
   TextComponent,
   TimerComponent,
+  Trigger,
   WhenComponent
 } from './CapsuleTypes';
 import { parseAction, permissionForAction, permissionForComponent } from './CapsuleValidator';
@@ -629,8 +630,11 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
   }
   const route = routeCapsule(capsule);
   if (!route.widget) {
-    // Too big for the card (until T4-19 condenses it): the name and a tap into the app.
-    const v = baseView('empty', capsule.id, capsule.name, 'Tap to open', wide);
+    // Not drawn on the card: the name, why (for motion, which only runs in the open app) and a tap into the app.
+    const motion = allComponents(capsule.ui).some((c: CapsuleComponent) => c.type === 'counter' &&
+      (c as CounterComponent).source === 'motion') || (capsule.triggers ?? []).some((t: Trigger) => t.on === 'motion');
+    const why = motion ? 'Counts motion only while the capsule is open. Tap to open.' : 'Tap to open';
+    const v = baseView('empty', capsule.id, capsule.name, why, wide);
     v.icon = capsule.schemaVersion === 1 ? 'logic' : 'blank';
     return v;
   }
@@ -692,7 +696,7 @@ export interface PendingCapsule {
 }
 
 /** A pending capsule older than this is ignored (the user left the add-widget page without adding). */
-export const PENDING_TTL_MS: number = 10 * 60 * 1000;
+export const PENDING_TTL_MS: number = 3 * 60 * 1000;
 
 /**
  * The capsule a newly added widget shows: the pending one if it is recent and still available, else none
