@@ -50,7 +50,7 @@ import {
 } from '../renderer/CapsuleRuntime';
 import { Notifier } from '../renderer/CapsuleRuntime';
 import { dailyReminders, notificationContent } from '../core/Reminders';
-import { CLOUD_EXPLAINER, failureHelp, FailureHelp, TRY_CLOUD_LABEL } from '../core/FailureHelp';
+import { cantBuild, CLOUD_EXPLAINER, failureHelp, FailureHelp, TRY_CLOUD_LABEL } from '../core/FailureHelp';
 import { SecondaryButton } from '../components/Buttons';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
@@ -1418,7 +1418,9 @@ struct Index {
 
   /** T4-30: a cloud is set up but this failed build didn't use it. The cloud is asked only after the notice. */
   private canTryCloud(): boolean {
-    return !this.failedOnline && this.failedRequest.length > 0 && this.cloudUsable() && !isNotEnglish(this.failedRequest);
+    // Not for live news / prices (cant-build): no model can build those.
+    return !this.failedOnline && this.failedRequest.length > 0 && this.cloudUsable() &&
+      !isNotEnglish(this.failedRequest) && !cantBuild(this.failedRequest);
   }
 
   /** "Try with cloud AI": the provider notice first (named, may be outside the EU), then this one request. */
@@ -2464,17 +2466,26 @@ struct Index {
   @Builder
   failedCard() {
     Column({ space: 12 }) {
-      Text(this.failedOnline ? FAILED_ONLINE_MESSAGE : FAILED_MESSAGE)
-        .fontSize(Flags.NEW_ERRORS ? 15 : $r('sys.float.Body_M'))
-        .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
-        .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))
-        .width('100%')
-      if (this.failHelp().reason.length > 0) {
+      if (cantBuild(this.failedRequest)) {
+        // Live news / prices (cant-build): the reason is the headline; no "couldn't build that offline".
         Text(this.failHelp().reason)
-          .fontSize($r('sys.float.Body_M'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
+          .fontSize(Flags.NEW_ERRORS ? 15 : $r('sys.float.Body_M'))
+          .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
+          .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))
           .width('100%')
+      } else {
+        Text(this.failedOnline ? FAILED_ONLINE_MESSAGE : FAILED_MESSAGE)
+          .fontSize(Flags.NEW_ERRORS ? 15 : $r('sys.float.Body_M'))
+          .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
+          .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))
+          .width('100%')
+        if (this.failHelp().reason.length > 0) {
+          Text(this.failHelp().reason)
+            .fontSize($r('sys.float.Body_M'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.font_primary'))
+            .width('100%')
+        }
       }
       Text(CLOUD_EXPLAINER)
         .fontSize($r('sys.float.Body_S'))
