@@ -1,7 +1,7 @@
 // Types for Capsule schema v0 and v1 (see SCHEMA.md). Types only, no logic.
 
 export type Permission =
-  'reminders' | 'notifications' | 'vibration' | 'motion' | 'location' | 'widget' | 'battery' | 'weather';
+  'reminders' | 'notifications' | 'vibration' | 'motion' | 'location' | 'widget' | 'battery' | 'weather' | 'devices';
 
 export type ComponentType = 'text' | 'timer' | 'counter' | 'checklist' | 'number' | 'button' |
   'display' | 'input' | 'list' | 'when' | 'row' | 'device'; // last six: v1 only
@@ -9,7 +9,7 @@ export type ComponentType = 'text' | 'timer' | 'counter' | 'checklist' | 'number
 export type CounterSource = 'manual' | 'motion';
 
 // One of: startTimer:<id> | pauseTimer:<id> | stopTimer:<id> | resetTimer:<id> | startAllTimers | increment:<id>
-// | reset:<id> | notify:<text>
+// | reset:<id> | notify:<text> | sendToDevice (needs "devices": show the capsule on a paired device)
 export type Action = string;
 
 export interface TextComponent {
@@ -153,7 +153,7 @@ export const MAX_TRIGGER_LABEL: number = 60;
 export const SCHEMA_VERSION: number = 0;
 
 export const PERMISSIONS: string[] =
-  ['reminders', 'notifications', 'vibration', 'motion', 'location', 'widget', 'battery', 'weather'];
+  ['reminders', 'notifications', 'vibration', 'motion', 'location', 'widget', 'battery', 'weather', 'devices'];
 
 export const COMPONENT_TYPES: string[] = ['text', 'timer', 'counter', 'checklist', 'number', 'button'];
 
@@ -167,7 +167,7 @@ export const MAX_SCHEMA_VERSION: number = 1;
 export const COUNTER_SOURCES: string[] = ['manual', 'motion'];
 
 export type ActionKind = 'startTimer' | 'pauseTimer' | 'stopTimer' | 'resetTimer' | 'startAllTimers' | 'increment' |
-  'reset' | 'notify';
+  'reset' | 'notify' | 'sendToDevice';
 
 /** Actions that control one timer: their target must be a timer, and they need "reminders". */
 export const TIMER_ACTIONS: string[] = ['startTimer', 'pauseTimer', 'stopTimer', 'resetTimer'];

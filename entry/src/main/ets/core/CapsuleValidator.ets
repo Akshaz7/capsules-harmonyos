@@ -129,6 +129,9 @@ export function parseAction(action: string): ParsedAction | null {
   if (action === 'startAllTimers') {
     return { kind: 'startAllTimers', arg: '' };
   }
+  if (action === 'sendToDevice') {
+    return { kind: 'sendToDevice', arg: '' };
+  }
   const colon = action.indexOf(':');
   if (colon <= 0) {
     return null;
@@ -174,12 +177,15 @@ export function permissionForAction(a: ParsedAction): Permission | null {
   if (a.kind === 'notify') {
     return 'notifications';
   }
+  if (a.kind === 'sendToDevice') {
+    return 'devices';
+  }
   return null;
 }
 
 const ACTIONS_HINT: string =
   '(allowed: startTimer:<id>, pauseTimer:<id>, stopTimer:<id>, resetTimer:<id>, startAllTimers, increment:<id>, ' +
-  'reset:<id>, notify:<text>)';
+  'reset:<id>, notify:<text>, sendToDevice)';
 
 /** A component with its JSON path, for checks that run after the structure is known. */
 class Placed {
@@ -811,7 +817,7 @@ function checkAction(ck: Checker, raw: string, path: string, permissions: Permis
   if (actionPerm !== null && !permissions.includes(actionPerm)) {
     ck.add(path, `action "${raw}" needs permission "${actionPerm}", which is not listed in "permissions"`);
   }
-  if (action.kind === 'notify' || action.kind === 'startAllTimers') {
+  if (action.kind === 'notify' || action.kind === 'startAllTimers' || action.kind === 'sendToDevice') {
     if (action.kind === 'startAllTimers' && !hasTimer) {
       ck.add(path, 'action "startAllTimers" but the capsule has no timer');
     }
