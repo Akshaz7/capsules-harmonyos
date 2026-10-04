@@ -989,7 +989,7 @@ struct Index {
     const v = validateCapsule(JSON.stringify(updated));
     if (!v.ok || !v.capsule) {
       hilog.error(0x0001, 'Index', 'edited triggers invalid: %{public}s', v.errors.join('; '));
-      this.toast("That change isn't valid. Try saying it another way.");
+      this.toast("That trigger change isn't valid, so nothing changed.");
       return;
     }
     const capsule = v.capsule;
