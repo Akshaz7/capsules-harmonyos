@@ -33,7 +33,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 3. `demo tennis`: a full scoreboard (deuce, advantage) run by the safe interpreter.
 4. Marketplace: search `squat`, Install, consent "From the marketplace", Run.
 5. `read my contacts and text them…`: refused by design.
-6. Real phone: the on-device LLM, with no network.
+6. Real phone: the on-device LLM, no cloud needed (record with airplane mode visibly on before saying "offline").
 
 *Visual:* the step list beside a QR code to the recorded demo.
 
@@ -69,7 +69,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 **Title:** Intelligent, and on your side
 
-- **Local first:** rules and the on-device model need no network. The **On-device only** mode guarantees nothing leaves the phone.
+- **Local first:** rules and the on-device model need no network. In **On-device only** mode no request is sent to an AI provider (the marketplace search and device sends are separate, see the compliance gaps).
 - **EU-first cloud:** used automatically only with Mistral (EU). Claude or OpenAI only if you enable non-EU providers. Each provider gets its own consent. Only the request text is sent.
 - **Honest trade-off:** Mistral 14/15 tuning and 4/5 held-out; Claude 14/15 and 5/5. On hard logic requests Claude led 4/4 to 2/4. We default to EU anyway, and the validator catches the failures.
 - **Transparency:** every capsule shows how it was made: rules, on your phone (template), on-device, Mistral (EU), Claude, or from someone else.

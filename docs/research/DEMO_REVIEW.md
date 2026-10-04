@@ -2,6 +2,8 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04, about 01:00–01:30). Read from the rules, this repository at `origin/main` and public sources. Nothing was run on a device or emulator and no code was changed. Line references are to the commit named in the text and will drift as work lands.
 
+> **Status since writing (re-checked against the code on 2026-10-04):** findings 3 and 4 still hold and are now flagged in `docs/DEMO_SCRIPT.md` (beat 4 hits the `km-to-miles` template; `track pages I read` is a prompt example). Finding 8 is out of date: a weather component exists now (PR #12), but no compound "task list and weather" rule. Live listing counts change; check before quoting them.
+
 **Written:** Sunday 2026-10-04, about 01:30. Submission 11:00. Finalist pitches about 16:00.
 
 **How this was produced:** AI-assisted desk review (Claude Code). I read `origin/main` of the app repo at `7292381` (last commit 2026-10-03 22:36; a fetch at 01:15 brought nothing newer), the branches `docs/judges-feedback-research` and `feat/esp32-relay-live`, the Huawei rules and criteria PDFs, the public challenge repo, and made read-only HTTP GETs against the live site. **Nothing was run on an emulator, a phone or the board. No repository was changed.**

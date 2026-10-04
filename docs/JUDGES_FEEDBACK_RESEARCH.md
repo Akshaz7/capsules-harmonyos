@@ -2,6 +2,8 @@
 
 **Date:** 2026-10-04
 
+> **Status since writing (re-checked against the code on 2026-10-04):** **Built:** a live weather reading as a schema v1.2 `device` component (Open-Meteo, `adapters/WeatherAdapter.ets`, rule `parseWeather` in `core/RuleParser.ets`); the device relay is live (see the README). **Planned:** a compound "task list and weather" rule (no `parseListAndWeather` in the code), the deterministic router of Part B, and other Cactus models from Part C. Code references below are to the older commit named in the next paragraph.
+
 **How this was produced:** AI-assisted desk research (a Claude Code sub-agent using web search and reading this repository). Nothing was run on a device or an emulator, and no code was changed. Code references are to `origin/main` at `7292381`; paths are relative to the repository root.
 
 **What prompted it:** Huawei judges tried the app and asked for a capsule with both a task list and weather. The app produced a garbled task list and no weather display at all.

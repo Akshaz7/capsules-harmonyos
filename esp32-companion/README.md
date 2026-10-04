@@ -33,7 +33,7 @@ As of 2026-10-03.
 | Wi-Fi on hardware | Joins the phone hotspot (WPA3) and the venue network `HackYeah2026`, which it sees on 2.4 GHz channel 1. Joining the venue network often takes several attempts. |
 | HTTP API on hardware | **Confirmed**: `./test_api.sh http://<board ip>` passes 72 of 72 against the board over the venue Wi-Fi. JSON nested 300 and 1024 levels deep gets a 400 and the board keeps running (it used to reboot). |
 | Screen, touch, beep | **Confirmed on hardware** by the owner: the screen shows the UI, a tap on + raises the count, the speaker beeps when a timer ends. `/screenshot` works on the board. |
-| Cloud relay client | **Confirmed on hardware against the fake** (`mock_relay.py` on a laptop, plain HTTP): registration, pairing QR code and phrase, capsules and actions from the relay, state reports, "cloud offline" and recovery. The real backend is not deployed yet; HTTPS was only checked as a handshake. See [Cloud relay](#cloud-relay). |
+| Cloud relay client | **Confirmed on hardware against the fake and against the live relay.** Against `mock_relay.py` (plain HTTP): registration, pairing QR code and phrase, capsules and actions from the relay, state reports, "cloud offline" and recovery. Against production (`https://harmoniser.keanuc.net`): `test_relay.sh` 106 of 106, and 30 minutes of HTTPS polling with no gap, reboot or failed request (see the status note below). See [Cloud relay](#cloud-relay). |
 | Rep counting | Experimental and **still untuned**. Off unless asked for. |
 
 Full list in [Tested and not tested](#tested-and-not-tested).

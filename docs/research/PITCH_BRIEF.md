@@ -2,6 +2,8 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04, about 01:30–01:50). Written from the code, tests and documents of both repositories. Nothing was built or run. Line references are to the commits named in the text and will drift. Where it says a document contradicts the code, the code is what was read.
 
+> **Status since writing (re-checked against the code on 2026-10-04):** PR #12 (motion, battery, weather) is now **merged**; where this brief calls it unmerged, read it as built, with the shake count still to be checked on a phone. The test count is now 278. Other figures are as of the time of writing.
+
 **Written:** Sunday 4 Oct 2026, about 02:00. Submission 11:00. Finalist pitches about 16:00.
 
 **How this was produced:** AI-assisted desk reading (Claude Code). Nothing was built, run, installed or changed. App repo read at `origin/main` `7292381` (220 commits, all dated 3 Oct, 14:59 to 22:36). Web repo read at `origin/main` `f13b42d` (25 commits). Unmerged branches were read as branches. The web repo and firmware line references were collected by a separate reading pass and spot-checked, not all re-opened. Outside facts were checked on the web and carry a URL.

@@ -64,7 +64,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 | Weather capsules | Only the chosen city's coordinates (from a bundled 12-city list) go to Open-Meteo, after the capsule's own consent; no request text, no identifiers. |
 | Request text, tier 2 | Sent to the chosen provider, along with our fixed system prompt. **Nothing else**: no capsule data, no app state, no identifiers. A unit test checks that the HTTP body holds only the system prompt and the request. |
 | Consent | Before a provider's first request, a one-time notice names that provider and says whether it is outside the EU. Consent is stored per provider, so agreeing to Mistral does not cover Claude. **On-device only** mode never calls the cloud. |
-| API keys | Only in a git-ignored `config.local.json`, pushed to the app's private files directory (debug builds). They are never in the repository or the `.hap`: a byte scan of the release HAP found no key. |
+| API keys | Only in a git-ignored `config.local.json`, pushed to the app's private files directory (debug builds). They are never in the repository or the `.hap`: a byte scan of the `test-1` HAP found no key (re-run it on the final release). |
 | On-device engine | Cactus's telemetry is replaced with a no-op stub in our patch, so the engine makes no network calls. |
 | Logs | Failures are logged with hilog. The request text is logged as `%{private}`, which is redacted outside debug logging. |
 | Provider-side retention | Set by each provider's API terms, not by us. Choosing **On-device only** avoids it entirely. |

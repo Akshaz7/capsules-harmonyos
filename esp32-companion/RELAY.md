@@ -13,7 +13,7 @@ and the real routes later.
   envelope of the rest of the backend, on every route. The app can switch on `code`; the
   board only looks at the status and never reads an error body.
 - The base URL is build-time configuration on the board (`RELAY_URL` in `main/secrets.h`).
-  The planned one is `https://harmoniser-web.vercel.app` (not deployed when this was written).
+  The live relay is `https://harmoniser.keanuc.net` (also served at `https://harmoniser-web.vercel.app`).
   `https://` is verified against ESP-IDF's certificate bundle; `http://` is for the fake.
 - The board does not follow redirects, so its token never goes to another host.
 

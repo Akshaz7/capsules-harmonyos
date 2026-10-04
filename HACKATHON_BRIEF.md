@@ -23,7 +23,7 @@ Each app Harmoniser makes is a **capsule**: JSON, not code, checked against a st
 
 ## Target
 
-HarmonyOS, API 24 (minimum API 20), phone. Validated on the DevEco HarmonyOS emulator and on real phones (on-device model, Share).
+HarmonyOS, API 24 (minimum API 20), phone. Checked on the DevEco HarmonyOS emulator throughout. On real phones: Share, and the photo path (10 photos read by on-device OCR and built on the phone, one by the on-device model).
 
 ## Built during the event
 
@@ -42,7 +42,7 @@ The commit history shows the progression. AI coding agents were used throughout,
 
 | Real (seen working) | Partial or not yet |
 | --- | --- |
-| Rules, on-device LLM, EU cloud with consent, refusals, English-only gate | On-device model: 9/15 correct in our eval; phone speed not measured |
+| Rules, EU cloud with consent, refusals, English-only gate | On-device model: 9/15 correct in the emulator eval, not yet shown through the main screen; phone speed not measured |
 | v1 capsules (tennis scoreboard, converter, bill split) | Daily triggers fire only while the app is open; template reminders don't show a notification yet |
 | Gatekeeper, log, widgets (incl. picker), timer pause/stop | Calendar alerts with the app closed: not seen working |
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
@@ -51,7 +51,7 @@ The commit history shows the progression. AI coding agents were used throughout,
 | Editing a capsule ("Change it…", with undo) | Photo → capsule: on-phone OCR path checked on a real phone (10/10 valid, 6/10 correct, offline); Snap button in the app not yet checked |
 | | Wrist companion: works against the live relay; the app's side isn't tested against it yet |
 
-Nothing is simulated in the app. Eval figures and limits are in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
+No sensor or device data is simulated in normal use. A labelled, dev-only device-relay simulation exists behind a config flag (`devices.simulate`). Eval figures and limits are in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
 
 ## Team
 

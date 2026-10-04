@@ -2,6 +2,8 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04). Looked up in an offline mirror of Huawei's documentation (`<mirror>` = github.com/liasica/harmonyos-skills, `harmonyos/references/`) and on developer.huawei.com. **No snippet here was compiled or run**: treat them as starting points for DevEco Studio to check.
 
+> **Status:** a reference written for the UI work; the snippets are still uncompiled. Some of these APIs are now used in the code (for example `formProvider.openFormManager`), so prefer the code where they differ.
+
 Date: 2026-10-04. App read at `origin/main` `7292381` (`capsules-harmonyos`), min API 20, emulator API 24.
 Produced by an AI research pass. **No snippet here was compiled or run.** Treat snippets as starting points and let DevEco's compiler have the last word.
 

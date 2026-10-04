@@ -2,6 +2,8 @@
 
 **Date:** 2026-10-03
 
+> **Status since writing (re-checked against the code on 2026-10-04):** **Built:** adding a specific capsule's widget from inside the app (`formProvider.openFormManager`, `widget/AddToHomeButton.ets`, `widget/WidgetService.ets`); widget tap reliability with 48 vp targets (`widget/pages/HarmoniserCard.ets`); one big element per capsule on the card. **Planned:** resizable widgets (`resizable`, `onSizeChanged`) and the other visual upgrades in sections 4 and 6 not listed as built. Code references below are to the older commit named in the next paragraph.
+
 **How this was produced:** AI-assisted research (a Claude Code sub-agent using web search and reading this repository). Nothing was run on a device or an emulator, and no code was changed. Code references are to `origin/main` at `b33b0c3`; the widget files, `form_config.json` and `pages/Index.ets` are unchanged at `3c22935`.
 
 **Summary**

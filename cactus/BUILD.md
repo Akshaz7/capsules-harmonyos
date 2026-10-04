@@ -47,6 +47,6 @@ $N/llvm/bin/llvm-strip --strip-unneeded -o ../Capsules/cactus/libs/arm64-v8a/lib
 
 ## Notes
 
-- The engine is compiled with `-march=armv8.2-a+fp16+simd+dotprod+i8mm` (set by Cactus), so the CPU must support those extensions. Verified on the HarmonyOS emulator on Apple Silicon; not yet verified on a physical phone.
+- The engine is compiled with `-march=armv8.2-a+fp16+simd+dotprod+i8mm` (set by Cactus), so the CPU must support those extensions. Verified on the HarmonyOS emulator on Apple Silicon, and the engine also runs on a physical phone (the app's photo eval on a phone built one capsule with the on-device model). Speed and memory on a phone have not been measured.
 - Cactus only supports arm64-v8a, so `build-profile.json5` filters the HAR to that ABI.
 - Licence: `cactus/CACTUS_LICENSE`; summary in `docs/THIRD_PARTY.md`.
