@@ -12,6 +12,7 @@ import { MemoryStore, normaliseRequest, RequestCache } from '../main/ets/core/te
 import { CapsuleSource, generateCapsuleWith, LocalSources } from '../main/ets/core/CapsuleGenerator';
 import { GenerateResult } from '../main/ets/core/CapsuleTypes';
 import { MarketReply, MarketTransport, matchTemplateAsync } from '../main/ets/core/templates/MarketMatch';
+import templatesPatternsTest from './TemplatesPatterns.test';
 
 const STREAK_CAPSULE: string = '{"schemaVersion":1,"id":"theirs","name":"Pomodoro streak","permissions":[],' +
   '"state":{"days":{"type":"number","initial":0}},"ui":[{"type":"display","text":"{days} days"},' +
@@ -320,4 +321,5 @@ export default function templatesTest() {
       expect(fillTemplate(CORE_TEMPLATES[1], 'pomodoro at 9am').capsule?.triggers === undefined).assertTrue();
     });
 });
+  templatesPatternsTest();
 }

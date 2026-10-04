@@ -20,6 +20,8 @@ import { allComponents } from '../core/CapsuleProgram';
 import { DeviceReadout } from '../capabilities/DeviceReadout';
 import { weatherSymbolKey, WEATHER_URL } from '../capabilities/WeatherData';
 import { CapsuleRuntime, ChecklistState, CounterState, formatClock, NumberState, TimerState } from './CapsuleRuntime';
+import { Flags } from '../theme/Flags';
+import { PatternView, usesPattern } from './patterns/PatternView';
 
 /** True if some button in the capsule increments this counter, so the row needn't show a + icon too. */
 function hasIncrementButton(components: CapsuleComponent[], counterId: string): boolean {
@@ -56,6 +58,15 @@ export struct CapsuleView {
   };
 
   build() {
+    if (Flags.NEW_PATTERNS && usesPattern(this.runtime.capsule)) {
+      PatternView({ runtime: this.runtime, motionNote: this.motionNote, onPickCity: this.onPickCity })
+    } else {
+      this.classic()
+    }
+  }
+
+  @Builder
+  classic() {
     Column({ space: 12 }) {
       ForEach(this.runtime.capsule.ui, (c: CapsuleComponent) => {
         CapsuleNode({
@@ -76,7 +87,7 @@ export struct CapsuleView {
 
 /** One component. when/row hold more CapsuleNodes, so nesting works at any depth. */
 @ComponentV2
-struct CapsuleNode {
+export struct CapsuleNode {
   @Require @Param runtime: CapsuleRuntime;
   @Require @Param component: CapsuleComponent;
   @Param motionNote: string = '';
