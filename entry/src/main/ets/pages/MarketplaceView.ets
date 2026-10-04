@@ -2,7 +2,7 @@ import { MARKET_CATEGORIES, MarketItem, MarketPage, MarketplaceClient } from '..
 import { Capsule } from '../core';
 import { Chip, CompactPillButton, IconTile, OriginChip, PrimaryButton } from '../components';
 import { Flags } from '../theme/Flags';
-import { Effects, Palette, Radius } from '../theme/Tokens';
+import { Effects, Palette, Radius, Space } from '../theme/Tokens';
 import { capsuleIcon } from './CapsuleEntry';
 
 /** The capsule's own icon when its JSON is at hand; a bag otherwise. */
@@ -327,7 +327,7 @@ export struct MarketplaceView {
     .width('100%')
     .scrollBar(BarState.Off)
     .clip(false)
-    .padding({ bottom: this.embedded ? 120 : 16 }) // as a tab: the last row clears the floating bar
+    .padding({ bottom: Flags.NEW_POLISH ? Space.tabClear : (this.embedded ? 120 : 16) }) // the last row clears the tab bar
   }
 
   @Builder
