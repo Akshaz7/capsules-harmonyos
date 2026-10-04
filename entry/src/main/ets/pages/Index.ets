@@ -2525,7 +2525,10 @@ struct Index {
         }
         this.statusRow()
         this.createNotices()
-        this.recentSection()
+        // Polish: no Recent block on Create (CREATE_RECENT, off); the Capsules tab lists them all.
+        if (!Flags.NEW_POLISH || Flags.CREATE_RECENT) {
+          this.recentSection()
+        }
       }
       .padding({ left: 16, right: 16, top: 8, bottom: 120 }) // room for the floating tab bar
       .width('100%')
