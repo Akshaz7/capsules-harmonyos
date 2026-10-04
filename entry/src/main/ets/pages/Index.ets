@@ -52,7 +52,7 @@ import { Notifier } from '../renderer/CapsuleRuntime';
 import { dailyReminders } from '../core/Reminders';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
-import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon, routeHeadline } from './CapsuleEntry';
+import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon } from './CapsuleEntry';
 import { CapsuleStore } from './CapsuleStore';
 import { ConsentView } from './ConsentView';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -2932,74 +2932,6 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-  }
-
-  @Builder
-  routeCard(entry: CapsuleEntry) {
-    if (entry.route.widget && this.widgets.length > 0) {
-      Column({ space: 6 }) {
-        Button() {
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-              .fontSize(18)
-              .fontColor([$r('sys.color.brand')])
-            Text('Show on home screen widget')
-              .fontSize($r('sys.float.Body_L'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('sys.color.brand'))
-          }
-        }
-        .width('100%')
-        .height(48)
-        .backgroundColor($r('sys.color.comp_background_tertiary'))
-        .onClick(() => this.showOnWidget(entry))
-        if (this.widgets.some((w: WidgetInfo) => w.capsuleId === entry.capsule.id)) {
-          Text('On your home screen')
-            .fontSize($r('sys.float.Caption_M'))
-            .fontColor($r('sys.color.font_tertiary'))
-        }
-      }
-      .width('100%')
-    } else if (entry.route.widget) {
-      Column({ space: 10 }) {
-        Row({ space: 10 }) {
-          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-            .fontSize(22)
-            .fontColor([$r('sys.color.brand')])
-          Text('Add to home screen')
-            .fontSize($r('sys.float.Subtitle_M'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .layoutWeight(1)
-          SymbolGlyph(this.hintOpenIds.includes(entry.capsule.id) ? $r('sys.symbol.chevron_up') :
-          $r('sys.symbol.chevron_down'))
-            .fontSize(18)
-            .fontColor([$r('sys.color.icon_secondary')])
-        }
-        .width('100%')
-        .onClick(() => this.toggleHint(entry.capsule.id))
-        if (this.hintOpenIds.includes(entry.capsule.id)) {
-          Text('1. Long-press the Harmoniser app icon on your home screen.\n' +
-            '2. Pick the Harmoniser widget.\n' +
-            '3. Tap "Add to home screen".')
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.font_secondary'))
-            .lineHeight(22)
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-      .padding(16)
-      .borderRadius(20)
-      .backgroundColor($r('sys.color.comp_background_primary'))
-      .border({ width: 1, color: $r('sys.color.brand'), style: BorderStyle.Dashed })
-    } else if (routeHeadline(entry.route).length > 0) {
-      Text(routeHeadline(entry.route))
-        .fontSize($r('sys.float.Caption_M'))
-        .fontColor($r('sys.color.font_tertiary'))
-        .width('100%')
-        .padding({ left: 4, right: 4 })
-    }
   }
 
   @Builder
