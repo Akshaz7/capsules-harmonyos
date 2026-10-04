@@ -90,7 +90,8 @@ import { PromptBar } from '../components/PromptBar';
 import { BuildCard, BuildStep } from '../components/BuildCard';
 import { BuildSkeleton } from '../components/BuildSkeleton';
 import { VoiceButton } from '../components/VoiceButton';
-import { BuildStage, buildStageIndex, BUILD_STAGES, buildStageText } from './BuildStages';
+import { BuildStage, buildStageIndex, BUILD_STAGES, buildStageText, stageFromCore, StageUpdate } from './BuildStages';
+import { BuildStage as CoreStage } from '../core';
 import { CapsuleTile } from '../components/CapsuleTile';
 import { EmptyState, ErrorCard } from '../components';
 import { RecentRow, RecentTile, SuggestionChips } from '../components/CreateParts';
@@ -315,6 +316,8 @@ struct Index {
   @Local buildCloud: string = '';
   /** Bumped by every build and by Cancel; a result whose number is stale is dropped. */
   private createSeq: number = 0;
+  /** T3-32: true once core reported a stage for this build; Index's own guesses then stay out of the way. */
+  private coreStageSeen: boolean = false;
   /** T3-29: the mic is listening (the prompt shows "Listening…"). */
   @Local listening: boolean = false;
   /** T3-29: why dictation stopped, shown as the standard error card; '' when fine. */
@@ -1254,6 +1257,7 @@ struct Index {
 
   private async createFrom(text: string): Promise<void> {
     const seq = ++this.createSeq;
+    this.coreStageSeen = false;
     this.voiceError = '';
     this.buildStage = 'reading';
     this.buildCloud = '';
@@ -1297,7 +1301,9 @@ struct Index {
     if (seq !== this.createSeq) {
       return; // cancelled, or replaced by a newer build: drop the late result
     }
-    this.buildStage = 'checking';
+    if (!this.coreStageSeen) {
+      this.buildStage = 'checking';
+    }
     this.busy = false;
     if (!result.ok && result.failure === undefined && !isUnsupportedLanguage(result) && smart && !consent &&
       this.cloudUsable()) {
@@ -1314,8 +1320,10 @@ struct Index {
   /** Rules, then the on-device model, then the cloud model only when `allowCloud`. Never throws. */
   private async generate(text: string, allowCloud: boolean, cloudOnly: boolean = false,
     skipTemplates: boolean = false): Promise<GenerateResult> {
+    const seq = this.createSeq;
     try {
       return await generateCapsule(text, {
+        onStage: (stage: CoreStage) => this.onCoreStage(seq, stage), // T3-32: the live step line
         mode: this.settings.aiMode === 'on-device' ? 'on-device-only' : 'smart',
         allowNonEu: this.settings.allowNonEu,
         allowCloud: allowCloud,
@@ -1359,6 +1367,7 @@ struct Index {
 
   private async retryWithCloud(text: string): Promise<void> {
     const seq = ++this.createSeq;
+    this.coreStageSeen = false;
     this.buildCloud = this.cloudName();
     this.buildStage = 'model';
     this.busy = true;
@@ -1366,7 +1375,9 @@ struct Index {
     if (seq !== this.createSeq) {
       return; // cancelled
     }
-    this.buildStage = 'checking';
+    if (!this.coreStageSeen) {
+      this.buildStage = 'checking';
+    }
     this.busy = false;
     try {
       this.finishCreate(text, result);
@@ -1397,6 +1408,22 @@ struct Index {
   /** The prompt's placeholder: "Listening…" while the mic is on, else the rotating examples. */
   private promptPlaceholder(): string {
     return this.listening ? 'Listening…' : this.placeholderText;
+  }
+
+  /** T3-32: core's stage events drive the step line, for the build that is still on screen only. */
+  private onCoreStage(seq: number, stage: CoreStage): void {
+    if (seq !== this.createSeq || !this.busy) {
+      return; // cancelled or replaced
+    }
+    const u: StageUpdate | null = stageFromCore(stage.name, stage.provider);
+    if (u === null) {
+      return;
+    }
+    this.coreStageSeen = true;
+    this.buildStage = u.stage;
+    if (u.stage === 'model') {
+      this.buildCloud = u.cloud;
+    }
   }
 
   /** T3-28 Cancel: the build keeps running in core, but its result is ignored when it arrives. */
@@ -2249,6 +2276,7 @@ struct Index {
     const useCloud = this.settings.aiMode === 'smart' && this.cloudUsable();
     const run = async (): Promise<void> => {
       const seq = ++this.createSeq;
+      this.coreStageSeen = false;
       this.buildCloud = useCloud ? this.cloudName() : '';
       this.buildStage = 'model';
       this.busy = true;
@@ -2256,7 +2284,9 @@ struct Index {
       if (seq !== this.createSeq) {
         return; // cancelled
       }
-      this.buildStage = 'checking';
+      if (!this.coreStageSeen) {
+        this.buildStage = 'checking';
+      }
       this.busy = false;
       this.finishCreate(request, result);
     };

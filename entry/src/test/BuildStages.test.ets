@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium';
-import { buildStageIndex, buildStageText } from '../main/ets/pages/BuildStages';
+import { buildStageIndex, buildStageText, stageFromCore, StageUpdate } from '../main/ets/pages/BuildStages';
 
 export default function buildStagesTest() {
   describe('T3-28 build step line', () => {
@@ -11,6 +11,26 @@ export default function buildStagesTest() {
       expect(buildStageText('model', '')).assertEqual('Thinking on your phone…');
       expect(buildStageText('checking', '')).assertEqual("Checking it's safe");
       expect(buildStageText('ready', '')).assertEqual('Ready');
+    });
+
+    it('maps core stage events onto the step line (T3-32)', 0, () => {
+      const at = (name: string, provider?: string): string => {
+        const u: StageUpdate | null = stageFromCore(name, provider);
+        return u === null ? 'null' : `${u.stage}/${u.cloud}`;
+      };
+      expect(at('cache')).assertEqual('reading/');
+      expect(at('rules')).assertEqual('reading/');
+      expect(at('template')).assertEqual('templates/');
+      expect(at('marketplace')).assertEqual('templates/');
+      expect(at('on-device')).assertEqual('model/');
+      expect(at('cloud', 'anthropic')).assertEqual('model/Claude');
+      expect(at('cloud', 'mistral')).assertEqual('model/Mistral (EU)');
+      expect(at('validating')).assertEqual('checking/');
+      expect(at('retrying')).assertEqual('checking/');
+      expect(at('done')).assertEqual('ready/');
+      expect(at('failed')).assertEqual('null');
+      const u = stageFromCore('cloud', 'openai') as StageUpdate;
+      expect(buildStageText(u.stage, u.cloud)).assertEqual('Asking OpenAI…');
     });
 
     it('orders the stages', 0, () => {
