@@ -2,7 +2,8 @@ import { describe, it, expect } from '@ohos/hypium';
 import { Capsule, ChecklistComponent, CounterComponent, TimerComponent } from '../main/ets/core/CapsuleTypes';
 import { ChatMessage, ModelProvider, ProviderName } from '../main/ets/core/ModelProvider';
 import { CapsuleState } from '../main/ets/core/WidgetModel';
-import { carryState, editCapsuleWith, editSummary, EditResult } from '../main/ets/core/edit/EditCapsule';
+import { carryState, carryValues, editCapsuleWith, editSummary, EditResult } from '../main/ets/core/edit/EditCapsule';
+import { StateValues } from '../main/ets/core/CapsuleProgram';
 import { durationMinutes, ruleEdit } from '../main/ets/core/edit/EditRules';
 
 const FOCUS: string = '{"schemaVersion":0,"id":"focus","name":"Focus","permissions":["reminders"],"ui":[' +
@@ -44,6 +45,24 @@ function timerOf(r: EditResult): TimerComponent {
 }
 
 export default function editCapsuleTest() {
+  describe('Editing a task list (T4-28)', () => {
+    it('summarises list items in words and keeps finished items gone', 0, () => {
+      const tasks = (items: string): Capsule => JSON.parse('{"schemaVersion":1,"id":"t","name":"Tasks","permissions":[],' +
+        `"state":{"tasks":{"type":"list","initial":[${items}]},"newTask":{"type":"text","initial":""}},` +
+        '"ui":[{"type":"list","source":"tasks"}]}') as Capsule;
+      const before = tasks('"Wear a jacket","Check wind","Take umbrella"');
+      const after = tasks('"Wear a jacket","Check wind","Buy bread"');
+      const summary = editSummary(before, after).join('|');
+      expect(summary).assertEqual('Adds to tasks: Buy bread|Removes from tasks: Take umbrella');
+      expect(summary.includes('[')).assertFalse();
+      const now: StateValues = {};
+      now['tasks'] = ['Check wind', 'Take umbrella']; // "Wear a jacket" was finished (ticked)
+      now['newTask'] = '';
+      const carried = carryValues(before, after, now);
+      expect(JSON.stringify(carried['tasks'])).assertEqual('["Check wind","Buy bread"]');
+    });
+  });
+
   describe('editCapsule', () => {
     it('makes the timer 1 minute with a rule, no cloud', 0, async () => {
       const cloud = new FakeProvider('mistral', []);

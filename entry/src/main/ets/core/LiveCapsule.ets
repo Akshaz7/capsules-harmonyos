@@ -40,8 +40,21 @@ const LIVE_PATTERNS: RegExp[] = [
   /\b(what'?s on|events?)\s+(today|tonight|this weekend)\b/i
 ];
 
+/** A trip or packing list ("make me a packing list for Kraków"): live only with a bundled city (T4-28). */
+const TRIP: RegExp =
+  /\b(packing list|pack(ing)? for|what (should I|to) pack|trip|travel(l?ing)?|visit(ing)?|holiday|vacation|weekend (in|away)|day out)\b/i;
+
+export function isTripTo(request: string): boolean {
+  return TRIP.test(request) && weatherCityIn(request).length > 0;
+}
+
 export function needsLiveInfo(request: string): boolean {
-  return LIVE_PATTERNS.some((p: RegExp) => p.test(request));
+  return LIVE_PATTERNS.some((p: RegExp) => p.test(request)) || isTripTo(request);
+}
+
+/** The forecast matters: the request mentions the weather, or a trip to a bundled city. */
+export function wantsForecast(request: string): boolean {
+  return mentionsWeather(request) || isTripTo(request);
 }
 
 export function mentionsWeather(request: string): boolean {
@@ -66,9 +79,10 @@ export function weatherCityIn(request: string): string {
 
 // ---- Prompt ----
 
-export const LIVE_SYSTEM: string = `You make a short task list for a phone app from the user's request.
+export const LIVE_SYSTEM: string = `You make a short task list (or packing list) for a phone app from the user's request.
 Use the live information you are given (a weather forecast) or find it with web search when the request needs it.
 Every task must fit that information (for example rain -> "Take an umbrella", sun -> "Hang the washing outside").
+For a trip or a packing list, the tasks are the things to pack or do, chosen for that forecast.
 Reply with exactly one JSON object and nothing else:
 {"name": "<capsule name, at most 40 characters>", "tasks": ["<task>", ...], "summary": "<one line: the live fact the tasks are based on>"}
 At most ${MAX_LIVE_TASKS} tasks, each at most ${MAX_TASK_CHARS} characters, in English. No markdown.
@@ -210,7 +224,7 @@ export function liveTasksCapsule(plan: LivePlan, cityId: string, withWeather: bo
 export function liveFallback(request: string): Capsule | null {
   const city = weatherCityIn(request);
   const phrase = city.length > 0 ? `task list and weather in ${cityName(city)}` : 'task list and weather';
-  return mentionsWeather(request) ? parseRequest(phrase) : null;
+  return wantsForecast(request) ? parseRequest(phrase) : null;
 }
 
 // ---- The source ----
@@ -277,7 +291,7 @@ export class LiveCapsuleSource implements CapsuleSource {
     if (this.config === null || this.config.apiKey.length === 0) {
       return this.fallback(request, 'no Claude key configured');
     }
-    const weather = mentionsWeather(request);
+    const weather = wantsForecast(request);
     const city = weatherCityIn(request);
     let forecast: string | null = null;
     if (weather && city.length > 0) {

@@ -111,6 +111,11 @@ export default function liveCapsuleTest() {
       expect(routesLive(GOAL, { allowNonEu: true, allowCloud: false })).assertFalse();
       expect(routesLive('timer 10 minutes', { allowNonEu: true })).assertFalse();
       expect(weatherCityIn(GOAL)).assertEqual('krakow');
+      // Trips and packing lists with a bundled city are live (T4-28); without a city they are not.
+      expect(needsLiveInfo('make me a packing list for Kraków')).assertTrue();
+      expect(needsLiveInfo('weekend in Paris, what to pack')).assertTrue();
+      expect(needsLiveInfo('packing list for camping')).assertFalse();
+      expect(routesLive('make me a packing list for Kraków', { allowNonEu: true })).assertTrue();
       expect(LIVE_MODEL).assertEqual('claude-haiku-4-5-20251001');
     });
 
@@ -160,6 +165,15 @@ export default function liveCapsuleTest() {
         expect(validateCapsule(JSON.stringify(c)).ok).assertTrue();
         done();
       });
+
+    it('a packing list for a city gets the forecast and the weather card', 0, async (done: Function) => {
+      const t = new ScriptedTransport([ok(messages([textBlock(PLAN)]))]);
+      const c = capsuleOf(await new LiveCapsuleSource(anthropic('k'), t, krakowForecast)
+        .generate('make me a packing list for Kraków'));
+      expect(t.bodies[0].includes(FORECAST)).assertTrue();
+      expect(c.ui[0].type).assertEqual('device');
+      done();
+    });
 
     it('handles a search error inside a 200 and retries once without the tool on a 400', 0, async (done: Function) => {
       const searched = new ScriptedTransport([ok(messages([SEARCH_USE, SEARCH_ERROR, textBlock(PLAN)]))]);

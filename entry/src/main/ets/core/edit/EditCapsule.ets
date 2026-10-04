@@ -11,7 +11,7 @@
  * Apply, and moves the user's state across with carryState(). `previous` is kept for "Undo last change".
  */
 import { Capsule, CapsuleComponent, CapsuleOrigin, ChecklistComponent, CounterComponent, FailureKind, Permission,
-  StateVar, TimerComponent } from '../CapsuleTypes';
+  Scalar, StateVar, TimerComponent, Value } from '../CapsuleTypes';
 import { validateCapsule } from '../CapsuleValidator';
 import { allComponents, StateValues } from '../CapsuleProgram';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from '../Language';
@@ -124,6 +124,10 @@ function varText(v: StateVar): string {
   return JSON.stringify(v.initial);
 }
 
+function listTexts(v: Value): string[] {
+  return Array.isArray(v) ? (v as Scalar[]).map((x: Scalar) => `${x}`) : [];
+}
+
 /** What changed between two versions of a capsule, in plain English, one line each. */
 export function editSummary(before: Capsule, after: Capsule): string[] {
   const out: string[] = [];
@@ -171,6 +175,19 @@ export function editSummary(before: Capsule, after: Capsule): string[] {
   Object.keys(is).forEach((n: string) => {
     if (was[n] === undefined) {
       out.push(`Added value ${n}`);
+    } else if (was[n].type === 'list' && is[n].type === 'list') {
+      // A list's items in plain words ("Adds to tasks: Buy bread"), never the raw arrays.
+      const before = listTexts(was[n].initial);
+      const after = listTexts(is[n].initial);
+      const lower = (t: string) => t.toLowerCase();
+      const added = after.filter((t: string) => !before.map(lower).includes(t.toLowerCase()));
+      const removed = before.filter((t: string) => !after.map(lower).includes(t.toLowerCase()));
+      if (added.length > 0) {
+        out.push(`Adds to ${n}: ${added.join(', ')}`);
+      }
+      if (removed.length > 0) {
+        out.push(`Removes from ${n}: ${removed.join(', ')}`);
+      }
     } else if (varText(was[n]) !== varText(is[n])) {
       out.push(`Starting ${n}: ${varText(was[n])} → ${varText(is[n])}`);
     }
@@ -246,15 +263,30 @@ export function carryState(before: Capsule, after: Capsule, state: CapsuleState)
   return out;
 }
 
-/** v1 values whose variable still exists with the same type and starting value. */
+/**
+ * v1 values whose variable still exists with the same type and starting value. A list whose starting items
+ * changed keeps its current items (finished ones stay gone) with the edit applied: new starting items are
+ * added, removed ones are taken out (T4-28).
+ */
 export function carryValues(before: Capsule, after: Capsule, values: StateValues): StateValues {
   const was: Record<string, StateVar> = before.state ?? {};
   const is: Record<string, StateVar> = after.state ?? {};
   const out: StateValues = {};
   Object.keys(values).forEach((n: string) => {
-    if (was[n] !== undefined && is[n] !== undefined && was[n].type === is[n].type &&
-      varText(was[n]) === varText(is[n])) {
+    if (was[n] === undefined || is[n] === undefined || was[n].type !== is[n].type) {
+      return;
+    }
+    if (varText(was[n]) === varText(is[n])) {
       out[n] = values[n];
+    } else if (is[n].type === 'list' && Array.isArray(values[n])) {
+      const oldInitial = listTexts(was[n].initial);
+      const newInitial = (is[n].initial as Scalar[]);
+      const current = (values[n] as Scalar[]);
+      const removed = oldInitial.filter((t: string) => !newInitial.some((x: Scalar) => `${x}` === t));
+      const kept = current.filter((x: Scalar) => !removed.includes(`${x}`));
+      const added = newInitial.filter((x: Scalar) => !oldInitial.includes(`${x}`) &&
+        !kept.some((k: Scalar) => `${k}` === `${x}`));
+      out[n] = kept.concat(added);
     }
   });
   return out;

@@ -91,7 +91,7 @@ import { BuildCard, BuildStep } from '../components/BuildCard';
 import { BuildSkeleton } from '../components/BuildSkeleton';
 import { VoiceButton } from '../components/VoiceButton';
 import { BuildStage, buildStageIndex, BUILD_STAGES, buildStageText, stageFromCore, StageUpdate } from './BuildStages';
-import { BuildStage as CoreStage } from '../core';
+import { BuildStage as CoreStage, LIVE_PROVIDER, routesLiveRequest } from '../core';
 import { CapsuleTile } from '../components/CapsuleTile';
 import { EmptyState, ErrorCard } from '../components';
 import { RecentRow, RecentTile, SuggestionChips } from '../components/CreateParts';
@@ -192,6 +192,9 @@ const DEVICE_POLL_MS = 2000;
 
 const FAILED_MESSAGE =
   "I couldn't build that offline. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
+/** The cloud was asked and still failed: not an offline problem (T4-28). */
+const FAILED_ONLINE_MESSAGE =
+  "The AI couldn't make a working capsule for that. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
 
 class CalendarScheduler implements TimerScheduler {
   private adapter: TimerAdapter;
@@ -371,6 +374,10 @@ struct Index {
   @Local busy: boolean = false;
   @Local message: string = '';
   @Local failed: boolean = false;
+  /** The failed build asked the cloud (FAILED_ONLINE_MESSAGE), not only the phone. */
+  @Local failedOnline: boolean = false;
+  /** The request whose Claude notice was declined (built without Claude; not asked again for it). */
+  private liveDeclined: string = '';
   /** When core refused a request by design: what it would need, e.g. ["contacts", "SMS"]. Else empty. */
   @Local unsupported: string[] = [];
   /** Core's English-only gate refused the request (T4-11): show the calm language card. */
@@ -1286,6 +1293,7 @@ struct Index {
     this.snapNeedsCloud = false;
     this.message = '';
     this.failed = false;
+    this.failedOnline = false;
     this.unsupported = [];
     this.languageFailed = false;
     const fixture = demoFixture(text);
@@ -1297,9 +1305,21 @@ struct Index {
       this.finishCreate(text, demo);
       return;
     }
+    // T4-28: a request that needs live information goes to Claude. Ask for Claude first (the rules may answer it
+    // without ever reaching the cloud otherwise); "On-device only" builds it on the phone instead.
+    const live = routesLiveRequest(text, this.settings.aiMode === 'smart', this.settings.allowNonEu) &&
+      !isNotEnglish(text) && this.liveDeclined !== text;
+    if (live && !this.settings.hasCloudConsent(LIVE_PROVIDER)) {
+      this.busy = false;
+      this.showCloudNotice(() => this.createFrom(text), () => {
+        this.liveDeclined = text; // build it without Claude, and don't ask again for this request
+        this.createFrom(text);
+      }, LIVE_PROVIDER);
+      return;
+    }
     // T3-12: when the rules don't cover it but a built-in template does, offer it first.
     this.buildStage = 'templates';
-    if (!isNotEnglish(text) && parseRequest(text) === null) {
+    if (!live && !isNotEnglish(text) && parseRequest(text) === null) {
       const m = matchTemplate(text);
       if (m !== null) {
         // T3-17: a strong template match goes straight to consent, with "Build fresh" as the way out.
@@ -1313,9 +1333,10 @@ struct Index {
       }
     }
     const smart = this.settings.aiMode === 'smart';
-    const consent = this.settings.hasCloudConsent(this.cloudKey());
+    const consent = this.settings.hasCloudConsent(live ? LIVE_PROVIDER : this.cloudKey());
     // Until core reports its stages (T4-25), the model step names the cloud only when it may be used.
-    this.buildCloud = smart && consent && this.cloudUsable() ? this.cloudName() : '';
+    this.buildCloud = live && consent ? 'Claude' : smart && consent && this.cloudUsable() ? this.cloudName() : '';
+    this.failedOnline = smart && consent && (live || this.cloudUsable());
     this.buildStage = 'model';
     const result = await this.generate(text, smart && consent);
     if (seq !== this.createSeq) {
@@ -1357,10 +1378,11 @@ struct Index {
   }
 
   /** One-time notice before the first cloud request. OK retries with the cloud; the other choice switches modes. */
-  private showCloudNotice(onOk: () => void, onDeclined: () => void): void {
+  private showCloudNotice(onOk: () => void, onDeclined: () => void, provider?: string): void {
+    const key = provider ?? this.cloudKey(); // live requests name Claude, whatever smart mode's provider is
     this.getUIContext().showAlertDialog({
-      title: cloudNotice(this.cloudKey()).title,
-      message: cloudNotice(this.cloudKey()).message,
+      title: cloudNotice(key).title,
+      message: cloudNotice(key).message,
       autoCancel: false,
       // Stacked so "On-device only" is not cut off.
       buttonDirection: DialogButtonDirection.VERTICAL,
@@ -1369,7 +1391,7 @@ struct Index {
           value: 'OK',
           style: DialogButtonStyle.HIGHLIGHT,
           action: () => {
-            this.settings.acceptCloudNotice(this.cloudKey());
+            this.settings.acceptCloudNotice(key);
             onOk();
           }
         },
@@ -1387,6 +1409,7 @@ struct Index {
 
   private async retryWithCloud(text: string): Promise<void> {
     const seq = ++this.createSeq;
+    this.failedOnline = true; // a failure from here was the cloud's, not "offline"
     this.coreStageSeen = false;
     this.buildCloud = this.cloudName();
     this.buildStage = 'model';
@@ -2355,7 +2378,7 @@ struct Index {
   @Builder
   failedCard() {
     Column({ space: 12 }) {
-      Text(FAILED_MESSAGE)
+      Text(this.failedOnline ? FAILED_ONLINE_MESSAGE : FAILED_MESSAGE)
         .fontSize(Flags.NEW_ERRORS ? 15 : $r('sys.float.Body_M'))
         .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
         .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))

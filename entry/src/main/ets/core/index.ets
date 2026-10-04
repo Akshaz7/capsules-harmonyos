@@ -245,6 +245,19 @@ function liveSource(): CapsuleSource {
   return new LiveCapsuleSource(config, cloudTransport ?? new NetworkTransport(), forecastLine);
 }
 
+/** The provider live capsules use (its consent key in the app). */
+export const LIVE_PROVIDER: string = 'anthropic';
+
+/**
+ * True when generateCapsule would build this request live with Claude (T4-28): it needs live information, smart
+ * mode, non-EU allowed, and an Anthropic key is configured. The app asks for Claude consent BEFORE building
+ * such a request (the rules would otherwise answer it without asking, and live would never run).
+ */
+export function routesLiveRequest(request: string, smart: boolean, allowNonEu: boolean): boolean {
+  return smart && modelConfigs.some((c: ModelConfig) => c.provider === 'anthropic' && c.apiKey.length > 0) &&
+    routesLive(request, { mode: 'smart', allowNonEu: allowNonEu });
+}
+
 /** The on-device model fills template slots the rules missed; throws when it is not ready. */
 async function onDeviceSlots(prompt: string): Promise<string> {
   await onDevice.whenInitialised();
