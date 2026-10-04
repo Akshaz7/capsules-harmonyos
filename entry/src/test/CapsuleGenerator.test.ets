@@ -10,6 +10,8 @@ import { MarketReply, MarketTransport } from '../main/ets/core/templates/MarketM
 import { SHARED_TOO_LONG } from '../main/ets/core/SharedText';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE } from '../main/ets/core/Language';
 import { Capsule, GenerateResult } from '../main/ets/core/CapsuleTypes';
+import { BuildStage } from '../main/ets/core/BuildStage';
+import { CORE_TEMPLATES } from '../main/ets/core/templates/CoreTemplates';
 
 const GOOD: string =
   '{"schemaVersion":0,"id":"plants","name":"Plants","permissions":[],"ui":[{"type":"checklist","id":"p","items":["Fern"]}]}';
@@ -97,7 +99,95 @@ class OpenAIBodyShape {
   messages: OpenAIBodyMessage[] = [];
 }
 
+/** Records the stages as "name" or "name:provider". */
+class StageLog {
+  stages: string[] = [];
+
+  listener(): (s: BuildStage) => void {
+    return (s: BuildStage): void => {
+      this.stages.push(s.provider !== undefined ? `${s.name}:${s.provider}` : s.name);
+    };
+  }
+}
+
+function throwingListener(s: BuildStage): void {
+  throw new Error('the UI broke');
+}
+
 export default function capsuleGeneratorTest() {
+  describe('Build stages (T4-25)', () => {
+    it('reports a rules hit: rules, validating, done', 0, async (done: Function) => {
+      const log = new StageLog();
+      const local: LocalSources = { library: new TemplateLibrary(CORE_TEMPLATES) };
+      const r = await generateCapsuleWith('count my squats', [], '', null, { onStage: log.listener() }, local);
+      expect(r.ok).assertTrue();
+      expect(log.stages.join(',')).assertEqual('rules,validating,done');
+      done();
+    });
+
+    it('reports a template hit: rules, template, marketplace, done', 0, async (done: Function) => {
+      const log = new StageLog();
+      const local: LocalSources = {
+        library: new TemplateLibrary(CORE_TEMPLATES),
+        market: { baseUrl: 'https://m.example', transport: new CountingMarket() }
+      };
+      const r = await generateCapsuleWith('tennis scoreboard me vs Sam', [], '', null, { onStage: log.listener() },
+        local);
+      expect(r.origin).assertEqual('template');
+      expect(log.stages.join(',')).assertEqual('rules,template,marketplace,done');
+      done();
+    });
+
+    it('reports a cloud build with its provider, and the retry when the first reply is invalid', 0,
+      async (done: Function) => {
+        const log = new StageLog();
+        const r = await generateCapsuleWith(PLAIN, [modelWith(new CountingTransport())], '', onDeviceFailing(),
+          { onStage: log.listener() });
+        expect(r.ok).assertTrue();
+        expect(log.stages.join(',')).assertEqual('rules,on-device,cloud:mistral,validating,done');
+        const bad = new StageLog();
+        const f = await generateCapsuleWith(PLAIN, [modelWith(new CountingTransport(200, '{"nope":1}'))], '', null,
+          { onStage: bad.listener() });
+        expect(f.ok).assertFalse();
+        expect(bad.stages.join(',')).assertEqual('rules,cloud:mistral,validating,retrying,validating,failed');
+        done();
+      });
+
+    it('skipTemplates skips the cache, templates and marketplace but keeps rules, on-device and cloud', 0,
+      async (done: Function) => {
+        const market = new CountingMarket();
+        const local: LocalSources = {
+          library: new TemplateLibrary(CORE_TEMPLATES),
+          market: { baseUrl: 'https://m.example', transport: market }
+        };
+        const usual = await generateCapsuleWith('tennis scoreboard me vs Sam', [], '', null, undefined, local);
+        expect(usual.origin).assertEqual('template');
+        const log = new StageLog();
+        const device = onDeviceReturning(GOOD);
+        const fresh = await generateCapsuleWith('tennis scoreboard me vs Sam', [], '', device,
+          { skipTemplates: true, onStage: log.listener() }, local);
+        expect(fresh.origin).assertEqual('on-device');
+        expect(log.stages.join(',')).assertEqual('rules,on-device,validating,done');
+        expect(market.calls).assertEqual(1); // only the first, usual build searched the marketplace
+        const rules = await generateCapsuleWith('count my squats', [], '', null, { skipTemplates: true }, local);
+        expect(rules.origin).assertEqual('rules');
+        done();
+      });
+
+    it('never lets the listener break the build, and sends no request text', 0, async (done: Function) => {
+      const r = await generateCapsuleWith('count my squats', [], '', null, { onStage: throwingListener });
+      expect(r.ok).assertTrue();
+      const log = new StageLog();
+      await generateCapsuleWith(PLAIN, [modelWith(new CountingTransport())], '', null, { onStage: log.listener() });
+      expect(log.stages.join(',').includes('plants')).assertFalse();
+      const cached = new StageLog();
+      await generateCapsuleWith('xyzzy', [], '', null, { onStage: cached.listener() });
+      expect(cached.stages[cached.stages.length - 1]).assertEqual('failed');
+      done();
+    });
+  });
+
+
   describe('CapsuleGenerator routing', () => {
     it('uses the rule parser first, without calling the on-device model or the cloud', 0, async (done: Function) => {
       const t = new CountingTransport();

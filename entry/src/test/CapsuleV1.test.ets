@@ -1,9 +1,10 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { ActionGuard, CapsuleRuntime } from '../main/ets/renderer/CapsuleRuntime';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
+import { parseRequest } from '../main/ets/core/RuleParser';
 import { BILL_SPLIT_CAPSULE as BILL, TENNIS_CAPSULE as TENNIS } from '../main/ets/core/V1Fixtures';
 import {
-  allComponents, applyActions, ApplyResult, evaluate, initialState, inputText, isEnabled, isShown, listItems,
+  allComponents, applyActions, ApplyResult, evaluate, finishListItem, initialState, inputText, isEnabled, isShown, listItems,
   renderTemplate, restoreState, setInput, StateValues
 } from '../main/ets/core/CapsuleProgram';
 import {
@@ -90,6 +91,31 @@ class DenyAll implements ActionGuard {
 }
 
 export default function capsuleV1Test() {
+  describe('Schema v1: finishing list items (T4-26)', () => {
+    it('removes one item without touching the input state; anything else is not ok', 0, () => {
+      const tasks = parseRequest('task list and weather in Kraków') as Capsule;
+      const s0 = setInput(tasks, initialState(tasks), 'newTask', 'Buy milk').state;
+      const added = applyActions(tasks, s0, allComponents(tasks.ui).find((c: CapsuleComponent) =>
+        c.type === 'button') as ButtonComponent).state;
+      const s1 = setInput(tasks, added, 'newTask', 'Call mum').state;
+      const two = applyActions(tasks, s1, allComponents(tasks.ui).find((c: CapsuleComponent) =>
+        c.type === 'button') as ButtonComponent).state;
+      expect(listItems(two, 'tasks').join('|')).assertEqual('Buy milk|Call mum');
+      const r = finishListItem(tasks, two, 'tasks', 0);
+      expect(r.ok).assertTrue();
+      expect(listItems(r.state, 'tasks').join('|')).assertEqual('Call mum');
+      expect(listItems(two, 'tasks').join('|')).assertEqual('Buy milk|Call mum'); // input unchanged
+      expect(r.actions.length).assertEqual(0);
+      const out = finishListItem(tasks, two, 'tasks', 2);
+      expect(`${out.ok} ${out.state === two}`).assertEqual('false true');
+      expect(finishListItem(tasks, two, 'tasks', -1).ok).assertFalse();
+      expect(finishListItem(tasks, two, 'tasks', 0.5).ok).assertFalse();
+      expect(finishListItem(tasks, two, 'newTask', 0).ok).assertFalse(); // not a list component
+      expect(finishListItem(tasks, two, 'nope', 0).ok).assertFalse();
+    });
+  });
+
+
   describe('Schema v1: tennis scoreboard', () => {
     it('validates and starts at 0 - 0', 0, () => {
       const c = load(TENNIS);

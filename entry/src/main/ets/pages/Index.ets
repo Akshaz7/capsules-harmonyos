@@ -48,9 +48,13 @@ import {
   TimerScheduler,
   TimerState
 } from '../renderer/CapsuleRuntime';
+import { Notifier } from '../renderer/CapsuleRuntime';
+import { dailyReminders, notificationContent } from '../core/Reminders';
+import { Alternative, cantBuild, CLOUD_EXPLAINER, failureHelp, FailureHelp, TRY_CLOUD_LABEL } from '../core/FailureHelp';
+import { SecondaryButton } from '../components/Buttons';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
-import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon, routeHeadline } from './CapsuleEntry';
+import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon, originShort } from './CapsuleEntry';
 import { CapsuleStore } from './CapsuleStore';
 import { ConsentView } from './ConsentView';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -62,7 +66,7 @@ import { AddToHomeButton } from '../widget/AddToHomeButton'; // PROTECTED: owned
 import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
 import { ShareLaunch, shareLaunch } from './ShareLaunch';
 import {
-  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, LIMITS_TEXT, refusalWords
+  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, refusalWords
 } from './CreateText';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
@@ -80,6 +84,20 @@ import { formatClock } from '../renderer/CapsuleRuntime';
 import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
 import { HomeHero } from './HomeHero';
+import { Flags } from '../theme/Flags';
+import { Effects, Palette, Radius, Space } from '../theme/Tokens';
+import { storeWidthClass } from '../theme/Breakpoint';
+import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../components';
+import { PromptBar } from '../components/PromptBar';
+import { BuildCard, BuildStep } from '../components/BuildCard';
+import { BuildSkeleton } from '../components/BuildSkeleton';
+import { VoiceButton } from '../components/VoiceButton';
+import { BuildStage, buildStageIndex, BUILD_STAGES, buildStageText, stageFromCore, StageUpdate } from './BuildStages';
+import { BuildStage as CoreStage, LIVE_PROVIDER, routesLiveRequest } from '../core';
+import { CapsuleTile } from '../components/CapsuleTile';
+import { EmptyState, ErrorCard } from '../components';
+import { RecentRow, RecentTile, SuggestionChips } from '../components/CreateParts';
+import { shareCapsule } from '../sharing';
 import { MiniPreview } from './MiniPreview';
 import { reduceMotion, springCurve, successTick } from './Motion';
 import { BUILT_FROM_TEMPLATE } from './CapsuleEntry';
@@ -94,12 +112,21 @@ interface UndoPoint {
 
 const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
+/** Polish: room under a full-page capsule for the floating tab bar (64 + 12 margin + 8 gap). */
+const POLISH_TAB_INSET = Space.tabClear; // T3-35: tab bar + 16
 const CHOOSE_PAGE = 'chooseCapsule';
 const MARKET_PAGE = 'marketplace';
 const TAB_CREATE = 0;
 const TAB_CAPSULES = 1;
 const TAB_MARKET = 2;
 const TAB_SETTINGS = 3;
+/** Redesign tab bar items, in tab order. */
+const TAB_ITEMS: TabItem[] = [
+  { icon: $r('sys.symbol.plus_circle'), label: 'Create' },
+  { icon: $r('sys.symbol.square_grid_2x2'), label: 'Capsules' },
+  { icon: $r('sys.symbol.bag'), label: 'Marketplace' },
+  { icon: $r('sys.symbol.gearshape'), label: 'Settings' }
+];
 const MARKETPLACE_ORIGIN = 'marketplace';
 // Stored as a capsule origin so the sheet and the card badge say where it came from.
 const IMPORTED_ORIGIN = 'imported';
@@ -124,13 +151,6 @@ const PLACEHOLDER_MS = 3000;
 const TYPE_MS = 55; // one character per tick while typing the placeholder
 const HOLD_TICKS = 30; // ~1.6 s with a whole example shown
 
-// Shown after a failed create. Each request is one the offline rules can build.
-const RETRY_SUGGESTIONS: ExampleChip[] = [
-  { label: 'Tennis points counter', icon: $r('sys.symbol.plus_circle'), request: 'count tennis points' },
-  { label: 'Eggs timer 10 min', icon: $r('sys.symbol.timer'), request: 'timer eggs 10' },
-  { label: 'Gym checklist', icon: $r('sys.symbol.checkmark_circle'),
-    request: 'checklist for gym: towel, water, shoes' }
-];
 /** Hidden demo requests that load core's schema v1 fixtures (for testing and the demo video). */
 function demoFixture(text: string): string | null {
   const t = text.toLowerCase();
@@ -144,7 +164,7 @@ interface CloudNotice {
 
 /** The one-time notice names the provider that will actually get the request, and says if it is outside the EU. */
 function cloudNotice(provider: string): CloudNotice {
-  if (provider === 'mistral') {
+  if (provider === 'mistral' && !Flags.CLOUD_CLAUDE_ONLY) {
     return { title: 'Use Mistral AI (EU)?', message:
       'For advanced apps, Harmoniser sends only your request text to Mistral AI (EU). No personal data or app data.' };
   }
@@ -169,6 +189,9 @@ const DEVICE_POLL_MS = 2000;
 
 const FAILED_MESSAGE =
   "I couldn't build that offline. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
+/** The cloud was asked and still failed: not an offline problem (T4-28). */
+const FAILED_ONLINE_MESSAGE =
+  "The AI couldn't make a working capsule for that. Try rephrasing, e.g. 'counter for tennis points' or 'timer 10 min'.";
 
 class CalendarScheduler implements TimerScheduler {
   private adapter: TimerAdapter;
@@ -198,6 +221,22 @@ class NotifyOnFinish implements TimerAlert {
 
   timerFinished(capsuleId: string, t: TimerState): void {
     this.adapter.publish(`${t.label} is done`, this.capsuleName);
+  }
+}
+
+/** notify:<text> from a button or trigger: a notification titled with the text (T4-27). */
+class NotifyText implements Notifier {
+  private adapter: NotificationAdapter;
+  private capsuleName: string;
+
+  constructor(adapter: NotificationAdapter, capsuleName: string) {
+    this.adapter = adapter;
+    this.capsuleName = capsuleName;
+  }
+
+  notify(capsuleId: string, text: string): void {
+    const n = notificationContent(this.capsuleName, text);
+    this.adapter.publish(n.title, n.text, capsuleId); // tapping it opens the capsule
   }
 }
 
@@ -261,6 +300,8 @@ struct Index {
   private pendingMarketItem: MarketItem | undefined = undefined;
   /** Capsule ids this install has published, to show "Remove from marketplace". */
   @Local publishedIds: string[] = [];
+  /** Polish: bumped by the ⋯ menu's "Show as QR code" to open SharingBar's QR sheet. */
+  @Local qrAsk: number = 0;
   /** Time of the last trigger check; the trigger cards re-read "Next: ..." from it. */
   @Local triggerNow: number = Date.now();
   @Local placeholderIndex: number = 0;
@@ -268,6 +309,24 @@ struct Index {
   @Local tab: number = TAB_CREATE;
   @Local tabTaps: number[] = [0, 0, 0, 0];
   private tabsController: TabsController = new TabsController();
+  /** Redesign: true on wide windows (600vp and up); also stored in AppStorage by theme/Breakpoint. */
+  @Local wide: boolean = false;
+  /** Height of the Create tab, to place the heading about 40% down the screen. */
+  @Local createHeight: number = 0;
+  /** T3-28: where the current build is, for the live step line. */
+  @Local buildStage: BuildStage = 'reading';
+  /** The provider the model step asks ("Claude"), or '' for the phone's own model. */
+  @Local buildCloud: string = '';
+  /** Bumped by every build and by Cancel; a result whose number is stale is dropped. */
+  private createSeq: number = 0;
+  /** T3-32: true once core reported a stage for this build; Index's own guesses then stay out of the way. */
+  private coreStageSeen: boolean = false;
+  /** T3-29: the mic is listening (the prompt shows "Listening…"). */
+  @Local listening: boolean = false;
+  /** T3-29: why dictation stopped, shown as the standard error card; '' when fine. */
+  @Local voiceError: string = '';
+  /** Redesign frame: the "Change it…" card shows after the footer pill is tapped (or while it has news). */
+  @Local changeOpenId: string = '';
   /** UI-1: the placeholder as typed so far (types and erases the examples). */
   @Local placeholderText: string = PLACEHOLDERS[0];
   @Local inputFocused: boolean = false;
@@ -314,6 +373,14 @@ struct Index {
   @Local busy: boolean = false;
   @Local message: string = '';
   @Local failed: boolean = false;
+  /** The failed build asked the cloud (FAILED_ONLINE_MESSAGE), not only the phone. */
+  @Local failedOnline: boolean = false;
+  /** The request the failure card is about (T4-30: reason, alternative, "Try with cloud AI"). */
+  @Local failedRequest: string = '';
+  /** T4-31: the request whose cloud notice was declined (button, Back, swipe, tap outside): it never goes to the cloud. */
+  private cloudDeclined: string = '';
+  /** The request whose Claude notice was declined (built without Claude; not asked again for it). */
+  private liveDeclined: string = '';
   /** When core refused a request by design: what it would need, e.g. ["contacts", "SMS"]. Else empty. */
   @Local unsupported: string[] = [];
   /** Core's English-only gate refused the request (T4-11): show the calm language card. */
@@ -361,6 +428,8 @@ struct Index {
     if (this.launch.formId.length > 0) {
       // Cold start from a blank widget: open the picker once the Navigation is up.
       setTimeout(() => this.openCapsulePicker(), 0);
+    } else if (this.launch.capsuleId.length > 0) {
+      setTimeout(() => this.openLaunchedCapsule(), 0); // cold start from a reminder or widget tap
     }
     if (this.share.seq > 0) {
       setTimeout(() => this.onShared(), 0); // cold start from the share sheet
@@ -388,12 +457,12 @@ struct Index {
   private async installFromMarket(item: MarketItem): Promise<void> {
     const got = await this.market.capsuleJson(item);
     if (got.json === undefined) {
-      this.toast(got.error ?? "Couldn't download that capsule");
+      this.toast(got.error ?? "Couldn't download that capsule. Check your connection and try again.");
       return;
     }
     const prepared = prepareImport(got.json);
     if (!prepared.ok || prepared.capsule === undefined) {
-      this.toast(prepared.error ?? "That capsule isn't valid");
+      this.toast(prepared.error ?? "That capsule isn't valid, so nothing was installed.");
       return;
     }
     this.nav.pop();
@@ -421,7 +490,7 @@ struct Index {
           this.store?.setPublished(entry.capsule.id, id);
           this.publishedIds = this.publishedIds.filter((x: string) => x !== entry.capsule.id).concat([entry.capsule.id]);
         }
-        this.toast(r.id !== undefined ? 'Published. Anyone can install it now.' : r.error ?? "Couldn't publish it");
+        this.toast(r.id !== undefined ? 'Published. Anyone can install it now.' : r.error ?? "Couldn't publish it. Try again later.");
       } }
     });
   }
@@ -465,7 +534,7 @@ struct Index {
       this.devices = this.deviceStore.add(r.device);
       this.toast(`Paired with ${deviceName(r.device)}`);
     } else {
-      this.toast(r.error ?? "Couldn't pair that device");
+      this.toast(r.error ?? "Couldn't pair that device. Check the code and try again.");
     }
   }
 
@@ -479,28 +548,56 @@ struct Index {
     }
   }
 
-  /** Asks every time (until the "devices" permission lands, T4-13), logs the answer, then sends. */
+  /**
+   * T3-15 with T4-13: once this capsule has "devices" it sends straight away; until then it asks once and the
+   * gatekeeper keeps the answer (allowDevices / denyDevices, both logged). Every send is logged too.
+   */
   private showOnDevice(entry: CapsuleEntry, deviceId: string): void {
     const counter = entry.runtime.counters.length > 0 ? entry.runtime.counters[0].value : undefined;
     const payload = payloadFor(entry.capsule, counter);
     const device = this.devices.find((d: PairedDevice) => d.id === deviceId);
-    if (payload === null || device === undefined) {
+    if (payload === null || device === undefined || !this.gate) {
       return;
     }
+    const gate = this.gate;
     const name = deviceName(device);
     const number = payload.type === 'timer' ? `${payload.seconds} seconds` : `the count ${payload.count}`;
     const what = `${payload.type} "${payload.label}", ${number}`;
+    const send = (): void => {
+      gate.logDeviceSend(entry.capsule.id, true, `sent to ${name}: ${what}`);
+      this.sendToDevice(entry, deviceId);
+    };
+    if (gate.canSendToDevice(entry.capsule.id)) {
+      send();
+      return;
+    }
     this.getUIContext().showAlertDialog({
       title: `Show "${entry.capsule.name}" on ${name}?`,
-      message: `Only this leaves your phone: ${what}.${this.relaySimulated ? ' (Simulated: nothing is sent.)' : ''}`,
-      primaryButton: { value: "Don't send", action: () => {
-        this.gate?.logDeviceSend(entry.capsule.id, false, `refused: show on ${name}`);
+      message: `Only this leaves your phone: ${what}. Harmoniser remembers your answer for this capsule.` +
+        `${this.relaySimulated ? ' (Simulated: nothing is sent.)' : ''}`,
+      primaryButton: { value: "Don't allow", action: () => {
+        gate.denyDevices(entry.capsule.id, `show on ${name}`);
       } },
-      secondaryButton: { value: 'Send', action: () => {
-        this.gate?.logDeviceSend(entry.capsule.id, true, `sent to ${name}: ${what}`);
-        this.sendToDevice(entry, deviceId);
+      secondaryButton: { value: 'Allow and send', action: () => {
+        gate.allowDevices(entry.capsule.id, `show on ${name}`);
+        send();
       } }
     });
+  }
+
+  /** T3-15: a capsule's own sendToDevice button: the device last used, else the first paired one. */
+  private sendFromButton(capsuleId: string): void {
+    const entry = this.entries.find((e: CapsuleEntry) => e.capsule.id === capsuleId);
+    const device = this.devices.find((d: PairedDevice) => d.id === this.deviceId) ??
+      (this.devices.length > 0 ? this.devices[0] : undefined);
+    if (entry === undefined) {
+      return;
+    }
+    if (device === undefined) {
+      this.toast('Pair a device first: open "Show on another device" below the capsule.');
+      return;
+    }
+    this.showOnDevice(entry, device.id);
   }
 
   private async sendToDevice(entry: CapsuleEntry, deviceId: string): Promise<void> {
@@ -908,7 +1005,7 @@ struct Index {
     const v = validateCapsule(JSON.stringify(updated));
     if (!v.ok || !v.capsule) {
       hilog.error(0x0001, 'Index', 'edited triggers invalid: %{public}s', v.errors.join('; '));
-      this.toast("That change isn't valid");
+      this.toast("That trigger change isn't valid, so nothing changed.");
       return;
     }
     const capsule = v.capsule;
@@ -957,6 +1054,23 @@ struct Index {
     }
   }
 
+  @Monitor('launch.capsuleId')
+  onCapsuleLaunch(): void {
+    if (this.launch.capsuleId.length > 0 && this.entries.length > 0) {
+      this.openLaunchedCapsule();
+    }
+  }
+
+  /** A reminder notification or a widget's "tap to open": show that capsule (if it is still saved). */
+  private openLaunchedCapsule(): void {
+    const id = this.launch.capsuleId;
+    this.launch.capsuleId = '';
+    if (this.entries.some((e: CapsuleEntry) => e.capsule.id === id)) {
+      this.nav.clear();
+      this.open(id);
+    }
+  }
+
   private openCapsulePicker(): void {
     this.close();
     this.nav.clear();
@@ -982,7 +1096,7 @@ struct Index {
     }
     const ok = await assignCapsuleToWidget(this.ctx, formId, capsuleId);
     const name = this.entries.find((e: CapsuleEntry) => e.capsule.id === capsuleId)?.capsule.name ?? 'It';
-    this.toast(ok ? `${name} is now on your home screen` : "That widget isn't available any more");
+    this.toast(ok ? `${name} is now on your home screen` : "That widget isn't there any more. Add a new one from the home screen.");
     this.launch.formId = '';
     this.loadWidgets();
     this.nav.pop();
@@ -1023,7 +1137,7 @@ struct Index {
     const ok = await assignCapsuleToWidget(this.ctx, formId, entry.capsule.id);
     this.loadWidgets();
     const index = this.widgets.findIndex((w: WidgetInfo) => w.formId === formId);
-    this.toast(ok ? `Showing ${entry.capsule.name} on Widget ${index + 1}` : "Couldn't show it on that widget");
+    this.toast(ok ? `Showing ${entry.capsule.name} on Widget ${index + 1}` : "Couldn't show it on that widget. Try another one.");
   }
 
   private toast(text: string): void {
@@ -1073,6 +1187,20 @@ struct Index {
       if (this.gate.isAllowed(capsule, 'reminders') && this.timers && this.notifications) {
         rt.scheduler = new CalendarScheduler(this.timers);
         rt.alert = new NotifyOnFinish(this.notifications, capsule.name);
+      }
+      if (this.gate.isAllowed(capsule, 'notifications') && this.notifications) {
+        rt.notifier = new NotifyText(this.notifications, capsule.name); // asks to enable notifications once
+      }
+      rt.onSendToDevice = () => this.sendFromButton(capsule.id); // T3-15: same path as "Show on another device"
+
+      // Daily notify triggers ring from the calendar, also while the app is closed (T4-27).
+      const reminders = this.gate.isAllowed(capsule, 'reminders') && this.gate.isAllowed(capsule, 'notifications') ?
+        dailyReminders(capsule) : [];
+      if (this.timers) {
+        // Adds, updates or removes; never duplicates. Until the calendar holds them, the app notifies itself.
+        this.timers.syncDailyReminders(capsule.id, reminders).then((ok: boolean) => {
+          rt.calendarReminders = ok && reminders.length > 0;
+        });
       }
     }
     if (this.store && capsule.state !== undefined) {
@@ -1158,10 +1286,17 @@ struct Index {
   }
 
   private async createFrom(text: string): Promise<void> {
+    const seq = ++this.createSeq;
+    this.coreStageSeen = false;
+    this.voiceError = '';
+    this.buildStage = 'reading';
+    this.buildCloud = '';
+    this.dismissKeyboard();
     this.busy = true;
     this.snapNeedsCloud = false;
     this.message = '';
     this.failed = false;
+    this.failedOnline = false;
     this.unsupported = [];
     this.languageFailed = false;
     const fixture = demoFixture(text);
@@ -1173,8 +1308,22 @@ struct Index {
       this.finishCreate(text, demo);
       return;
     }
+    // T4-28: a request that needs live information goes to Claude. Ask for Claude first (the rules may answer it
+    // without ever reaching the cloud otherwise); "On-device only" builds it on the phone instead.
+    const live = routesLiveRequest(text, this.settings.aiMode === 'smart', this.settings.allowNonEu) &&
+      !isNotEnglish(text) && this.liveDeclined !== text;
+    if (live && !this.settings.hasCloudConsent(LIVE_PROVIDER)) {
+      this.busy = false;
+      this.showCloudNotice(() => this.createFrom(text), () => {
+        this.liveDeclined = text; // build it without Claude, and don't ask again for this request
+        this.cloudDeclined = text; // ...nor send it to any other cloud (T4-31)
+        this.createFrom(text);
+      }, LIVE_PROVIDER);
+      return;
+    }
     // T3-12: when the rules don't cover it but a built-in template does, offer it first.
-    if (!isNotEnglish(text) && parseRequest(text) === null) {
+    this.buildStage = 'templates';
+    if (!live && !isNotEnglish(text) && parseRequest(text) === null) {
       const m = matchTemplate(text);
       if (m !== null) {
         // T3-17: a strong template match goes straight to consent, with "Build fresh" as the way out.
@@ -1188,14 +1337,27 @@ struct Index {
       }
     }
     const smart = this.settings.aiMode === 'smart';
-    const consent = this.settings.hasCloudConsent(this.cloudKey());
+    const consent = this.cloudDeclined !== text &&
+      this.settings.hasCloudConsent(live ? LIVE_PROVIDER : this.cloudKey());
+    // Until core reports its stages (T4-25), the model step names the cloud only when it may be used.
+    this.buildCloud = live && consent ? 'Claude' : smart && consent && this.cloudUsable() ? this.cloudName() : '';
+    this.failedOnline = smart && consent && (live || this.cloudUsable());
+    this.buildStage = 'model';
     const result = await this.generate(text, smart && consent);
+    if (seq !== this.createSeq) {
+      return; // cancelled, or replaced by a newer build: drop the late result
+    }
+    if (!this.coreStageSeen) {
+      this.buildStage = 'checking';
+    }
     this.busy = false;
     if (!result.ok && result.failure === undefined && !isUnsupportedLanguage(result) && smart && !consent &&
-      this.cloudUsable()) {
+      this.cloudUsable() && this.cloudDeclined !== text) {
       // The device couldn't build it and the cloud would be next: ask once before the first cloud request.
       hilog.info(0x0001, 'Index', 'on-device failed (%{public}s); showing the cloud notice', result.error ?? '');
       this.showCloudNotice(() => this.retryWithCloud(text), () => {
+        this.cloudDeclined = text;
+        this.failedRequest = text;
         this.failed = true;
       });
       return;
@@ -1204,13 +1366,17 @@ struct Index {
   }
 
   /** Rules, then the on-device model, then the cloud model only when `allowCloud`. Never throws. */
-  private async generate(text: string, allowCloud: boolean, cloudOnly: boolean = false): Promise<GenerateResult> {
+  private async generate(text: string, allowCloud: boolean, cloudOnly: boolean = false,
+    skipTemplates: boolean = false, forceSmart: boolean = false): Promise<GenerateResult> {
+    const seq = this.createSeq;
     try {
       return await generateCapsule(text, {
-        mode: this.settings.aiMode === 'on-device' ? 'on-device-only' : 'smart',
+        onStage: (stage: CoreStage) => this.onCoreStage(seq, stage), // T3-32: the live step line
+        mode: this.settings.aiMode === 'on-device' && !forceSmart ? 'on-device-only' : 'smart',
         allowNonEu: this.settings.allowNonEu,
         allowCloud: allowCloud,
-        cloudOnly: cloudOnly
+        cloudOnly: cloudOnly,
+        skipTemplates: skipTemplates // "Build fresh": no cache, templates or marketplace (T4 355746d)
       });
     } catch (e) {
       const failed: GenerateResult = { ok: false, error: `generateCapsule threw: ${(e as Error).message}`, details: [] };
@@ -1219,10 +1385,26 @@ struct Index {
   }
 
   /** One-time notice before the first cloud request. OK retries with the cloud; the other choice switches modes. */
-  private showCloudNotice(onOk: () => void, onDeclined: () => void): void {
+  private showCloudNotice(onOk: () => void, onDeclined: () => void, provider?: string): void {
+    const key = provider ?? this.cloudKey(); // live requests name Claude, whatever smart mode's provider is
+    // T4-31: exactly one outcome. Only OK sends anything; Back, swipe or tap outside count as declining.
+    let decided = false;
+    const ok = (): void => {
+      if (!decided) {
+        decided = true;
+        this.settings.acceptCloudNotice(key);
+        onOk();
+      }
+    };
+    const declined = (): void => {
+      if (!decided) {
+        decided = true;
+        onDeclined();
+      }
+    };
     this.getUIContext().showAlertDialog({
-      title: cloudNotice(this.cloudKey()).title,
-      message: cloudNotice(this.cloudKey()).message,
+      title: cloudNotice(key).title,
+      message: cloudNotice(key).message,
       autoCancel: false,
       // Stacked so "On-device only" is not cut off.
       buttonDirection: DialogButtonDirection.VERTICAL,
@@ -1230,26 +1412,51 @@ struct Index {
         {
           value: 'OK',
           style: DialogButtonStyle.HIGHLIGHT,
-          action: () => {
-            this.settings.acceptCloudNotice(this.cloudKey());
-            onOk();
-          }
+          action: () => ok()
         },
         {
           value: 'On-device only',
           action: () => {
             this.settings.setAiMode('on-device');
-            onDeclined();
+            declined();
           }
         }
       ],
-      cancel: () => onDeclined()
+      cancel: () => declined() // Back or swipe (tap outside does not close it: autoCancel false)
     });
   }
 
-  private async retryWithCloud(text: string): Promise<void> {
+  /** T4-30: a cloud is set up but this failed build didn't use it. The cloud is asked only after the notice. */
+  private canTryCloud(): boolean {
+    // Not for live news / prices (cant-build): no model can build those.
+    return !this.failedOnline && this.failedRequest.length > 0 && this.cloudUsable() &&
+      !isNotEnglish(this.failedRequest) && !cantBuild(this.failedRequest);
+  }
+
+  /** "Try with cloud AI": the provider notice first (named, may be outside the EU), then this one request. */
+  private tryCloud(): void {
+    const text = this.failedRequest;
+    const live = routesLiveRequest(text, true, this.settings.allowNonEu);
+    this.showCloudNotice(() => this.retryWithCloud(text, true, live ? 'Claude' : ''), () => {
+      // Declined: the failure card stays (showCloudNotice already switched to on-device).
+    }, live ? LIVE_PROVIDER : undefined);
+  }
+
+  private async retryWithCloud(text: string, forceSmart: boolean = false, cloudName: string = ''): Promise<void> {
+    const seq = ++this.createSeq;
+    this.failedOnline = true; // a failure from here was the cloud's, not "offline"
+    this.failed = false;
+    this.coreStageSeen = false;
+    this.buildCloud = cloudName.length > 0 ? cloudName : this.cloudName();
+    this.buildStage = 'model';
     this.busy = true;
-    const result = await this.generate(text, true);
+    const result = await this.generate(text, true, false, false, forceSmart);
+    if (seq !== this.createSeq) {
+      return; // cancelled
+    }
+    if (!this.coreStageSeen) {
+      this.buildStage = 'checking';
+    }
     this.busy = false;
     try {
       this.finishCreate(text, result);
@@ -1258,6 +1465,75 @@ struct Index {
       this.unsupported = [];
       this.languageFailed = false;
         this.failed = true;
+    }
+  }
+
+  /** Wide windows (>= 600vp, NEW_WIDE): the capsule frame shows its extras in a side panel. */
+  private frameHasSide(): boolean {
+    return Flags.NEW_WIDE && this.wide;
+  }
+
+  /** T3-29: partial then final dictated text replaces the prompt each time. */
+  private onVoiceText(text: string): void {
+    this.voiceError = '';
+    this.request = text;
+  }
+
+  private onVoiceError(message: string): void {
+    this.listening = false;
+    this.voiceError = message;
+  }
+
+  /** The prompt's placeholder: "Listening…" while the mic is on, else the rotating examples. */
+  private promptPlaceholder(): string {
+    return this.listening ? 'Listening…' : this.placeholderText;
+  }
+
+  /** T3-32: core's stage events drive the step line, for the build that is still on screen only. */
+  private onCoreStage(seq: number, stage: CoreStage): void {
+    if (seq !== this.createSeq || !this.busy) {
+      return; // cancelled or replaced
+    }
+    const u: StageUpdate | null = stageFromCore(stage.name, stage.provider);
+    if (u === null) {
+      return;
+    }
+    this.coreStageSeen = true;
+    this.buildStage = u.stage;
+    if (u.stage === 'model') {
+      this.buildCloud = u.cloud;
+    }
+  }
+
+  /** T3-28 Cancel: the build keeps running in core, but its result is ignored when it arrives. */
+  private cancelBuild(): void {
+    this.createSeq++;
+    this.busy = false;
+    this.buildStage = 'reading';
+    hilog.info(0x0001, 'Index', 'build cancelled by the user');
+  }
+
+  private dismissKeyboard(): void {
+    try {
+      this.getUIContext().getFocusController().clearFocus();
+    } catch (e) {
+      // no focused input: nothing to dismiss
+    }
+  }
+
+  /** T3-28: the live build card under the prompt, fading and scaling out as the sheet or capsule takes over. */
+  @Builder
+  buildLive() {
+    if (this.busy) {
+      BuildSkeleton({
+        stepText: buildStageText(this.buildStage, this.buildCloud),
+        stepIndex: buildStageIndex(this.buildStage),
+        stepCount: BUILD_STAGES.length,
+        reduceMotion: reduceMotion(),
+        onCancel: () => this.cancelBuild()
+      })
+        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.96, y: 0.96 }))
+          .animation({ duration: reduceMotion() ? 0 : 250, curve: Curve.EaseOut }))
     }
   }
 
@@ -1275,6 +1551,7 @@ struct Index {
       hilog.error(0x0001, 'Index', 'generateCapsule failed for "%{private}s": %{public}s [%{public}s]',
         text, result.error ?? 'no error', failureDetail(result));
       this.unsupported = refusalWords(result);
+      this.failedRequest = text;
       this.failed = true;
       return;
     }
@@ -1310,7 +1587,7 @@ struct Index {
     }
     const replaced = this.entries.find((e: CapsuleEntry) => e.capsule.id === this.replacingId);
     if (replaced) {
-      this.undo(replaced, `Replaced ${replaced.capsule.name} with a version made with Mistral (EU)`);
+      this.undo(replaced, `Replaced ${replaced.capsule.name} with a version made with ${Flags.CLOUD_CLAUDE_ONLY ? 'Claude' : 'Mistral (EU)'}`);
     }
     this.replacingId = '';
     if (this.pendingOriginRaw === MARKETPLACE_ORIGIN && this.pendingMarketItem !== undefined) {
@@ -1427,7 +1704,7 @@ struct Index {
     if (!result.ok || !result.capsule || !isCloudOrigin(result.origin ?? '')) {
       hilog.error(0x0001, 'Index', 'make smarter failed for "%{private}s": origin %{public}s, %{public}s',
         text, result.origin ?? '-', result.error ?? '');
-      this.message = "Mistral couldn't improve this one right now.";
+      this.message = `${Flags.CLOUD_CLAUDE_ONLY ? 'Claude' : 'Mistral'} couldn't improve this one right now.`;
       return;
     }
     this.pending = this.uniqueCapsule(result.capsule);
@@ -1488,7 +1765,7 @@ struct Index {
     this.snapNeedsCloud = false;
     const path = copyToCache(ctx, uri);
     if (path.length === 0) {
-      this.toast("Couldn't open that photo");
+      this.toast("Couldn't open that photo. Try another one.");
       return;
     }
     this.busy = true;
@@ -1528,6 +1805,20 @@ struct Index {
 
   @Builder
   snapCloudNote() {
+    if (Flags.NEW_SNAP) {
+      // Redesign: the standard error card; same text, same single action.
+      ErrorCard({
+        title: SNAP_NEEDS_CLOUD,
+        action: this.settings.aiMode === 'on-device' ? 'Switch AI mode to Smart in Settings' : '',
+        onAction: () => this.selectTab(TAB_SETTINGS)
+      })
+    } else {
+      this.snapCloudNoteOld()
+    }
+  }
+
+  @Builder
+  snapCloudNoteOld() {
     Row({ space: 12 }) {
       SymbolGlyph($r('sys.symbol.camera'))
         .fontSize(20)
@@ -1696,6 +1987,7 @@ struct Index {
       issue: this.changeId === entry.capsule.id ? this.changeIssue : '',
       issueText: this.changeId === entry.capsule.id ? this.changeIssueText : '',
       canUndo: this.undoIds.includes(entry.capsule.id),
+      autoFocus: this.changeOpenId === entry.capsule.id,
       onSubmit: (text: string) => this.proposeChange(entry, text),
       onApply: () => this.confirmChange(),
       onCancel: () => this.resetChange(entry.capsule.id),
@@ -1729,7 +2021,7 @@ struct Index {
 
   /** The provider smart mode will send cloud requests to: Mistral when an EU provider is set up, else the default. */
   private cloudKey(): string {
-    if (this.euCloud) {
+    if (this.euCloud && !Flags.CLOUD_CLAUDE_ONLY) {
       return 'mistral';
     }
     return this.cloudProviders.length > 0 ? this.cloudProviders[0] : '';
@@ -1737,7 +2029,7 @@ struct Index {
 
   /** Settings > Smart: names the provider Smart mode would actually use (BUG-3). */
   private smartModeDetail(): string {
-    if (this.euCloud) {
+    if (this.euCloud && !Flags.CLOUD_CLAUDE_ONLY) {
       return 'On-device + Mistral EU when needed';
     }
     if (!this.cloudConfigured) {
@@ -1749,7 +2041,7 @@ struct Index {
 
   /** The cloud provider smart mode will use, as users know it. Core prefers an EU provider. */
   private cloudName(): string {
-    if (this.euCloud) {
+    if (this.euCloud && !Flags.CLOUD_CLAUDE_ONLY) {
       return 'Mistral (EU)';
     }
     const p = this.cloudProviders.length > 0 ? this.cloudProviders[0] : '';
@@ -1758,6 +2050,9 @@ struct Index {
 
   /** Whether smart mode may use a cloud provider: an EU one, or any one if non-EU providers are allowed. */
   private cloudUsable(): boolean {
+    if (Flags.CLOUD_CLAUDE_ONLY) {
+      return this.cloudConfigured; // T4-31: Claude only; the provider notice is the consent
+    }
     return this.euCloud || (this.cloudConfigured && this.settings.allowNonEu);
   }
 
@@ -1766,8 +2061,11 @@ struct Index {
     if (this.settings.aiMode === 'on-device') {
       return `${this.onDeviceStatus} · On-device only`;
     }
-    if (this.euCloud) {
+    if (this.euCloud && !Flags.CLOUD_CLAUDE_ONLY) {
       return `${this.onDeviceStatus} · Mistral (EU) when needed`;
+    }
+    if (Flags.CLOUD_CLAUDE_ONLY && (this.cloudConfigured || this.euCloud)) {
+      return `${this.onDeviceStatus} · ${this.settings.allowNonEu ? 'Claude when needed' : 'Claude is off (outside the EU)'}`;
     }
     if (this.cloudConfigured) {
       return `${this.onDeviceStatus} · ${this.settings.allowNonEu ? 'Cloud AI when needed' : 'No EU cloud provider'}`;
@@ -1805,6 +2103,9 @@ struct Index {
     } else if (name === MARKET_PAGE) {
       MarketplaceView({
         client: this.market,
+        wide: this.wide,
+        onDeviceOnly: this.settings.aiMode === 'on-device',
+        onOpenSettings: () => this.nav.pushPath({ name: SETTINGS_PAGE }),
         onInstall: (item: MarketItem) => this.installFromMarket(item)
       })
     } else if (name === SETTINGS_PAGE) {
@@ -1840,8 +2141,9 @@ struct Index {
           ConsentView({
             capsule: this.pending,
             origin: this.pendingOrigin,
+            originKind: originKindOf(this.pendingOriginRaw),
             builtFrom: this.pendingBuiltFrom,
-            canBuildFresh: this.pendingBuiltFrom.length > 0 && this.settings.aiMode === 'smart' && this.cloudUsable(),
+            canBuildFresh: this.pendingBuiltFrom.length > 0, // the cloud when usable, else the phone (skipTemplates)
             onBuildFresh: () => this.buildFresh(),
             onDecide: (allowed: Permission[]) => this.decide(allowed),
             onCancel: () => this.cancelPending()
@@ -1857,7 +2159,7 @@ struct Index {
     Column({ space: 12 }) {
       // No inner padding here: the card's 16vp is the only inset, so the text lines up with the
       // Create button. Even a few vp of TextArea padding clipped the first glyph ("k", "W", "M").
-      TextArea({ placeholder: this.placeholderText, text: this.request })
+      TextArea({ placeholder: this.promptPlaceholder(), text: this.request })
         .height(96)
         .onFocus(() => {
           this.inputFocused = true;
@@ -1866,7 +2168,9 @@ struct Index {
           this.inputFocused = false;
         })
         .width('100%')
-        .fontSize($r('sys.float.Body_L'))
+        .fontSize(Flags.NEW_CREATE_CLASSIC ? 17 : $r('sys.float.Body_L'))
+        .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text : undefined)
+        .placeholderColor(Flags.NEW_CREATE_CLASSIC ? Palette.disabled : undefined)
         .backgroundColor(Color.Transparent)
         .borderRadius(0)
         .padding(0)
@@ -1874,61 +2178,116 @@ struct Index {
           this.request = value;
         })
       Row() {
-        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
-          SymbolGlyph($r('sys.symbol.camera'))
-            .fontSize(20)
-            .fontColor([$r('sys.color.icon_primary')])
-            .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.cameraBounce)
-        }
-        .width(40)
-        .height(40)
-        .enabled(!this.busy)
-        .accessibilityText('Snap')
-        .accessibilityDescription(SNAP_HINT)
-        .onClick(() => {
-          this.cameraBounce++;
-          this.snap();
-        })
-        Blank()
-        Button() {
-          Row({ space: 6 }) {
-            if (this.busy) {
-              LoadingProgress()
-                .width(20)
-                .height(20)
-                .color($r('sys.color.font_on_primary'))
-            }
-            Text(this.busy ? 'Creating' : 'Create')
-              .fontSize($r('sys.float.Body_M'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('sys.color.font_on_primary'))
+        if (Flags.CREATE_SNAP) {
+          Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+            SymbolGlyph($r('sys.symbol.camera'))
+              .fontSize(20)
+              .fontColor([Flags.NEW_CREATE_CLASSIC ? Palette.text : $r('sys.color.icon_primary')])
+              .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.cameraBounce)
           }
-          .padding({ left: 18, right: 18 })
-          .height(40)
-          .overlay(this.shimmer(), { align: Alignment.Start })
+          .width(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
+          .height(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
+          .backgroundColor(Flags.NEW_CREATE_CLASSIC ? Palette.softButton : undefined)
+          .enabled(!this.busy)
+          .accessibilityText('Snap')
+          .accessibilityDescription(SNAP_HINT)
+          .onClick(() => {
+            this.cameraBounce++;
+            this.snap();
+          })
+        } else {
+          // T3-29: dictation replaces Snap; the words land in the prompt as they are spoken.
+          VoiceButton({
+            diameter: Flags.NEW_CREATE_CLASSIC ? 44 : 40,
+            onText: (t: string) => this.onVoiceText(t),
+            onError: (m: string) => this.onVoiceError(m),
+            onListening: (on: boolean) => {
+              this.listening = on;
+            }
+          })
+            .enabled(!this.busy)
         }
-        .height(40)
-        .clip(true)
-        .backgroundColor($r('sys.color.brand'))
-        .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: 0.92 })
-        .enabled(!this.busy && this.request.trim().length > 0)
-        .opacity(this.busy || this.request.trim().length > 0 ? 1 : 0.4)
-        .onClick(() => {
-          this.create();
-        })
+        Blank()
+        if (Flags.NEW_POLISH) {
+          this.polishSend()
+        } else {
+          Button() {
+            Row({ space: 6 }) {
+              if (this.busy) {
+                LoadingProgress()
+                  .width(20)
+                  .height(20)
+                  .color($r('sys.color.font_on_primary'))
+              }
+              Text(this.busy ? 'Creating' : 'Create')
+                .fontSize($r('sys.float.Body_M'))
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('sys.color.font_on_primary'))
+            }
+            .padding({ left: 18, right: 18 })
+            .height(40)
+            .overlay(this.shimmer(), { align: Alignment.Start })
+          }
+          .height(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
+          .clip(true)
+          .backgroundColor(Flags.NEW_CREATE_CLASSIC ? (this.busy || this.request.trim().length > 0 ? Palette.blue : Palette.sendDisabled) :
+            $r('sys.color.brand'))
+          .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: 0.92 })
+          .enabled(!this.busy && this.request.trim().length > 0)
+          .opacity(Flags.NEW_CREATE_CLASSIC || this.busy || this.request.trim().length > 0 ? 1 : 0.4)
+          .onClick(() => {
+            this.create();
+          })
+        }
       }
       .width('100%')
     }
     .width('100%')
     .padding(16)
-    .borderRadius(24)
+    .borderRadius(Flags.NEW_POLISH ? Radius.pillLarge : (Flags.NEW_CREATE_CLASSIC ? 22 : 24))
     // Frosted material over the hero gradient, with a soft shadow; a brand glow while typing.
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THIN)
-    .border({ width: this.inputFocused ? 1.5 : 0.5,
-      color: this.inputFocused ? $r('sys.color.brand') : $r('sys.color.comp_divider') })
-    .shadow(this.inputFocused ? { radius: 28, color: '#335B8CFF', offsetY: 6 } :
-      { radius: 16, color: '#14000000', offsetY: 4 })
+    // NEW_CREATE_CLASSIC: a white card, 1vp line border (blue while typing), the same soft shadow.
+    // NEW_POLISH: the prompt is the hero: a white card, radius 24, hairline border (blue while typing), one shadow.
+    .backgroundBlurStyle(Flags.NEW_CREATE_CLASSIC || Flags.NEW_POLISH ? BlurStyle.NONE : BlurStyle.COMPONENT_THIN)
+    .backgroundColor(Flags.NEW_CREATE_CLASSIC || Flags.NEW_POLISH ? Palette.surface : undefined)
+    .border(Flags.NEW_POLISH ? { width: this.inputFocused ? 1.5 : 1, color: this.inputFocused ? Palette.blue : Palette.hairline } :
+      { width: Flags.NEW_CREATE_CLASSIC ? (this.inputFocused ? 1.5 : 1) : (this.inputFocused ? 1.5 : 0.5),
+      color: this.inputFocused ? (Flags.NEW_CREATE_CLASSIC ? Palette.blue : $r('sys.color.brand')) :
+        (Flags.NEW_CREATE_CLASSIC ? Palette.line2 : $r('sys.color.comp_divider')) })
+    .shadow(Flags.NEW_POLISH ? Effects.cardShadow : (this.inputFocused ? { radius: 28, color: '#335B8CFF', offsetY: 6 } :
+      { radius: 16, color: '#14000000', offsetY: 4 }))
     .animation({ duration: 220, curve: Curve.EaseOut })
+  }
+
+  /** Polish: Create's send is a 48vp circular gradient button (spinner while building). Same create(). */
+  @Builder
+  polishSend() {
+    Button({ type: ButtonType.Circle }) {
+      if (this.busy) {
+        LoadingProgress()
+          .width(24)
+          .height(24)
+          .color(Palette.surface)
+      } else {
+        SymbolGlyph($r('sys.symbol.arrow_up'))
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor([Palette.surface])
+      }
+    }
+    .width(48)
+    .height(48)
+    .backgroundColor(this.busy || this.request.trim().length > 0 ? Palette.blue : Palette.sendDisabled)
+    .linearGradient(this.busy || this.request.trim().length > 0 ?
+      { angle: 135, colors: [[Palette.blue, 0], [Palette.blueDeep, 1]] } :
+      { angle: 135, colors: [[Color.Transparent, 0], [Color.Transparent, 1]] })
+    .shadow(this.request.trim().length > 0 ? Effects.buttonShadow : { radius: 0, color: Color.Transparent })
+    .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: Effects.pressedScale })
+    .enabled(!this.busy && this.request.trim().length > 0)
+    .accessibilityText(this.busy ? 'Creating' : 'Create')
+    .onClick(() => {
+      this.create();
+    })
   }
 
   /** A light band sweeping across Create while it builds (not with reduce motion). */
@@ -1978,8 +2337,9 @@ struct Index {
   @Builder
   statusRow() {
     Text(this.statusLine())
-      .fontSize($r('sys.float.Caption_M'))
-      .fontColor($r('sys.color.font_tertiary'))
+      .fontSize(Flags.NEW_CREATE_CLASSIC ? 13 : $r('sys.float.Caption_M'))
+      .fontWeight(Flags.NEW_CREATE_CLASSIC ? 500 : undefined)
+      .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text2 : $r('sys.color.font_tertiary'))
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .width('100%')
@@ -1989,6 +2349,18 @@ struct Index {
   /** Calm, final answer for requests capsules can never do; no suggestions to retry. */
   @Builder
   unsupportedCard() {
+    if (Flags.NEW_ERRORS) {
+      ErrorCard({
+        title: `Harmoniser can't do ${joinWords(this.unsupported)} by design.`,
+        body: `Capsules can only use: ${CAPSULE_ABILITIES}.`
+      })
+    } else {
+      this.unsupportedCardOld()
+    }
+  }
+
+  @Builder
+  unsupportedCardOld() {
     Row({ space: 12 }) {
       SymbolGlyph($r('sys.symbol.lock'))
         .fontSize(20)
@@ -2013,8 +2385,9 @@ struct Index {
   }
 
   /**
-   * "Not quite right? Build fresh" on a template's consent sheet: skip templates and ask the cloud for a capsule
-   * made for this request (after the cloud notice). Declining the notice brings the template back.
+   * "Not quite right? Build fresh" on a template's consent sheet: skip the cache, templates and marketplace and
+   * build a capsule for this request. With the cloud usable it asks the cloud (after the cloud notice; declining
+   * brings the template back); otherwise the phone's own model builds it.
    */
   private buildFresh(): void {
     const capsule = this.pending;
@@ -2023,13 +2396,24 @@ struct Index {
       return;
     }
     this.cancelPending();
+    const useCloud = this.settings.aiMode === 'smart' && this.cloudUsable();
     const run = async (): Promise<void> => {
+      const seq = ++this.createSeq;
+      this.coreStageSeen = false;
+      this.buildCloud = useCloud ? this.cloudName() : '';
+      this.buildStage = 'model';
       this.busy = true;
-      const result = await this.generate(request, true, true);
+      const result = await this.generate(request, useCloud, useCloud, true);
+      if (seq !== this.createSeq) {
+        return; // cancelled
+      }
+      if (!this.coreStageSeen) {
+        this.buildStage = 'checking';
+      }
       this.busy = false;
       this.finishCreate(request, result);
     };
-    if (this.settings.hasCloudConsent(this.cloudKey())) {
+    if (!useCloud || this.settings.hasCloudConsent(this.cloudKey())) {
       run();
     } else {
       this.showCloudNotice(() => run(), () => {
@@ -2046,11 +2430,11 @@ struct Index {
     Row({ space: 12 }) {
       SymbolGlyph($r('sys.symbol.character_on_character'))
         .fontSize(20)
-        .fontColor([$r('sys.color.icon_secondary')])
+        .fontColor([Flags.NEW_ERRORS ? Palette.orangeIcon : $r('sys.color.icon_secondary')])
       Text() {
         Span(LANGUAGE_MESSAGE)
         Span(`'${LANGUAGE_EXAMPLE}'`)
-          .fontColor($r('sys.color.font_emphasize'))
+          .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_emphasize'))
           .fontWeight(FontWeight.Medium)
           .onClick(() => this.useLanguageExample())
         Span('.')
@@ -2062,8 +2446,8 @@ struct Index {
     .alignItems(VerticalAlign.Top)
     .width('100%')
     .padding(16)
-    .borderRadius(20)
-    .backgroundColor($r('sys.color.comp_background_primary'))
+    .borderRadius(Flags.NEW_ERRORS ? Radius.card : 20)
+    .backgroundColor(Flags.NEW_ERRORS ? Palette.orangeTintSoft : $r('sys.color.comp_background_primary'))
   }
 
   private useLanguageExample(): void {
@@ -2071,38 +2455,73 @@ struct Index {
     this.languageFailed = false;
   }
 
+  private failHelp(): FailureHelp {
+    return failureHelp(this.failedRequest);
+  }
+
+  @Builder
+  retryChip(label: string, icon: Resource, request: string) {
+    Row({ space: 6 }) {
+      SymbolGlyph(icon)
+        .fontSize(16)
+        .fontColor([$r('sys.color.icon_emphasize')])
+      Text(label)
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_primary'))
+    }
+    .height(36)
+    .padding({ left: 14, right: 14 })
+    .margin({ right: 8, bottom: 8 })
+    .borderRadius(18)
+    .backgroundColor(Flags.NEW_ERRORS ? Palette.surface : $r('sys.color.comp_background_tertiary'))
+    .onClick(() => {
+      this.request = request;
+      this.create();
+    })
+  }
+
   @Builder
   failedCard() {
     Column({ space: 12 }) {
-      Text(FAILED_MESSAGE)
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_primary'))
-        .width('100%')
-      Text(LIMITS_TEXT)
+      if (cantBuild(this.failedRequest)) {
+        // Live news / prices (cant-build): the reason is the headline; no "couldn't build that offline".
+        Text(this.failHelp().reason)
+          .fontSize(Flags.NEW_ERRORS ? 15 : $r('sys.float.Body_M'))
+          .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
+          .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))
+          .width('100%')
+      } else {
+        Text(this.failedOnline ? FAILED_ONLINE_MESSAGE : FAILED_MESSAGE)
+          .fontSize(Flags.NEW_ERRORS ? 15 : $r('sys.float.Body_M'))
+          .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
+          .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))
+          .width('100%')
+        if (this.failHelp().reason.length > 0) {
+          Text(this.failHelp().reason)
+            .fontSize($r('sys.float.Body_M'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('sys.color.font_primary'))
+            .width('100%')
+        }
+      }
+      Text(CLOUD_EXPLAINER)
         .fontSize($r('sys.float.Body_S'))
         .fontColor($r('sys.color.font_secondary'))
         .width('100%')
         .onClick(() => this.selectTab(TAB_SETTINGS))
+      if (this.canTryCloud()) {
+        SecondaryButton({ label: TRY_CLOUD_LABEL, onTap: () => this.tryCloud() })
+      }
+      // Ash: every suggestion comes from the request (no generic examples).
+      if (this.failHelp().alternatives.length > 0) {
+        Text('Try instead')
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_secondary'))
+      }
       Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(RETRY_SUGGESTIONS, (chip: ExampleChip) => {
-          Row({ space: 6 }) {
-            SymbolGlyph(chip.icon)
-              .fontSize(16)
-              .fontColor([$r('sys.color.icon_emphasize')])
-            Text(chip.label)
-              .fontSize($r('sys.float.Body_M'))
-              .fontColor($r('sys.color.font_primary'))
-          }
-          .height(36)
-          .padding({ left: 14, right: 14 })
-          .margin({ right: 8, bottom: 8 })
-          .borderRadius(18)
-          .backgroundColor($r('sys.color.comp_background_tertiary'))
-          .onClick(() => {
-            this.request = chip.request;
-            this.create();
-          })
-        }, (chip: ExampleChip) => chip.label)
+        ForEach(this.failHelp().alternatives, (a: Alternative) => {
+          this.retryChip(a.label, $r('sys.symbol.checkmark_circle'), a.request)
+        }, (a: Alternative) => a.request)
       }
       .width('100%')
       if (this.settings.aiMode === 'on-device') {
@@ -2112,7 +2531,7 @@ struct Index {
             .fontColor($r('sys.color.font_secondary'))
           Text('switch AI mode to Smart in Settings')
             .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.brand'))
+            .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)
             .onClick(() => this.selectTab(TAB_SETTINGS))
         }
@@ -2121,8 +2540,8 @@ struct Index {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding(16)
-    .borderRadius(20)
-    .backgroundColor($r('sys.color.comp_background_primary'))
+    .borderRadius(Flags.NEW_ERRORS ? Radius.card : 20)
+    .backgroundColor(Flags.NEW_ERRORS ? Palette.orangeTintSoft : $r('sys.color.comp_background_primary'))
   }
 
   @Builder
@@ -2159,10 +2578,6 @@ struct Index {
             .fontSize($r('sys.float.Caption_M'))
             .fontColor($r('sys.color.brand'))
         }
-      } else {
-        Text('In app')
-          .fontSize($r('sys.float.Caption_M'))
-          .fontColor($r('sys.color.font_tertiary'))
       }
     }
     .alignItems(HorizontalAlign.Start)
@@ -2181,44 +2596,55 @@ struct Index {
   home() {
     Scroll() {
       Column({ space: 16 }) {
-        Row({ space: 8 }) {
-          Image($r('app.media.harmoniser_mark'))
-            .width(28)
-            .height(28)
-          Text('Harmoniser')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('sys.color.font_primary'))
+        if (Flags.NEW_CREATE_CLASSIC) {
+          // New logo and wordmark, and the scan-QR button (the existing import: file or QR).
+          Row() {
+            HostBar({ showScan: false })
+              .layoutWeight(1)
+              .margin({ left: -20 }) // HostBar pads 20; the page already pads 16
+            SharingBar({
+              showShare: false,
+              compact: true,
+              onPairCode: (code: string) => this.claimDevice(code),
+              onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+            })
+          }
+          .width('100%')
+        } else {
+          Row({ space: 8 }) {
+            Image($r('app.media.harmoniser_mark'))
+              .width(28)
+              .height(28)
+            Text('Harmoniser')
+              .fontSize(20)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('sys.color.font_primary'))
+          }
+          .width('100%')
+          .height(44)
         }
-        .width('100%')
-        .height(44)
         Column({ space: 4 }) {
           HomeHero()
-          Text('Tiny apps, made by asking.')
-            .fontSize($r('sys.float.Body_L'))
-            .fontColor($r('sys.color.font_secondary'))
+          Text("Tiny apps you don't need to download.")
+            .fontSize(Flags.NEW_CREATE_CLASSIC ? 15 : $r('sys.float.Body_L'))
+            .fontWeight(Flags.NEW_CREATE_CLASSIC ? 500 : undefined)
+            .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text2 : $r('sys.color.font_secondary'))
             .width('100%')
         }
         this.inputCard()
-        this.statusRow()
-        if (this.snapNeedsCloud) {
-          this.snapCloudNote()
-        } else if (this.languageFailed) {
-          this.languageCard()
-        } else if (this.failed && this.unsupported.length > 0) {
-          this.unsupportedCard()
-        } else if (this.failed) {
-          this.failedCard()
-        } else if (this.message.length > 0) {
-          Text(this.message)
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.font_secondary'))
-            .width('100%')
+        if (Flags.NEW_BUILD_LIVE) {
+          this.buildLive()
         }
-        this.recentSection()
+        this.statusRow()
+        this.createNotices()
+        // Polish: no Recent block on Create (CREATE_RECENT, off); the Capsules tab lists them all.
+        if (!Flags.NEW_POLISH || Flags.CREATE_RECENT) {
+          this.recentSection()
+        }
       }
-      .padding({ left: 16, right: 16, top: 8, bottom: 120 }) // room for the floating tab bar
+      .padding({ left: 16, right: 16, top: 8, bottom: Flags.NEW_POLISH ? Space.tabClear : 120 }) // room for the floating tab bar
       .width('100%')
+      .constraintSize({ maxWidth: Flags.NEW_WIDE && this.wide ? 640 : undefined })
     }
     .width('100%')
     .height('100%')
@@ -2227,8 +2653,159 @@ struct Index {
     .scrollBar(BarState.Off)
     // One soft, static pale-blue wash at the top that fades into the system background.
     .linearGradient({ direction: GradientDirection.Bottom,
-      colors: [[$r('app.color.hero_top'), 0], [$r('sys.color.background_secondary'), 0.35]] })
+      colors: Flags.NEW_CREATE_CLASSIC ? [[Color.Transparent, 0], [Color.Transparent, 1]] :
+        [[$r('app.color.hero_top'), 0], [$r('sys.color.background_secondary'), 0.35]] })
     .transition(TransitionEffect.OPACITY)
+  }
+
+  /** The create flow's cards (failure, language, snap, message): one at a time, as before. */
+  @Builder
+  createNotices() {
+    if (this.voiceError.length > 0) {
+      ErrorCard({ title: this.voiceError })
+    } else if (this.snapNeedsCloud) {
+      this.snapCloudNote()
+    } else if (this.languageFailed) {
+      this.languageCard()
+    } else if (this.failed && this.unsupported.length > 0) {
+      this.unsupportedCard()
+    } else if (this.failed) {
+      this.failedCard()
+    } else if (this.message.length > 0) {
+      Text(this.message)
+        .fontSize(Flags.NEW_ERRORS ? 14 : $r('sys.float.Body_M'))
+        .fontColor(Flags.NEW_ERRORS ? Palette.text2 : $r('sys.color.font_secondary'))
+        .width('100%')
+    }
+  }
+
+  /** Redesign (NEW_CREATE): host bar, title, Recent, suggestions, and the prompt bar docked above the tab bar. */
+  @Builder
+  createTab() {
+    Column() {
+      Scroll() {
+        Column({ space: 14 }) {
+          Row() {
+            HostBar({ showScan: false })
+              .layoutWeight(1)
+            // The existing import (file or QR scan); nothing is saved until the consent sheet's Run.
+            SharingBar({
+              showShare: false,
+              compact: true,
+              onPairCode: (code: string) => this.claimDevice(code),
+              onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+            })
+              .margin({ right: 16 })
+          }
+          .width('100%')
+          // Brand, then the big question about 40% down, then the prompt bar (host bar is about 56vp).
+          Column()
+            .width('100%')
+            .height(Math.max(8, this.createHeight * 0.4 - 56 - 28))
+          Column({ space: 4 }) {
+            Text('What do you need?')
+              .fontSize(24)
+              .fontWeight(800)
+              .fontColor(Palette.text)
+              .width('100%')
+            Text("Tiny apps you don't need to download.")
+              .fontSize(13)
+              .fontWeight(500)
+              .fontColor(Palette.text2)
+              .width('100%')
+          }
+          .padding({ left: 20, right: 20 })
+          Column({ space: 14 }) {
+            if (Flags.NEW_BUILD_LIVE) {
+              this.buildLive()
+            } else if (Flags.NEW_PROGRESS && this.busy) {
+              BuildCard({
+                request: this.request.trim().length > 0 ? this.request.trim() : 'Reading your photo',
+                steps: this.buildSteps()
+              })
+            }
+            this.createNotices()
+            if (Flags.CREATE_RECENT) {
+              RecentRow({ tiles: this.recentTiles(), onOpen: (id: string) => this.open(id) })
+            }
+            if (Flags.CREATE_SUGGESTIONS && this.request.trim().length === 0) {
+              SuggestionChips({ suggestions: this.suggestions(), onPick: (text: string) => {
+                this.request = text;
+              } })
+            }
+            Text(this.statusLine())
+              .fontSize(13)
+              .fontWeight(500)
+              .fontColor(Palette.text2)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+          }
+          .padding({ left: 16, right: 16 })
+        }
+        .width('100%')
+        .constraintSize({ maxWidth: this.wide ? 640 : undefined })
+        .padding({ bottom: 16 })
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .align(Alignment.Top)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+      PromptBar({
+        text: this.request,
+        placeholder: this.promptPlaceholder(),
+        busy: this.busy,
+        onTextChange: (v: string) => {
+          this.request = v;
+        },
+        onSend: () => this.create(),
+        onSnap: () => {
+          this.cameraBounce++;
+          this.snap();
+        },
+        onVoiceText: (t: string) => this.onVoiceText(t),
+        onVoiceError: (m: string) => this.onVoiceError(m),
+        onListening: (on: boolean) => {
+          this.listening = on;
+        },
+        onFocusChange: (focused: boolean) => {
+          this.inputFocused = focused;
+        }
+      })
+        .margin({ left: 12, right: 12, bottom: 64 + 12 + 10 }) // above the floating tab bar
+        .constraintSize({ maxWidth: this.wide ? 640 : undefined })
+    }
+    .width('100%')
+    .height('100%')
+    .onAreaChange((o: Area, n: Area) => {
+      this.createHeight = n.height as number;
+    })
+  }
+
+  private recentTiles(): RecentTile[] {
+    return this.entries.slice(0, 8).map((e: CapsuleEntry): RecentTile => {
+      const t: RecentTile = {
+        id: e.capsule.id, name: e.capsule.name, icon: capsuleIcon(e.capsule), originText: originBadge(e.origin),
+        originKind: originKindOf(e.origin)
+      };
+      return t;
+    });
+  }
+
+  /** The order the core tries sources (core/CapsuleGenerator.ets), as the build card lists it. */
+  private buildSteps(): BuildStep[] {
+    const steps: BuildStep[] = [{ label: 'On your phone', detail: 'Built-in rules and templates, no internet' }];
+    steps.push({ label: 'On-device AI', detail: this.onDeviceStatus });
+    if (this.settings.aiMode === 'smart' && this.cloudUsable()) {
+      steps.push({ label: this.cloudName(), detail: 'Only when your phone cannot build it' });
+    }
+    return steps;
+  }
+
+  /** The existing rotating examples, without their "Try: " prefix. */
+  private suggestions(): string[] {
+    return PLACEHOLDERS.map((p: string) => p.replace(/^Try: /, ''));
   }
 
   /** Home "Recent": the four newest capsules as live mini widgets; "See all" opens the Capsules tab. */
@@ -2237,14 +2814,14 @@ struct Index {
     Column({ space: 12 }) {
       Row() {
         Text('Recent')
-          .fontSize($r('sys.float.Subtitle_L'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary'))
+          .fontSize(Flags.NEW_CREATE_CLASSIC ? 17 : $r('sys.float.Subtitle_L'))
+          .fontWeight(Flags.NEW_CREATE_CLASSIC ? 700 : FontWeight.Bold)
+          .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text : $r('sys.color.font_primary'))
           .layoutWeight(1)
         if (this.entries.length > 0) {
           Text('See all')
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.brand'))
+            .fontSize(Flags.NEW_CREATE_CLASSIC ? 15 : $r('sys.float.Body_M'))
+            .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.blue : $r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)
             .onClick(() => this.selectTab(TAB_CAPSULES))
         }
@@ -2252,8 +2829,8 @@ struct Index {
       .width('100%')
       if (this.entries.length === 0) {
         Text('Your capsules will appear here')
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_tertiary'))
+          .fontSize(Flags.NEW_CREATE_CLASSIC ? 15 : $r('sys.float.Body_M'))
+          .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text2 : $r('sys.color.font_tertiary'))
           .width('100%')
       } else {
         Grid() {
@@ -2262,9 +2839,9 @@ struct Index {
               Column({ space: 8 }) {
                 MiniPreview({ runtime: entry.runtime })
                 Text(entry.capsule.name)
-                  .fontSize($r('sys.float.Body_M'))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('sys.color.font_primary'))
+                  .fontSize(Flags.NEW_CREATE_CLASSIC ? 15 : $r('sys.float.Body_M'))
+                  .fontWeight(Flags.NEW_CREATE_CLASSIC ? 600 : FontWeight.Medium)
+                  .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text : $r('sys.color.font_primary'))
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .width('100%')
@@ -2334,7 +2911,7 @@ struct Index {
           .layoutDirection(GridDirection.Row)
         }
       }
-      .padding({ left: 16, right: 16, top: 12, bottom: 120 })
+      .padding({ left: 16, right: 16, top: 12, bottom: Flags.NEW_POLISH ? Space.tabClear : 120 })
       .width('100%')
     }
     .width('100%')
@@ -2342,6 +2919,88 @@ struct Index {
     .align(Alignment.Top)
     .edgeEffect(EdgeEffect.Spring)
     .scrollBar(BarState.Off)
+  }
+
+  /** Redesign (NEW_CAPSULES): page title, the existing import, and a grid of live tiles. */
+  @Builder
+  capsulesTabNew() {
+    Scroll() {
+      Column({ space: 14 }) {
+        Row({ space: 8 }) {
+          Text('Capsules')
+            .fontSize(28)
+            .fontWeight(800)
+            .fontColor(Palette.text)
+          if (this.entries.length > 0) {
+            Text(`${this.entries.length}`)
+              .fontSize(15)
+              .fontWeight(600)
+              .fontColor(Palette.text2)
+          }
+          Blank()
+          // Import from another phone. Nothing is saved until the sheet's Run.
+          SharingBar({
+            showShare: false,
+            compact: true,
+            onPairCode: (code: string) => this.claimDevice(code),
+            onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+          })
+        }
+        .width('100%')
+        if (this.entries.length === 0) {
+          EmptyState({ title: 'Capsules you create appear here.', action: 'Create one',
+            onAction: () => this.selectTab(TAB_CREATE) })
+        } else {
+          Grid() {
+            ForEach(this.entries, (entry: CapsuleEntry) => {
+              GridItem() {
+                CapsuleTile({
+                  name: entry.capsule.name,
+                  icon: capsuleIcon(entry.capsule),
+                  value: entry.runtime.summary(),
+                  originText: originBadge(entry.origin),
+                  originKind: originKindOf(entry.origin),
+                  shortOrigin: originShort(entry.origin),
+                  widget: entry.route.widget,
+                  onOpen: () => this.open(entry.capsule.id)
+                })
+              }
+            }, (entry: CapsuleEntry) => `${entry.capsule.id}-${entry.runtime.serial}`)
+          }
+          .columnsTemplate(this.wide ? '1fr 1fr 1fr' : '1fr 1fr')
+          .columnsGap(10)
+          .rowsGap(10)
+          .width('100%')
+          .layoutDirection(GridDirection.Row)
+        }
+      }
+      .padding({ left: 16, right: 16, top: 16, bottom: Flags.NEW_POLISH ? Space.tabClear : 120 })
+      .width('100%')
+      .constraintSize({ maxWidth: this.wide ? 960 : undefined })
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.Top)
+    .edgeEffect(EdgeEffect.Spring)
+    .scrollBar(BarState.Off)
+  }
+
+  /** Polish: the tab bar under an open capsule. Tapping a tab closes the capsule and shows that tab. */
+  @Builder
+  polishTabBar() {
+    TabBar({
+      items: TAB_ITEMS,
+      selected: this.tab,
+      taps: this.tabTaps,
+      onSelect: (i: number) => {
+        // Tabs mounts again with `index: this.tab`, so set the tab first, then close.
+        this.tabTaps = this.tabTaps.map((n: number, k: number) => k === i ? n + 1 : n);
+        this.tab = i;
+        this.close();
+      }
+    })
+      .margin({ left: 16, right: 16, bottom: 12 })
+      .constraintSize({ maxWidth: this.wide ? 640 : undefined })
   }
 
   private selectTab(index: number): void {
@@ -2396,15 +3055,26 @@ struct Index {
       // Native Tabs hold the pages; their own bar is hidden in favour of the floating pill below.
       Tabs({ barPosition: BarPosition.End, controller: this.tabsController, index: this.tab }) {
         TabContent() {
-          this.home()
+          if (Flags.NEW_CREATE) {
+            this.createTab()
+          } else {
+            this.home()
+          }
         }
         TabContent() {
-          this.capsulesTab()
+          if (Flags.NEW_CAPSULES) {
+            this.capsulesTabNew()
+          } else {
+            this.capsulesTab()
+          }
         }
         TabContent() {
           MarketplaceView({
             client: this.market,
             embedded: true,
+            wide: this.wide,
+            onDeviceOnly: this.settings.aiMode === 'on-device',
+            onOpenSettings: () => this.selectTab(TAB_SETTINGS),
             onInstall: (item: MarketItem) => this.installFromMarket(item)
           })
         }
@@ -2426,78 +3096,21 @@ struct Index {
       })
       .width('100%')
       .height('100%')
-      this.tabBar()
+      if (Flags.NEW_SHELL) {
+        TabBar({
+          items: TAB_ITEMS,
+          selected: this.tab,
+          taps: this.tabTaps,
+          onSelect: (i: number) => this.selectTab(i)
+        })
+          .margin({ left: 16, right: 16, bottom: 12 })
+          .constraintSize({ maxWidth: this.wide ? 640 : undefined })
+      } else {
+        this.tabBar()
+      }
     }
     .width('100%')
     .height('100%')
-  }
-
-  @Builder
-  routeCard(entry: CapsuleEntry) {
-    if (entry.route.widget && this.widgets.length > 0) {
-      Column({ space: 6 }) {
-        Button() {
-          Row({ space: 8 }) {
-            SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-              .fontSize(18)
-              .fontColor([$r('sys.color.brand')])
-            Text('Show on home screen widget')
-              .fontSize($r('sys.float.Body_L'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('sys.color.brand'))
-          }
-        }
-        .width('100%')
-        .height(48)
-        .backgroundColor($r('sys.color.comp_background_tertiary'))
-        .onClick(() => this.showOnWidget(entry))
-        if (this.widgets.some((w: WidgetInfo) => w.capsuleId === entry.capsule.id)) {
-          Text('On your home screen')
-            .fontSize($r('sys.float.Caption_M'))
-            .fontColor($r('sys.color.font_tertiary'))
-        }
-      }
-      .width('100%')
-    } else if (entry.route.widget) {
-      Column({ space: 10 }) {
-        Row({ space: 10 }) {
-          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
-            .fontSize(22)
-            .fontColor([$r('sys.color.brand')])
-          Text('Add to home screen')
-            .fontSize($r('sys.float.Subtitle_M'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('sys.color.font_primary'))
-            .layoutWeight(1)
-          SymbolGlyph(this.hintOpenIds.includes(entry.capsule.id) ? $r('sys.symbol.chevron_up') :
-          $r('sys.symbol.chevron_down'))
-            .fontSize(18)
-            .fontColor([$r('sys.color.icon_secondary')])
-        }
-        .width('100%')
-        .onClick(() => this.toggleHint(entry.capsule.id))
-        if (this.hintOpenIds.includes(entry.capsule.id)) {
-          Text('1. Long-press the Harmoniser app icon on your home screen.\n' +
-            '2. Pick the Harmoniser widget.\n' +
-            '3. Tap "Add to home screen".')
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.font_secondary'))
-            .lineHeight(22)
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-      .padding(16)
-      .borderRadius(20)
-      .backgroundColor($r('sys.color.comp_background_primary'))
-      .border({ width: 1, color: $r('sys.color.brand'), style: BorderStyle.Dashed })
-    } else {
-      Text(routeHeadline(entry.route))
-        .fontSize($r('sys.float.Caption_M'))
-        .fontColor($r('sys.color.font_tertiary'))
-        .width('100%')
-        .padding({ left: 4, right: 4 })
-    }
   }
 
   @Builder
@@ -2605,24 +3218,258 @@ struct Index {
     .transition(TransitionEffect.OPACITY)
   }
 
+  /** Redesign (NEW_FRAME): the open capsule inside CapsuleFrame. Same parts as detail(), restyled. */
+  @Builder
+  frameDetail(entry: CapsuleEntry) {
+    Column() {
+      CapsuleFrame({
+        name: entry.capsule.name,
+        icon: capsuleIcon(entry.capsule),
+        originText: originBadge(entry.origin),
+        originKind: originKindOf(entry.origin),
+        wide: this.wide,
+        hasSidePanel: this.frameHasSide(),
+        fullPage: Flags.NEW_POLISH,
+        bottomInset: Flags.NEW_POLISH ? POLISH_TAB_INSET : 0,
+        onClose: () => this.close(),
+        onChangeIt: () => {
+          this.changeOpenId = this.changeOpenId === entry.capsule.id ? '' : entry.capsule.id;
+        },
+        onShare: () => this.shareFromFrame(entry),
+        body: () => {
+          this.frameBody(entry)
+        },
+        sidePanel: () => {
+          this.frameSide(entry)
+        },
+        addToHome: () => {
+          this.frameAddToHome(entry)
+        },
+        headerAction: () => {
+          this.capsuleMenu(entry)
+        }
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ top: 8 })
+    .geometryTransition(entry.capsule.id)
+    .transition(TransitionEffect.OPACITY)
+  }
+
+  @Builder
+  frameBody(entry: CapsuleEntry) {
+    // "Change it…" (footer pill) opens here, at the top, so it is seen at once.
+    if (this.changeOpenId === entry.capsule.id || this.undoIds.includes(entry.capsule.id) ||
+      (this.changeId === entry.capsule.id &&
+        (this.changeBusy || this.changeSummary.length > 0 || this.changeIssue.length > 0))) {
+      this.changeCard(entry)
+    }
+    CapsuleView({
+      runtime: entry.runtime,
+      motionNote: this.motionNoteFor(entry.capsule),
+      onPickCity: () => this.openCityPicker(entry.capsule.id)
+    })
+    // Wide windows (NEW_WIDE): the rest goes in the frame's side panel (frameExtras), next to the capsule.
+    if (!this.frameHasSide()) {
+      this.frameExtras(entry)
+    }
+  }
+
+  /** The side panel on wide windows: the frame extras, stacked. */
+  @Builder
+  frameSide(entry: CapsuleEntry) {
+    Column({ space: 12 }) {
+      this.frameExtras(entry)
+    }
+    .width('100%')
+  }
+
+  /** Triggers, Make it smarter, devices, share, publish, remove and the log: under the capsule, or beside it. */
+  @Builder
+  frameExtras(entry: CapsuleEntry) {
+    if ((entry.capsule.triggers ?? []).length > 0) {
+      TriggerCard({
+        triggers: entry.capsule.triggers ?? [],
+        allowed: this.triggersAllowed(entry),
+        now: this.triggerNow,
+        onRunNow: (i: number) => this.runTriggerNow(entry, i),
+        onEditTime: (i: number) => this.editTriggerTime(entry, i),
+        onRemove: (i: number) => this.removeTrigger(entry, i)
+      })
+    }
+    if (this.canMakeSmarter(entry)) {
+      this.smarterButton(entry)
+    }
+    if (this.devicesEnabled && payloadFor(entry.capsule) !== null) {
+      DevicePanel({
+        devices: this.devices,
+        simulated: this.relaySimulated,
+        status: this.deviceCapsuleId === entry.capsule.id ? this.deviceStatus : '',
+        onPairScan: () => this.pairScan(),
+        onPairPhrase: (phrase: string) => this.claimDevice(phrase),
+        onShow: (id: string) => this.showOnDevice(entry, id),
+        onUnpair: (id: string) => this.unpairDevice(id)
+      })
+    }
+    // Share only (with "Show as QR code"); the footer's Share opens the same share panel.
+    // Polish: its buttons move to the ⋯ menu; it stays mounted for the QR sheet and its messages.
+    SharingBar({ capsule: entry.capsule, showImport: false, showButtons: !Flags.NEW_POLISH, qrRequest: this.qrAsk })
+    if (this.marketConfigured && !Flags.NEW_POLISH) {
+      if (this.publishedIds.includes(entry.capsule.id)) {
+        Row({ space: 8 }) {
+          Text('In the marketplace')
+            .fontSize($r('sys.float.Body_M'))
+            .fontColor($r('sys.color.font_secondary'))
+          Button('Remove from marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
+            .onClick(() => this.unpublishFromMarket(entry))
+        }
+      } else {
+        Button('Publish to marketplace', { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .onClick(() => this.publishToMarket(entry))
+      }
+    }
+    Button() {
+      Row({ space: 6 }) {
+        SymbolGlyph($r('sys.symbol.trash'))
+          .fontSize(18)
+          .fontColor([$r('sys.color.warning')])
+        Text('Remove capsule')
+          .fontSize($r('sys.float.Body_L'))
+          .fontColor($r('sys.color.warning'))
+      }
+    }
+    .width('100%')
+    .height(48)
+    .margin({ top: 8 })
+    .backgroundColor($r('sys.color.comp_background_tertiary'))
+    .onClick(() => {
+      this.undo(entry);
+    })
+    Text('Removes the capsule, its permissions and its calendar events.')
+      .fontSize($r('sys.float.Caption_M'))
+      .fontColor($r('sys.color.font_tertiary'))
+    Row() {
+      Button('Activity log', { buttonStyle: ButtonStyleMode.TEXTUAL, controlSize: ControlSize.SMALL })
+        .onClick(() => this.nav.pushPath({ name: LOG_PAGE }))
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.Center)
+  }
+
+  /** Polish: the full-page capsule's ⋯ menu. Same handlers as the buttons it replaces. */
+  private capsuleMenuItems(entry: CapsuleEntry): MenuElement[] {
+    const items: MenuElement[] = [
+      { value: 'Share', action: () => this.shareFromFrame(entry) },
+      { value: 'Show as QR code', action: () => {
+        this.qrAsk++;
+      } }
+    ];
+    if (this.marketConfigured) {
+      if (this.publishedIds.includes(entry.capsule.id)) {
+        items.push({ value: 'Remove from marketplace', action: () => {
+          this.unpublishFromMarket(entry);
+        } });
+      } else {
+        items.push({ value: 'Publish to marketplace', action: () => this.publishToMarket(entry) });
+      }
+    }
+    if (this.devicesEnabled && payloadFor(entry.capsule) !== null) {
+      items.push({ value: 'Send to device', action: () => this.sendFromButton(entry.capsule.id) });
+    }
+    items.push({ value: 'Remove capsule', action: () => {
+      this.undo(entry);
+    } });
+    return items;
+  }
+
+  @Builder
+  capsuleMenu(entry: CapsuleEntry) {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph($r('sys.symbol.dot_grid_1x2'))
+        .fontSize(20)
+        .fontColor([Palette.blue])
+    }
+    .width(40)
+    .height(40)
+    .backgroundColor(Palette.indigoTint)
+    .responseRegion({ x: -2, y: -2, width: 44, height: 44 })
+    .accessibilityText('More actions')
+    .bindMenu(this.capsuleMenuItems(entry))
+  }
+
+  /** The frame footer's slot for T4's button, mounted exactly as T4 provides it. */
+  @Builder
+  frameAddToHome(entry: CapsuleEntry) {
+    // PROTECTED: owned by T4. Do not remove or modify. See /tmp/hy-tasks.
+    AddToHomeButton({ capsuleId: entry.capsule.id, capsuleName: entry.capsule.name })
+  }
+
+  /** System back on an open capsule closes it (redesign frame); pushed pages and the tabs behave as before. */
+  onBackPress(): boolean {
+    if (Flags.NEW_FRAME && this.nav.size() === 0 && this.openEntry() !== undefined) {
+      this.close();
+      return true;
+    }
+    return false;
+  }
+
+  /** Footer Share: the same share panel as SharingBar; if it can't open, point to "Show as QR code". */
+  private shareFromFrame(entry: CapsuleEntry): void {
+    if (!this.ctx) {
+      return;
+    }
+    shareCapsule(this.ctx, entry.capsule).catch(() => {
+      this.toast("Couldn't open the share panel. Use Show as QR code below.");
+    });
+  }
+
   build() {
     Navigation(this.nav) {
-      Stack() {
+      Stack({ alignContent: Alignment.Top }) {
+        if (Flags.NEW_THEME) {
+          // The one gradient: 360vp at the top, #DCE5FF into the page background.
+          Column()
+            .width('100%')
+            .height(360)
+            .linearGradient({ direction: GradientDirection.Bottom, colors: [[Palette.gradientTop, 0], [Palette.bg, 1]] })
+            .hitTestBehavior(HitTestMode.None)
+            // Background layer only: runs under the status bar; content stays in the safe area.
+            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+        }
         if (this.openEntry()) {
-          this.detail(this.openEntry() as CapsuleEntry)
+          if (Flags.NEW_FRAME && Flags.NEW_POLISH) {
+            // Polish: the capsule is a full page and the tab bar stays usable below it.
+            Stack({ alignContent: Alignment.Bottom }) {
+              this.frameDetail(this.openEntry() as CapsuleEntry)
+              this.polishTabBar()
+            }
+            .width('100%')
+            .height('100%')
+          } else if (Flags.NEW_FRAME) {
+            this.frameDetail(this.openEntry() as CapsuleEntry)
+          } else {
+            this.detail(this.openEntry() as CapsuleEntry)
+          }
         } else {
           this.mainTabs()
         }
       }
       .width('100%')
       .height('100%')
-      .backgroundColor($r('sys.color.background_secondary'))
+      .backgroundColor(Flags.NEW_THEME ? Palette.bg : $r('sys.color.background_secondary'))
+      .onAreaChange((o: Area, n: Area) => {
+        storeWidthClass(n.width as number);
+        this.wide = Flags.NEW_WIDE && (n.width as number) >= 600;
+      })
       // One sheet only: ArkUI keeps the last bindSheet on a node, so the consent sheet and the city picker
       // must share this single binding (the builder branches on cityPickerId).
       .bindSheet(this.showSheet || this.cityPickerId.length > 0, this.sheetBody(), {
         height: this.cityPickerId.length > 0 ? 520 : SheetSize.FIT_CONTENT,
         dragBar: true,
-        backgroundColor: $r('sys.color.background_secondary'),
+        // Still the one sheet binding on this node (never add a second); only its look changes.
+        backgroundColor: Flags.NEW_CONSENT ? Palette.surface : $r('sys.color.background_secondary'),
+        radius: Flags.NEW_CONSENT ? { topLeft: 28, topRight: 28 } : undefined,
         onDisappear: () => {
           this.cityPickerId = '';
           if (this.pending) {
@@ -2632,7 +3479,7 @@ struct Index {
       })
     }
     .hideTitleBar(true)
-    .backgroundColor($r('sys.color.background_secondary'))
+    .backgroundColor(Flags.NEW_THEME ? Palette.bg : $r('sys.color.background_secondary'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .mode(NavigationMode.Stack)
     .navDestination(this.pageMap)

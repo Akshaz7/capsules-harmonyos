@@ -4,9 +4,13 @@
  * screen first; nothing is saved until the app runs them.
  */
 import { common } from '@kit.AbilityKit';
+import { LengthMetrics } from '@kit.ArkUI';
 import { Capsule } from '../core/CapsuleTypes';
 import { ImportResult, onImported as deliverPreparedImport, PreparedImport } from './CapsuleShare';
 import { ImportOutcome, pickAndPrepare, scanAndPrepare } from './ImportFlow';
+import { ErrorCard } from '../components';
+import { Flags } from '../theme/Flags';
+import { Palette, Radius } from '../theme/Tokens';
 import { capsuleQrText, saveCapsuleToFiles, shareCapsule } from './ShareExport';
 
 @ComponentV2
@@ -16,6 +20,10 @@ export struct SharingBar {
   @Param showImport: boolean = true;
   /** Import only, as a small round icon button (e.g. in a header). Errors show as a toast. */
   @Param compact: boolean = false;
+  /** Polish: false hides Share / Show as QR code (they live in the capsule's ⋯ menu); the QR sheet still opens. */
+  @Param showButtons: boolean = true;
+  /** Polish: bump to open the QR sheet from outside (the capsule's ⋯ menu). */
+  @Param qrRequest: number = 0;
   /** A scanned device pairing QR: the page pairs that device. */
   @Event onPairCode: (code: string) => void = () => {
   };
@@ -72,6 +80,11 @@ export struct SharingBar {
     } catch (e) {
       this.report((e as Error).message);
     }
+  }
+
+  @Monitor('qrRequest')
+  onQrRequest(): void {
+    this.showQr();
   }
 
   private showQr(): void {
@@ -161,13 +174,14 @@ export struct SharingBar {
   build() {
     if (this.compact) {
       Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.square_and_arrow_down'))
+        // Redesign: the scan-QR glyph (the tap still offers "From file" or "Scan QR code").
+        SymbolGlyph(Flags.NEW_SHELL ? $r('sys.symbol.viewfinder_square') : $r('sys.symbol.square_and_arrow_down'))
           .fontSize(22)
-          .fontColor([$r('sys.color.icon_primary')])
+          .fontColor([Flags.NEW_SHELL ? Palette.text : $r('sys.color.icon_primary')])
       }
-      .width(40)
-      .height(40)
-      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      .width(Flags.NEW_SHELL ? 44 : 40)
+      .height(Flags.NEW_SHELL ? 44 : 40)
+      .backgroundColor(Flags.NEW_SHELL ? Palette.white72 : $r('sys.color.comp_background_tertiary'))
       .enabled(!this.busy)
       .accessibilityText('Import a capsule')
       .onClick(() => {
@@ -182,9 +196,13 @@ export struct SharingBar {
   bar() {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
-        if (this.showShare) {
+        if (this.showShare && this.showButtons) {
           Button('Share')
             .layoutWeight(1)
+            .height(Flags.NEW_SHARE ? 48 : undefined)
+            .fontWeight(Flags.NEW_SHARE ? 700 : undefined)
+            .backgroundColor(Flags.NEW_SHARE ? Palette.blue : undefined)
+            .borderRadius(Flags.NEW_SHARE ? Radius.button : undefined)
             .enabled(this.capsule !== undefined && !this.busy)
             .onClick(() => {
               this.share();
@@ -200,12 +218,16 @@ export struct SharingBar {
         }
       }
       .width('100%')
-      if (this.showShare) {
+      if (this.showShare && this.showButtons) {
         Button('Show as QR code', { buttonStyle: ButtonStyleMode.TEXTUAL })
+          .fontColor(Flags.NEW_SHARE ? Palette.blue : undefined)
+          .fontWeight(Flags.NEW_SHARE ? 600 : undefined)
           .enabled(this.capsule !== undefined && !this.busy)
           .onClick(() => this.showQr())
       }
-      if (this.message.length > 0) {
+      if (this.message.length > 0 && Flags.NEW_SHARE) {
+        ErrorCard({ title: this.message })
+      } else if (this.message.length > 0) {
         Text(this.message)
           .fontSize(13)
           .fontColor(Color.Red)
@@ -217,6 +239,8 @@ export struct SharingBar {
     .bindSheet(this.qrText.length > 0, this.qrSheet(), {
       height: SheetSize.MEDIUM,
       title: { title: 'Scan to import' },
+      backgroundColor: Flags.NEW_SHARE ? Palette.surface : undefined,
+      radius: Flags.NEW_SHARE ? LengthMetrics.vp(Radius.frame) : undefined,
       onDisappear: () => {
         this.qrText = '';
       }
@@ -227,15 +251,17 @@ export struct SharingBar {
   qrSheet() {
     Column({ space: 12 }) {
       QRCode(this.qrText)
-        .width(260)
-        .height(260)
+        .width(Flags.NEW_SHARE ? 280 : 260)
+        .height(Flags.NEW_SHARE ? 280 : 260)
+        .constraintSize({ maxWidth: Flags.NEW_SHARE ? '82%' : undefined })
+        .aspectRatio(1)
         .color(Color.Black)
         .backgroundColor(Color.White)
         .padding(12)
         .borderRadius(12)
       Text('On the other phone: Harmoniser > Import > Scan QR code.')
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_secondary'))
+        .fontSize(Flags.NEW_SHARE ? 14 : $r('sys.float.Body_M'))
+        .fontColor(Flags.NEW_SHARE ? Palette.text2 : $r('sys.color.font_secondary'))
         .textAlign(TextAlign.Center)
     }
     .width('100%')

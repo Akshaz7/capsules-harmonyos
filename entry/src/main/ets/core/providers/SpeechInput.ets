@@ -19,39 +19,15 @@ import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 
-export const VOICE_PERMISSION: string = 'ohos.permission.MICROPHONE';
-export const VOICE_UNAVAILABLE: string = 'Voice input is not available on this phone.';
-export const VOICE_NOTHING_HEARD: string = 'Nothing was heard. Try again.';
-export const VOICE_LANGUAGE: string = 'zh-CN';
+import { cleanTranscript, VOICE_LANGUAGE, VOICE_NOTHING_HEARD, VOICE_UNAVAILABLE } from './VoiceText';
+
+export {
+  cleanTranscript, MIC_OFF, VOICE_LANGUAGE, VOICE_NOTHING_HEARD, VOICE_PERMISSION, VOICE_UNAVAILABLE, voiceErrorMessage
+} from './VoiceText';
 /** Longest utterance, in ms (the engine's short mode allows 60 s). */
 const MAX_AUDIO_MS: number = 20000;
 /** 1280 bytes = 40 ms of 16 kHz mono 16-bit PCM; writeAudio only accepts 640 or 1280 bytes. */
 const CHUNK_BYTES: number = 1280;
-
-const UNITS: Record<string, number> = {
-  'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9,
-  'ten': 10, 'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15, 'sixteen': 16,
-  'seventeen': 17, 'eighteen': 18, 'nineteen': 19
-};
-const TENS: Record<string, number> = {
-  'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60, 'seventy': 70, 'eighty': 80, 'ninety': 90
-};
-
-/**
- * Recognizer output -> request text: Chinese punctuation to English, no trailing full stop, number words to digits
- * ("twenty five minutes" -> "25 minutes", "a hundred" -> "100"), "i" -> "I". The rules only read digits.
- */
-export function cleanTranscript(raw: string): string {
-  let t = raw.replace(/。/g, '. ').replace(/，/g, ', ').replace(/？/g, '? ').replace(/！/g, '! ')
-    .replace(/：/g, ': ').replace(/\s+/g, ' ').trim();
-  t = t.replace(/\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[ -](one|two|three|four|five|six|seven|eight|nine)\b/gi,
-    (m: string, tens: string, unit: string) => `${TENS[tens.toLowerCase()] + UNITS[unit.toLowerCase()]}`);
-  t = t.replace(/\b(a|one) hundred\b/gi, '100');
-  t = t.replace(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b/gi,
-    (m: string) => `${UNITS[m.toLowerCase()] ?? TENS[m.toLowerCase()]}`);
-  t = t.replace(/\bi\b/g, 'I').replace(/[.!]+$/, '').trim();
-  return t.length > 0 ? t.charAt(0).toUpperCase() + t.substring(1) : t;
-}
 
 interface Session {
   id: string;

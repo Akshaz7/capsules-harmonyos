@@ -11,13 +11,13 @@ This project uses AI-assisted development. Keep this document current and public
 | `hmos-arkui-develop-skill`, `hmos-arkts-knowledge-retriever` Agent Skills | Local skills | ArkUI/ArkTS API and syntax lookup before writing UI code; `devecocli docs` for Kit API and error-code lookup |
 | Agent Skills: `harmony-app-dev` (douya-labs), `arkts-development` (FadingLight9291117, branch master), `frontend-ui-standards` (MaxHan7), `harmonyos-review` (CoreyLyn) | Public community skills, installed 2026-10-04 with `skill-installer`; every SKILL.md and bundled script was inspected before use | HarmonyOS/ArkUI implementation guidance, consistent UI work and a final review pass. Platform APIs were verified against the installed DevEco Studio 6.1.1 SDK declarations (`@ohos.sensor.d.ts`, `@ohos.batteryInfo.d.ts`, `toolchains/lib/PermissionDefinitions.json`), not against the skills' own claims |
 | Claude Code general-purpose subagent (Claude Sonnet) | Anthropic | Read-only research of the Cactus-Compute Hugging Face models compatible with Cactus v2.2.2 (sizes, licences, formats); results checked by hand before any download |
-| Parallel Claude Code sessions (Claude Opus 5.5): T1 coordination, T2 docs, T3 app UI, T4 core, T5 Cactus | Anthropic | Development split by file ownership. Each session commits only its own paths on `main`. From sprint 2, T1 dispatches work through task files and builds the signed HAP from committed `main`. |
+| Parallel Claude Code sessions (Claude Opus 5.5): T1 coordination, T2 docs, T3 app UI, T4 core, T5 Cactus | Anthropic | Development split by file ownership. Each session commits only its own paths on `main`. From sprint 2, T1 dispatches work through task files and builds the HAP from committed `main`, signed locally for the phones with DevEco's signing config, which is never committed (the repository builds an unsigned HAP). |
 | **Runtime (in the product):** LFM2-VL-450M, `cq4`, on Cactus v2.2.2 (our HarmonyOS port) | Liquid AI / Cactus Compute; see `docs/THIRD_PARTY.md` | On-device slot-filling for simple requests |
-| **Runtime:** Mistral `ministral-14b-latest` | Mistral AI (EU) | Default cloud model for logic requests (schema v1). Also run in the provider eval. |
-| **Runtime:** Claude `claude-sonnet-5-5` | Anthropic (outside the EU) | Opt-in cloud model ("Allow non-EU providers"). Also run in the provider eval. |
+| **Runtime:** Mistral `ministral-14b-latest` | Mistral AI (EU) | Was the default cloud model for logic requests; **no longer used in the app** (code switched off, being removed, 2026-10-04). Kept in the provider eval record. |
+| **Runtime:** Claude `claude-sonnet-5-5` | Anthropic (outside the EU) | Cloud model used when "Allow non-EU providers" is on (the default since live capsules); also run in the provider eval. Live capsules use `claude-haiku-4-5-20251001` with web search. |
 | Gemma `gemma-4-E2B` (2-bit `cq2`) | Google, via Cactus-Compute on Hugging Face | Evaluated as an on-device model in the Cactus spike (0/10 correct, 4 times slower); not used |
 
-**Gemini was not used.** `GEMINI.md` is the template's compatibility shim, unchanged since the first commit, which points Gemini CLI at `AGENTS.md`. No MCP servers were used to build the product. The full product AI disclosure is in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
+**Gemini was not used.** `GEMINI.md` is the template's compatibility shim, unchanged since the first commit, which points Gemini CLI at `AGENTS.md`. No MCP servers were used for the app code in this repository. The backend repository (`harmoniser-web`) records its own: the device relay work there used the Chrome DevTools MCP server to try `/pair` and `/device` in a browser; the wrist companion's tools are in [`esp32-companion/AI_WORKFLOW.md`](esp32-companion/AI_WORKFLOW.md). The full product AI disclosure is in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
 
 ## Important prompts and instructions
 
@@ -64,7 +64,7 @@ This project uses AI-assisted development. Keep this document current and public
 Ash (team lead) chose the product idea and owned every product decision. That includes the capsule schema: `SCHEMA.md` is "the contract", and v1 and v1.1 changes were approved by Ash before any code changed. The agents proposed options with evidence, and Ash chose. Examples from the work log:
 - **Timers:** `reminderAgentManager` failed on phones without an AppGallery grant (error 1700002). The agent showed the log, and Ash chose Calendar Kit.
 - **On-device AI:** a Cactus spike outside the repo measured three approaches on the emulator: full-capsule generation (3/10 correct), tool calling (2/10) and slot-filling with grounding (5/10, 0 wrong). Ash chose slot-filling.
-- **Cloud:** the EU-first policy (Mistral by default, non-EU opt-in, consent per provider) follows the digital-sovereignty pitch in the on-device brief. The eval later showed it costs some accuracy, and the trade-off is documented rather than hidden.
+- **Cloud:** the EU-first policy (Mistral by default, non-EU opt-in, consent per provider) follows the digital-sovereignty pitch in the on-device brief. The eval later showed it costs some accuracy, and the trade-off is documented rather than hidden. **Update 2026-10-04 (Ash):** Mistral is out; Claude is the only cloud provider, and the app names it and waits for the user's OK before sending anything. On 2026-10-04 Ash changed the default for full user control: **Allow non-EU providers** is now on, so live capsules (weather, trips, look-ups) use Claude with a forecast or web search after a one-time notice, logic capsules stay on Mistral (EU), and EU-only or On-device only is one switch away.
 - **Architecture:** rules, then on-device, then cloud, then validator, then gatekeeper. Splitting into `core/` (pure, unit-testable ArkTS) and `pages/`, `renderer/`, `adapters/` (platform) let several sessions work in parallel without overlapping files.
 
 ### Implementation
@@ -79,7 +79,7 @@ Generated code was accepted only after it passed the gates below. Product-visibl
 ### Testing and debugging
 
 - **Type-check and build:** `devecocli check arkts` on changed files, because hvigor only compiles files that something imports. Then `devecocli build --modules entry`.
-- **Unit tests:** `hvigorw … test` (Hypium), 249 tests at the time of writing. They cover the validator, rule parser, routing policy, cloud providers with fake transports, the v1 interpreter, widgets, sharing and shared text. Deliberately broken assertions were used once to confirm that failures are reported.
+- **Unit tests:** `hvigorw … test` (Hypium), 361 tests at the time of writing. They cover the validator, rule parser, routing policy, cloud providers with fake transports, the v1 interpreter, widgets, sharing and shared text. Deliberately broken assertions were used once to confirm that failures are reported.
 - **Emulator:** install with `hdc`, launch with `aa start`, read `hilog`, take screenshots with `devecocli ui screenshot`. Several sessions share one emulator, so automated runs use `aa start --ps` parameters and result files instead of UI taps.
 - **Model evaluation:** `scripts/eval-providers.mjs` makes real provider calls with the app's own prompt, validator and interpreter. It has tuning, held-out, refusal and hard-logic sets. There is also an on-device eval on the emulator.
 - **Security checks:** byte scans of built `.hap` files for API keys, and a git-history scan for secrets before publishing.
@@ -99,8 +99,8 @@ Generated code was accepted only after it passed the gates below. Product-visibl
 
 ## Known limitations
 
-- The rule parser turns "medication 8am and 8pm" into a dose checklist. Schema v1.1 time triggers fire only while the app is open, and motion triggers don't fire (no motion sensor code). (Computed values and live bill splits arrived with schema v1.)
-- Vibration and automatic motion counting are not built, although the schema has `vibration` and `motion` permissions.
+- The rule parser turns "medication 8am and 8pm" into a dose checklist. Schema v1.1 time triggers fire only while the app is open. Motion triggers and motion counters use the accelerometer (PR #12) but have no phone check yet. (Computed values and live bill splits arrived with schema v1.)
+- Capsules that vibrate are not built, although the schema has a `vibration` permission. Motion counts shakes while a capsule is open, not steps or reps. Reminders (`notify:<text>`, daily calendar reminders) were built late and are not yet checked on a device.
 - `CapsuleModel.ets` holds a copy of `SCHEMA.md` for the prompt. It must be updated by hand if the schema changes.
 - Local unit tests can't call system APIs, so the network transport and rawfile loading in `core/index.ets` are type-checked but not unit-tested.
 - On-device AI got 9 of 15 eval requests correct (first eval: 5 of 10, with the other 5 rejected cleanly). Slot grounding stops it returning a valid but wrong capsule, but multi-item requests (3 timers, a 3-item checklist) often fail. Rules run first, so the model only sees the requests rules miss.
@@ -125,7 +125,7 @@ Generated code was accepted only after it passed the gates below. Product-visibl
 
 ## AI feature disclosure
 
-AI is part of the product: Harmoniser turns plain-language requests into capsules. It uses a rule parser, then LFM2-VL-450M on-device through our Cactus port, then Mistral `ministral-14b-latest` (EU) or, if the user opts in, Claude `claude-sonnet-5-5`. The full disclosure covers models, inference flow, data handling and privacy, failure and fallback behaviour, evaluation and limitations. It is in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
+AI is part of the product: Harmoniser turns plain-language requests into capsules. It uses a rule parser, then LFM2-VL-450M on-device through our Cactus port, then, only after the user's OK, Claude (`claude-sonnet-5-5` for cloud builds, `claude-haiku-4-5-20251001` with web search for live capsules). Mistral was used during development and is no longer used in the app. The full disclosure covers models, inference flow, data handling and privacy, failure and fallback behaviour, evaluation and limitations. It is in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
 
 ### Trailer (marketing video)
 

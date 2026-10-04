@@ -2,7 +2,7 @@
 A capsule is JSON. No code. Unknown fields or types = reject.
 
 { "schemaVersion": 0, "id": string, "name": string,
-  "permissions": [ "reminders" | "notifications" | "vibration" | "motion" | "location" | "widget" ],
+  "permissions": [ "reminders" | "notifications" | "vibration" | "motion" | "location" | "widget" | "devices" ],
   "ui": [ component ] }
 
 component types:
@@ -13,7 +13,10 @@ component types:
 - number    { type, id, label }
 - button    { type, label, action }
 
-actions: startTimer:<id> | startAllTimers | increment:<id> | reset:<id> | notify:<text>
+actions: startTimer:<id> | startAllTimers | increment:<id> | reset:<id> | notify:<text> | sendToDevice
+  sendToDevice needs: devices. It shows the capsule on a device the user paired in the app (e.g. a wrist
+  companion); the capsule names no device, address or URL. Consent is asked once per capsule, logged, and can
+  be undone like the other permissions (approved by Ash, 20:55).
 Rule: any component or action that needs a permission not listed in "permissions" is blocked and logged by the gatekeeper.
 
 # Capsule schema v1 (approved by Ash, 2026-10-03)

@@ -19,6 +19,9 @@ import { allComponents } from '../core/CapsuleProgram';
 import { DeviceReadout } from '../capabilities/DeviceReadout';
 import { weatherSymbolKey, WEATHER_URL } from '../capabilities/WeatherData';
 import { CapsuleRuntime, ChecklistState, CounterState, formatClock, NumberState, TimerState } from './CapsuleRuntime';
+import { Flags } from '../theme/Flags';
+import { rowPairs } from './RowPairs';
+import { PatternView, usesPattern } from './patterns/PatternView';
 
 /** True if some button in the capsule increments this counter, so the row needn't show a + icon too. */
 function hasIncrementButton(components: CapsuleComponent[], counterId: string): boolean {
@@ -55,6 +58,15 @@ export struct CapsuleView {
   };
 
   build() {
+    if (Flags.NEW_PATTERNS && usesPattern(this.runtime.capsule)) {
+      PatternView({ runtime: this.runtime, motionNote: this.motionNote, onPickCity: this.onPickCity })
+    } else {
+      this.classic()
+    }
+  }
+
+  @Builder
+  classic() {
     Column({ space: 12 }) {
       ForEach(this.runtime.capsule.ui, (c: CapsuleComponent) => {
         CapsuleNode({
@@ -75,7 +87,7 @@ export struct CapsuleView {
 
 /** One component. when/row hold more CapsuleNodes, so nesting works at any depth. */
 @ComponentV2
-struct CapsuleNode {
+export struct CapsuleNode {
   @Require @Param runtime: CapsuleRuntime;
   @Require @Param component: CapsuleComponent;
   @Param motionNote: string = '';
@@ -449,12 +461,31 @@ struct CapsuleNode {
           .width('100%')
           .height(48)
       } else {
-        ForEach(this.runtime.items(c.source), (item: string) => {
-          Text(item)
-            .fontSize($r('sys.float.Body_L'))
-            .fontColor($r('sys.color.font_primary'))
-            .width('100%')
-            .height(48)
+        ForEach(this.runtime.items(c.source), (item: string, i: number) => {
+          // T3-30: a tick circle per item; ticking finishes the task, which leaves the list (as on the widget).
+          Row({ space: 8 }) {
+            Stack() {
+              Circle()
+                .width(24)
+                .height(24)
+                .fill(Color.Transparent)
+                .stroke($r('sys.color.brand'))
+                .strokeWidth(2)
+            }
+            .width(44)
+            .height(44)
+            .margin({ left: -10 }) // the 24vp circle lines up with the card's text inset; the tap area is 44vp
+            .accessibilityText(`Finish ${item}`)
+            .onClick(() => {
+              this.runtime.finishItem(c.source, i);
+            })
+            Text(item)
+              .fontSize($r('sys.float.Body_L'))
+              .fontColor($r('sys.color.font_primary'))
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .constraintSize({ minHeight: 48 })
         }, (item: string, i: number) => `${i}-${item}`)
       }
     }
@@ -499,6 +530,30 @@ struct CapsuleNode {
         }
         .width('100%')
       }
+    } else if (this.component.type === 'row' && (this.component as RowComponent).items.length >= 3) {
+      // 3+ children go two per line (2+1, 2+2, ...), each half the width, so no button is squeezed. Pairs
+      // rather than a wrapping Flex: full-width children (width '100%') made a Flex give each its own line.
+      Column({ space: 12 }) {
+        ForEach(rowPairs((this.component as RowComponent).items), (pair: CapsuleComponent[]) => {
+          Row({ space: 12 }) {
+            ForEach(pair, (child: CapsuleComponent) => {
+              Column() {
+                CapsuleNode({
+                  runtime: this.runtime, component: child, motionNote: this.motionNote, onPickCity: this.onPickCity
+                })
+              }
+              .layoutWeight(1)
+            }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)
+            if (pair.length === 1) {
+              Blank()
+                .layoutWeight(1)
+            }
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Top)
+        }, (pair: CapsuleComponent[], i: number) => `${i}-${pair.length}`)
+      }
+      .width('100%')
     } else if (this.component.type === 'row') {
       Row({ space: 12 }) {
         ForEach((this.component as RowComponent).items, (child: CapsuleComponent) => {

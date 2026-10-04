@@ -2,6 +2,8 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04, about 01:30–01:50). Written from the code, tests and documents of both repositories. Nothing was built or run. Line references are to the commits named in the text and will drift. Where it says a document contradicts the code, the code is what was read.
 
+> **Status since writing (re-checked against `main` on 2026-10-04):** PR #12 is **merged**. Of the ordered fixes in section 8: fix 1 (`parseListAndWeather`) is **built** (PR #14/#15); fix 2: the `SCHEMA.md` v1.2 section is in `main`; fix 3 (the cooldown starts only after a successful fetch) is **done**; fix 4 (log the weather fetch through `gate.logDeviceSend`) is **not done**; fix 5 (README and demo script) is done; fix 6 (phone checks) has no record yet; fix 7 is **planned**.
+
 Reviewed head `52450b0` (6 commits on `main` 7292381, GitHub says MERGEABLE/CLEAN, no CI checks). Read-only: nothing
 changed, pushed, merged or built. Paths are under `entry/src/main/ets/` on the PR branch unless stated.
 

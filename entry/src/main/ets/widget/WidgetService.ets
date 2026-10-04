@@ -19,13 +19,13 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule, Permission } from '../core/CapsuleTypes';
 import { restoreState } from '../core/CapsuleProgram';
 import {
-  applyWidgetMessage, buildWidgetView, declaredAction, emptyView, firstBlank, GateFacts, parseWidgetMessage,
-  capsuleForNewWidget, pickColorTag, pressWidgetButton, planWidgetAssignments, stableColorTag, WidgetView, withColor
+  accentFor, applyWidgetMessage, buildWidgetView, declaredAction, emptyView, firstBlank, GateFacts, parseWidgetMessage,
+  capsuleForNewWidget, CardSize, isWideSize, pickColorTag, sizeOfBinding, pressWidgetButton, planWidgetAssignments, stableColorTag, WidgetView, withColor
 } from '../core/WidgetModel';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
 import {
   FormBinding, allBindings, getBinding, isFormProcess, loadSeen, loadState, putBinding, saveSeen, saveState,
-  savedCapsules, savedValues, savePending, takePending
+  savedCapsules, savedValues, savePending, peekPending, clearPending
 } from './WidgetStore';
 
 const DOMAIN = 0x0002;
@@ -37,15 +37,23 @@ export const FORM_ABILITY = 'HarmoniserFormAbility';
 export const WIDGET_SOURCE = 'harmoniser';
 export const CHOOSE_CAPSULE_ACTION = 'chooseCapsule';
 
-export type WidgetSize = '2x2' | '2x4';
+export type WidgetSize = '1x2' | '2x2' | '2x4' | '4x4';
+
+const SIZE_NAMES: Record<CardSize, WidgetSize> = { 's': '1x2', 'm': '2x2', 'w': '2x4', 'l': '4x4' };
 
 export interface WidgetInfo {
   formId: string;
   /** null when the widget is blank ("Tap to choose a capsule"). */
   capsuleId: string | null;
   size: WidgetSize;
-  /** The widget's stable accent slot (WIDGET_PALETTE index), shown as its colour. */
+  /** The widget's stable accent slot (WIDGET_PALETTE index), shown as its colour and a dot on the card. */
   colorTag: number;
+  /** The accent colour of colorTag ("#RRGGBB"), for the dot in the app's widget list. */
+  accent: string;
+  /** The capsule's name; '' when blank. */
+  capsuleName: string;
+  /** Preview: the card's one-line summary ("3 / 8", "4:59 left", "All done"); '' when blank. */
+  preview: string;
 }
 
 /**
@@ -77,6 +85,7 @@ function gateFacts(gate: Gatekeeper, capsule: Capsule, removedFromApp: boolean):
 export function viewFor(ctx: common.Context, binding: FormBinding): WidgetView {
   const v = viewForCapsule(ctx, binding);
   v.formId = binding.formId;
+  v.size = sizeOfBinding(binding);
   return withColor(v, colorTagOf(binding));
 }
 
@@ -113,13 +122,14 @@ export function bindingData(view: WidgetView): formBindingData.FormBindingData {
  * same formId after an app update, so an existing binding (blank or not, with its addedAt) is kept
  * and only its size is updated.
  */
-export function bindForm(ctx: common.Context, formId: string, wide: boolean): FormBinding {
+export function bindForm(ctx: common.Context, formId: string, size: CardSize): FormBinding {
   const existing = getBinding(ctx, formId);
   if (existing === null) {
-    return bindNewForm(ctx, formId, wide);
+    return bindNewForm(ctx, formId, size);
   }
-  if (existing.wide !== wide) {
-    existing.wide = wide;
+  if (existing.size !== size) {
+    existing.size = size;
+    existing.wide = isWideSize(size);
     putBinding(ctx, existing);
   }
   hilog.info(DOMAIN, TAG, 'form %{public}s keeps %{public}s', formId,
@@ -128,18 +138,20 @@ export function bindForm(ctx: common.Context, formId: string, wide: boolean): Fo
 }
 
 /**
- * Binds a new widget to the capsule whose "Add to home screen" was tapped (the pending capsule), used once.
+ * Binds a new widget to the capsule whose "Add to home screen" was tapped (the pending capsule, kept for the
+ * system's preview widgets and the real one until it is on a widget or expires).
  * Without one the widget starts blank ("Tap to choose a capsule"); it never takes "the latest capsule".
  */
-export function bindNewForm(ctx: common.Context, formId: string, wide: boolean): FormBinding {
+export function bindNewForm(ctx: common.Context, formId: string, size: CardSize): FormBinding {
   const capsules = savedCapsules(ctx);
   const gate = freshGate(ctx);
-  const pending = takePending(ctx);
+  const pending = peekPending(ctx); // previews and the real widget all show it (see peekPending)
   const chosen = capsuleForNewWidget(pending, Date.now(),
     (id: string) => capsules.some((c: Capsule) => c.id === id) && !gate.isRemoved(id));
   const used = allBindings(ctx).map((b: FormBinding) => colorTagOf(b));
   const binding: FormBinding = {
-    formId: formId, capsuleId: chosen, wide: wide, addedAt: Date.now(), colorTag: pickColorTag(used, formId)
+    formId: formId, capsuleId: chosen, wide: isWideSize(size), addedAt: Date.now(),
+    colorTag: pickColorTag(used, formId), size: size
   };
   if (chosen.length > 0) {
     const seen = loadSeen(ctx) ?? [];
@@ -153,10 +165,19 @@ export function bindNewForm(ctx: common.Context, formId: string, wide: boolean):
   return binding;
 }
 
-/** The capsule the next newly added widget shows (consumed by that widget; expires after 10 minutes). */
+/** The capsule newly added widgets show for the next few minutes (see PENDING_TTL_MS and clearPendingFor). */
 export function setPendingCapsule(ctx: common.Context, capsuleId: string): void {
   savePending(ctx, { capsuleId: capsuleId, at: Date.now() });
   hilog.info(DOMAIN, TAG, 'pending capsule for the next new widget: %{public}s', capsuleId);
+}
+
+/** Clears the pending capsule once a widget shows it (the button calls this when it sees the widget). */
+export function clearPendingFor(ctx: common.Context, capsuleId: string): void {
+  const pending = peekPending(ctx);
+  if (pending !== null && pending.capsuleId === capsuleId) {
+    clearPending(ctx);
+    hilog.info(DOMAIN, TAG, 'pending capsule %{public}s is on a widget now; cleared', capsuleId);
+  }
 }
 
 /** What "Add to home screen" did: already shown, filled a blank widget, opened the add-widget page, or neither. */
@@ -197,8 +218,8 @@ export async function pushForm(ctx: common.Context, binding: FormBinding): Promi
 }
 
 /**
- * Applies planWidgetAssignments to the stored bindings: blanks widgets whose capsule is gone and puts
- * new widget-suitable capsules on blank widgets. Returns all bindings and the formIds that changed.
+ * Applies planWidgetAssignments to the stored bindings: blanks widgets whose capsule is gone (new capsules are
+ * never put on widgets by themselves, T4-12). Returns all bindings and the formIds that changed.
  */
 function syncAssignments(ctx: common.Context): SyncResult {
   const gate = freshGate(ctx);
@@ -234,22 +255,25 @@ export async function refreshCapsuleWidgets(ctx: common.Context, capsuleId?: str
   }
 }
 
-function infoOf(b: FormBinding): WidgetInfo {
+function infoOf(ctx: common.Context, b: FormBinding): WidgetInfo {
+  const blank = b.capsuleId.length === 0;
+  const view = blank ? null : viewFor(ctx, b);
   return {
-    formId: b.formId, capsuleId: b.capsuleId.length > 0 ? b.capsuleId : null, size: b.wide ? '2x4' : '2x2',
-    colorTag: colorTagOf(b)
+    formId: b.formId, capsuleId: blank ? null : b.capsuleId, size: SIZE_NAMES[sizeOfBinding(b)],
+    colorTag: colorTagOf(b), accent: accentFor(colorTagOf(b)), capsuleName: view !== null ? view.title : '',
+    preview: view !== null ? (view.summary ?? '') : ''
   };
 }
 
 /** Every placed Harmoniser widget, in the order they were added, with assignments brought up to date. */
 export function listWidgets(ctx: common.Context): WidgetInfo[] {
-  return syncAssignments(ctx).bindings.map((b: FormBinding) => infoOf(b));
+  return syncAssignments(ctx).bindings.map((b: FormBinding) => infoOf(ctx, b));
 }
 
 /** The first blank widget (in the order widgets were added), or null if every widget shows a capsule. */
 export function firstBlankWidget(ctx: common.Context): WidgetInfo | null {
   const blank = firstBlank(syncAssignments(ctx).bindings);
-  return blank === null ? null : infoOf(blank);
+  return blank === null ? null : infoOf(ctx, blank as FormBinding);
 }
 
 /**
@@ -316,7 +340,11 @@ export async function handleWidgetMessage(ctx: common.Context, formId: string, m
     } else if (action.length > 0 && !gate.allowAction(capsule, action)) {
       // Blocked and logged by the gatekeeper.
     } else {
-      saveState(ctx, applyWidgetMessage(capsule, loadState(ctx, capsule), msg, Date.now()));
+      const state = loadState(ctx, capsule);
+      if (state.values === undefined && capsule.state !== undefined) {
+        state.values = restoreState(capsule, savedValues(ctx, capsule.id)); // a task list: start from the app's
+      }
+      saveState(ctx, applyWidgetMessage(capsule, state, msg, Date.now()));
     }
   }
   // Every widget showing this capsule redraws, not just the one tapped.

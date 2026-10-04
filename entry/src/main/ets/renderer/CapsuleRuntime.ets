@@ -14,6 +14,7 @@ import {
   allComponents,
   applyActions,
   ApplyResult,
+  finishListItem,
   initialState,
   inputText,
   isEnabled,
@@ -26,6 +27,7 @@ import {
 } from '../core/CapsuleProgram';
 import { CapsuleState, ChecklistTicks, CounterValue, TimerRun } from '../core/WidgetModel';
 import { runTrigger, TriggerGuard, TriggerRun } from '../core/Triggers';
+import { notifiesInApp } from '../core/Reminders';
 import { DeviceReadout } from '../capabilities/DeviceReadout';
 
 const DOMAIN = 0x0001;
@@ -103,6 +105,11 @@ export interface TimerAlert {
   timerFinished(capsuleId: string, t: TimerState): void;
 }
 
+/** Shows a notify:<text> action (T4-27). Set only when the gatekeeper allows "notifications". */
+export interface Notifier {
+  notify(capsuleId: string, text: string): void;
+}
+
 /** Approves each action before it runs (the gatekeeper). */
 export interface ActionGuard {
   allowAction(action: string): boolean;
@@ -142,6 +149,11 @@ export class CapsuleRuntime {
   scheduler?: TimerScheduler;
   guard?: ActionGuard;
   alert?: TimerAlert;
+  notifier?: Notifier;
+  /** T3-15: a sendToDevice button (allowed by the guard, so "devices" is granted) uses the page's send path. */
+  onSendToDevice?: () => void;
+  /** True when the capsule's daily notify triggers are calendar reminders: the app does not notify them too. */
+  calendarReminders: boolean = false;
   /** Called after the user changes persisted state (timers started, counts, ticks, v1 values). */
   onChange?: () => void;
   // Per component in allComponents(capsule.ui) order: '' if it may render, else why it is blocked.
@@ -252,6 +264,18 @@ export class CapsuleRuntime {
     this.onChange?.();
   }
 
+  /** T3-30: the user ticked list item `index`: it is finished, so it leaves the list (as on the widget). */
+  finishItem(source: string, index: number): boolean {
+    const r: ApplyResult = finishListItem(this.capsule, this.values, source, index);
+    if (!r.ok) {
+      hilog.warn(0x0001, 'CapsuleRuntime', 'finish item refused: %{public}s', r.error ?? '');
+      return false;
+    }
+    this.values = r.state;
+    this.onChange?.();
+    return true;
+  }
+
   /** Replaces v1 values with saved ones (names and types that no longer match fall back to initial). */
   restoreValues(saved: StateValues): void {
     this.values = restoreState(this.capsule, saved);
@@ -292,7 +316,9 @@ export class CapsuleRuntime {
     const r = runTrigger(this.capsule, this.values, index, guard);
     if (r.fired) {
       this.values = r.state;
-      r.actions.forEach((action: string) => this.run(action));
+      const trigger = (this.capsule.triggers ?? [])[index];
+      r.actions.filter((action: string) => notifiesInApp(trigger, action, this.calendarReminders))
+        .forEach((action: string) => this.run(action));
       this.onChange?.();
     }
     hilog.info(DOMAIN, TAG, 'trigger %{public}d of %{public}s: fired=%{public}s %{public}s', index, this.capsule.id,
@@ -394,7 +420,10 @@ export class CapsuleRuntime {
         break;
       }
       case 'notify':
-        // Delivered by the notification adapter (step 4).
+        this.notifier?.notify(this.capsule.id, arg);
+        break;
+      case 'sendToDevice':
+        this.onSendToDevice?.();
         break;
       default:
         hilog.warn(DOMAIN, TAG, 'unknown action %{public}s', action);

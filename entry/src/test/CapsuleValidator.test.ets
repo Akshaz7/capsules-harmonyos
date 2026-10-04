@@ -1,5 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
-import { validateCapsule, parseAction } from '../main/ets/core/CapsuleValidator';
+import { validateCapsule, parseAction, permissionForAction } from '../main/ets/core/CapsuleValidator';
+import { canSendToDevice, grantsWith, grantsWithout } from '../main/ets/core/Consent';
+import { ParsedAction } from '../main/ets/core/CapsuleTypes';
 import { CounterComponent, TimerComponent } from '../main/ets/core/CapsuleTypes';
 
 const VALID: string = `{
@@ -30,6 +32,35 @@ function errorsOf(json: string): string {
 }
 
 export default function capsuleValidatorTest() {
+  describe('Permission "devices" (T4-13)', () => {
+    it('accepts "devices" and sendToDevice with it; rejects sendToDevice without it and unknown permissions', 0, () => {
+      const send = (perms: string): string =>
+        `{"schemaVersion":0,"id":"d","name":"D","permissions":[${perms}],"ui":[{"type":"counter","id":"c",` +
+          `"label":"Laps","source":"manual"},{"type":"button","label":"Show on watch","action":"sendToDevice"}]}`;
+      expect(validateCapsule(send('"devices"')).errors.join(' | ')).assertEqual('');
+      const missing = validateCapsule(send(''));
+      expect(missing.ok).assertFalse();
+      expect(missing.errors.join(' | ')).assertContain('needs permission "devices"');
+      const unknown = validateCapsule(send('"devices","bluetooth"'));
+      expect(unknown.errors.join(' | ')).assertContain('unknown permission "bluetooth"');
+      expect(validateCapsule(send('"devices"').replace('"sendToDevice"', '"sendToDevice:watch"')).ok).assertFalse();
+      const a = parseAction('sendToDevice') as ParsedAction;
+      expect(`${a.kind} ${permissionForAction(a)}`).assertEqual('sendToDevice devices');
+    });
+
+    it('blocks a device send without consent, allows it after, and undo blocks it again', 0, () => {
+      const none: string[] = ['reminders'];
+      expect(canSendToDevice(none)).assertFalse();
+      const allowed = grantsWith(none, 'devices');
+      expect(canSendToDevice(allowed)).assertTrue();
+      expect(grantsWith(allowed, 'devices').join()).assertEqual('reminders,devices'); // asked once, stored once
+      expect(none.join()).assertEqual('reminders'); // input unchanged
+      const undone = grantsWithout(allowed, 'devices');
+      expect(canSendToDevice(undone)).assertFalse();
+      expect(undone.join()).assertEqual('reminders');
+    });
+  });
+
   describe('CapsuleValidator', () => {
     it('accepts a valid capsule using every component and action', 0, () => {
       const r = validateCapsule(VALID);

@@ -3,10 +3,11 @@ import {
   applyWidgetMessage, buildWidgetView, CapsuleState, declaredAction, GateFacts, initialState, parseState,
   parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow,
   BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact,
-  accentFor, capsuleForNewWidget, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
+  accentFor, capsuleForNewWidget, goalOf, themedIcon, isWideSize, sizeForDimension, sizeOfBinding, summaryLine, WidgetCheckItem, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
 } from '../main/ets/core/WidgetModel';
 import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
 import { StateValues } from '../main/ets/core/CapsuleProgram';
+import { GoalLine } from '../main/ets/core/WidgetModel';
 import { parseRequest } from '../main/ets/core/RuleParser';
 import { routeCapsule } from '../main/ets/core/CapsuleRouter';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
@@ -62,6 +63,15 @@ function noneRemoved(id: string): boolean {
 
 function displaySummary(d: WidgetDisplay): string {
   return d.kind === 'score' ? `${d.label}[${d.left}|${d.right}]` : d.text;
+}
+
+function glassesGoal(goal: number): StateValues {
+  const v: StateValues = {};
+  v['glasses'] = 2;
+  if (goal > 0) {
+    v['goal'] = goal;
+  }
+  return v;
 }
 
 function goalValues(count: number): StateValues {
@@ -132,11 +142,13 @@ export default function widgetModelTest() {
       expect(buildWidgetView(c, initialState(c), gate([], true, true), NOW, false).status).assertEqual('removed');
     });
 
-    it('never draws a capsule that is not widget-suitable', 0, () => {
+    it('draws a capsule too big for the card condensed: the first parts and "Open for more" (T4-19)', 0, () => {
       const c = rules('4 timers a 1 b 2 c 3 d 4');
       const v = buildWidgetView(c, initialState(c), gate(['reminders'], true, false), NOW, false);
-      expect(v.status).assertEqual('empty');
-      expect(v.rows.length).assertEqual(0);
+      expect(`${v.status} ${v.rows.length} ${v.hint}`).assertEqual('ok 3 Open for more');
+      const small = rules('count coffees');
+      expect(buildWidgetView(small, initialState(small), gate([], true, false), NOW, false).hint === undefined)
+        .assertTrue();
     });
 
     it('maps taps to declared actions only', 0, () => {
@@ -185,13 +197,15 @@ export default function widgetModelTest() {
       const saved: SavedCapsule[] = [
         { capsule: rules('count coffees'), savedAt: 1 },
         { capsule: rules('medication 8am and 8pm'), savedAt: 2 },
-        { capsule: rules('split 84 between 4'), savedAt: 3 }, // v1 with inputs: app only
-        { capsule: rules('4 timers a 1 b 2 c 3 d 4'), savedAt: 5 }, // too many components
-        { capsule: rules('split 84 between 4'), savedAt: 4 } // v1: app only
+        { capsule: rules('count my shakes'), savedAt: 3 }, // motion: app only
+        { capsule: rules('phone battery'), savedAt: 5 }, // only a live reading: nothing to draw
+        { capsule: rules('count my shakes'), savedAt: 4 } // motion: app only
       ];
       expect(pickCapsuleForNewWidget(saved, (id: string) => false)?.id).assertEqual('schedule-medication');
       expect(pickCapsuleForNewWidget(saved, (id: string) => id === 'schedule-medication')?.id)
         .assertEqual('count-coffees');
+      const big: SavedCapsule[] = [{ capsule: rules('4 timers a 1 b 2 c 3 d 4'), savedAt: 6 }];
+      expect(pickCapsuleForNewWidget(saved.concat(big), (id: string) => false)?.id).assertEqual('timers-a-b-c-d');
       expect(pickCapsuleForNewWidget([], (id: string) => false)).assertNull();
     });
   });
@@ -199,21 +213,26 @@ export default function widgetModelTest() {
   describe('Widget assignment', () => {
     const never = (id: string): boolean => false;
 
-    it('fills blank widgets with new capsules, oldest new capsule first, in widget order', 0, () => {
+    it('never fills blank widgets with new capsules by itself (T4-12)', 0, () => {
       const coffees = rules('count coffees');
       const meds = rules('medication 8am and 8pm');
-      // Two blank widgets; nothing seen yet except what existed before.
-      // Form ids are not ordered: '20' was added first even though '3428806' is shorter.
       const first = planWidgetAssignments([blank('3428806', 200), blank('20', 100)], [coffees], [], never);
-      expect(shown(first.bindings)).assertEqual('20=count-coffees 3428806=-');
-      expect(first.changed.join()).assertEqual('20');
-      // Second capsule created (saved list is newest first).
-      const second = planWidgetAssignments(first.bindings, [meds, coffees], first.seen, never);
-      expect(shown(second.bindings)).assertEqual('20=count-coffees 3428806=schedule-medication');
-      expect(second.changed.join()).assertEqual('3428806');
-      // Nothing new: nothing changes.
-      const again = planWidgetAssignments(second.bindings, [meds, coffees], second.seen, never);
-      expect(again.changed.length).assertEqual(0);
+      expect(shown(first.bindings)).assertEqual('20=- 3428806=-');
+      expect(first.changed.length).assertEqual(0);
+      const bound: WidgetBindingFact[] = [{ formId: '1', capsuleId: 'count-coffees', wide: false }, blank('2')];
+      const second = planWidgetAssignments(bound, [meds, coffees], first.seen, never);
+      expect(shown(second.bindings)).assertEqual('1=count-coffees 2=-'); // existing widget untouched, blank stays blank
+      expect(second.changed.length).assertEqual(0);
+    });
+
+    it('a pending capsule goes on the next new widget only; existing widgets keep theirs (T4-12)', 0, () => {
+      const pending: PendingCapsule = { capsuleId: 'count-coffees', at: NOW };
+      expect(capsuleForNewWidget(pending, NOW + 1000, availableExceptGone)).assertEqual('count-coffees');
+      expect(capsuleForNewWidget(pending, NOW + PENDING_TTL_MS + 1, availableExceptGone)).assertEqual('');
+      expect(capsuleForNewWidget(null, NOW, availableExceptGone)).assertEqual('');
+      const bound: WidgetBindingFact[] = [{ formId: '1', capsuleId: 'schedule-medication', wide: false }];
+      const after = planWidgetAssignments(bound, [rules('count coffees'), rules('medication 8am and 8pm')], [], never);
+      expect(shown(after.bindings)).assertEqual('1=schedule-medication');
     });
 
     it('blanks a widget when its capsule is removed, and keeps it blank', 0, () => {
@@ -236,9 +255,9 @@ export default function widgetModelTest() {
     });
 
     it('skips app-only capsules, capsules already shown, and existing capsules on the first run', 0, () => {
-      const water = rules('split 84 between 4'); // v1 with inputs: app only
+      const water = rules('count my shakes'); // motion: app only
       const coffees = rules('count coffees');
-      const appOnly = planWidgetAssignments([blank('1')], [water], [], never);
+      const appOnly = planWidgetAssignments([blank('1')], [water, coffees], [], never);
       expect(shown(appOnly.bindings)).assertEqual('1=-');
       const already = planWidgetAssignments([{ formId: '1', capsuleId: 'count-coffees', wide: false }, blank('2')],
         [coffees], [], never);
@@ -278,7 +297,7 @@ export default function widgetModelTest() {
     it('a v1 goal counter becomes a ring with its value, goal and what is left (T4-15)', 0, () => {
       const water = rules('water 8 glasses');
       const v = buildWidgetView(water, initialState(water), gate([], true, false), 0, false, goalValues(3));
-      expect(`${v.layout} ${v.icon} ${v.value}/${v.goal}`).assertEqual('goal goal 3/8');
+      expect(`${v.layout} ${v.icon} ${v.value}/${v.goal}`).assertEqual('goal water 3/8');
       expect(v.caption).assertEqual('5 to go');
       expect(v.buttons.map((b: WidgetButton) => `${b.index}:${b.label}:${b.enabled}`).join(' ')).assertEqual('0:+1 glass:true 1:Reset:true');
       const done = buildWidgetView(water, initialState(water), gate([], true, false), 0, false, goalValues(8));
@@ -288,12 +307,85 @@ export default function widgetModelTest() {
     it('tennis becomes score lines and point buttons (T4-15, wired by T4-14)', 0, () => {
       const tennis = capsuleOf(TENNIS_CAPSULE);
       const v = buildWidgetView(tennis, initialState(tennis), gate([], true, false), 0, true, tennisValues());
-      expect(`${v.layout} ${v.icon}`).assertEqual('logic logic');
+      expect(`${v.layout} ${v.icon}`).assertEqual('logic trophy');
       expect(v.displays.map(displaySummary).join(' | ')).assertEqual('Games[3|2] | [30|15] | P1 leads');
       expect(v.buttons.map((b: WidgetButton) => b.label).join(',')).assertEqual('Point P1,Point P2,Reset match');
       const fresh = buildWidgetView(tennis, initialState(tennis), gate([], true, false), 0, false, {});
       expect(fresh.displays.length).assertEqual(2); // "P1 leads" is hidden until a game is won
       expect(fresh.buttons[2].enabled).assertFalse(); // Reset match: enabledIf
+    });
+
+    it('picks themed icons and the ring for goal-like lines; a lone number is drawn big (T4-24)', 0, () => {
+      expect(themedIcon('Water logger', 'logic')).assertEqual('water');
+      expect(themedIcon('Drink 8 glasses', 'goal')).assertEqual('water');
+      expect(themedIcon('Morning run', 'counter')).assertEqual('walk');
+      expect(themedIcon('Tennis score', 'logic')).assertEqual('trophy');
+      expect(themedIcon('Chicken and rice', 'text')).assertEqual('cooking');
+      expect(themedIcon('Tea timer', 'timer')).assertEqual('timer');
+      expect(themedIcon('Bill split', 'logic')).assertEqual('logic');
+      expect(themedIcon('Water', 'blank')).assertEqual('blank');
+      const a = goalOf('Glasses: 3 / 8', {}) as GoalLine;
+      expect(`${a.value}/${a.goal} ${a.caption}`).assertEqual('3/8 Glasses');
+      const b = goalOf('3 of 8 glasses today', {}) as GoalLine;
+      expect(`${b.value}/${b.goal} ${b.caption}`).assertEqual('3/8 glasses today');
+      const c = goalOf('2 glasses', glassesGoal(8)) as GoalLine;
+      expect(`${c.value}/${c.goal} ${c.caption}`).assertEqual('2/8 glasses');
+      expect(goalOf('2 glasses', glassesGoal(0))).assertNull();
+      expect(goalOf('Round 2 of 5', {})).assertNull();
+      expect(goalOf('Games 2 - 1', {})).assertNull();
+      const logger = capsuleOf('{"schemaVersion":1,"id":"water-log","name":"Water logger","permissions":[],' +
+        '"state":{"glasses":{"type":"number","initial":1}},"ui":[{"type":"display","text":"{glasses}"},' +
+        '{"type":"text","text":"glasses of water today"},{"type":"button","label":"+1","do":[{"set":"glasses",' +
+        '"to":"glasses + 1"}]},{"type":"button","label":"-1","do":[{"set":"glasses","to":"glasses - 1"}]},' +
+        '{"type":"button","label":"Reset","do":[{"reset":"glasses"}]}]}');
+      const v = buildWidgetView(logger, initialState(logger), gate([], true, false), 0, true);
+      expect(`${v.layout} ${v.icon} ${v.displays[0].kind} ${v.displays[0].left}`).assertEqual('logic water number 1');
+      expect(v.displays[1].text).assertEqual('glasses of water today');
+      const goal = capsuleOf('{"schemaVersion":1,"id":"w","name":"Water","permissions":[],"state":{"glasses":' +
+        '{"type":"number","initial":2},"goal":{"type":"number","initial":8}},"ui":[{"type":"display","text":' +
+        '"{glasses} glasses"},{"type":"button","label":"+1","do":[{"set":"glasses","to":"glasses + 1"}]}]}');
+      const g = buildWidgetView(goal, initialState(goal), gate([], true, false), 0, false);
+      expect(`${g.layout} ${g.value}/${g.goal} ${g.caption}`).assertEqual('goal 2/8 glasses');
+    });
+
+    it('every logic capsule fits a widget, condensed when it is too big (T4-19)', 0, () => {
+      const none = gate([], true, false);
+      const tennis = capsuleOf(TENNIS_CAPSULE);
+      const tv = buildWidgetView(tennis, initialState(tennis), none, 0, true, tennisValues());
+      expect(`${routeCapsule(tennis).condensed} ${tv.buttons.length} ${tv.hint === undefined}`).assertEqual('false 3 true');
+      const pomodoro = rules('pomodoro');
+      expect(routeCapsule(pomodoro).widget).assertTrue();
+      // Tip calculator / bill split: inputs stay in the app, the card shows the result.
+      const split = rules('split 84 between 4');
+      const sv = buildWidgetView(split, initialState(split), none, 0, false);
+      expect(`${sv.status} ${sv.hint}`).assertEqual('ok Open to edit values');
+      expect(sv.displays.length > 0).assertTrue();
+      expect(sv.displays.map(displaySummary).join(' | ')).assertContain('21');
+      // km converter: an input, a computed display and preset buttons.
+      const km = capsuleOf('{"schemaVersion":1,"id":"km","name":"km to miles","permissions":[],"state":{"km":' +
+        '{"type":"number","initial":10}},"computed":{"miles":"round(km * 0.621371, 2)"},"ui":[' +
+        '{"type":"input","bind":"km","kind":"number","label":"Kilometres"},{"type":"display","text":"{km} km = {miles} miles"},' +
+        '{"type":"button","label":"5 km","do":[{"set":"km","to":"5"}]},{"type":"button","label":"10 km","do":[{"set":"km","to":"10"}]}]}');
+      const kv = buildWidgetView(km, initialState(km), none, 0, false);
+      expect(`${kv.hint} ${kv.displays[0].text} ${kv.buttons.length}`).assertEqual('Open to edit values 10 km = 6.21 miles 2');
+      // Quiz: 5 lines and 5 buttons -> the top 3 lines and the 3 most important buttons ("do" steps first).
+      const d = (t: string): string => `{"type":"display","text":"${t}"}`;
+      const quiz = capsuleOf('{"schemaVersion":1,"id":"quiz","name":"Capitals quiz","permissions":["notifications"],"state":{"q":' +
+        '{"type":"number","initial":0},"score":{"type":"number","initial":0}},"ui":[' +
+        `${d('Score: {score}')},${d('Question {q + 1} of 5')},${d('Capital of France?')},${d('Pick one')},${d('Good luck')},` +
+        '{"type":"button","label":"Help","action":"notify:Think of the Eiffel Tower"},' +
+        '{"type":"button","label":"Paris","do":[{"set":"score","to":"score + 1"},{"set":"q","to":"q + 1"}]},' +
+        '{"type":"button","label":"Lyon","do":[{"set":"q","to":"q + 1"}]},' +
+        '{"type":"button","label":"Nice","do":[{"set":"q","to":"q + 1"}]},' +
+        '{"type":"button","label":"Restart","do":[{"reset":"score"},{"reset":"q"}]}]}');
+      expect(routeCapsule(quiz).condensed).assertTrue();
+      const qv = buildWidgetView(quiz, initialState(quiz), none, 0, true);
+      expect(qv.displays.length).assertEqual(3);
+      expect(qv.displays[0].text).assertEqual('Score: 0');
+      expect(qv.buttons.map((b: WidgetButton) => `${b.index}:${b.label}`).join(',')).assertEqual('1:Paris,2:Lyon,3:Nice');
+      expect(qv.hint).assertEqual('Open for more');
+      const press = pressWidgetButton(quiz, initialState(quiz), 1, 0, allowAll); // the card's "Paris"
+      expect(press.ok).assertTrue();
     });
 
     it('score lines only for short values on both sides', 0, () => {
@@ -384,6 +476,71 @@ export default function widgetModelTest() {
       expect(capsuleForNewWidget(gone, 2000, availableExceptGone)).assertEqual(''); // removed meanwhile
       const future: PendingCapsule = { capsuleId: 'count-coffees', at: 9000 };
       expect(capsuleForNewWidget(future, 2000, availableExceptGone)).assertEqual(''); // clock went back
+    });
+
+    it('a long checklist builds checklist rows on the widget, not the "Tap to open" view (T4-20)', 0, () => {
+      const chicken = capsuleOf('{"schemaVersion":0,"id":"chicken","name":"Chicken and rice","permissions":[],' +
+        '"ui":[{"type":"checklist","id":"steps","items":["Rinse rice","Boil water","Season chicken","Fry chicken",' +
+        '"Cook rice","Chop onions","Serve"]}]}');
+      const v = buildWidgetView(chicken, initialState(chicken), gate([], true, false), NOW, false);
+      expect(`${v.status} ${v.layout} ${v.caption}`).assertEqual('ok checklist 0 / 7 done');
+      expect(v.rows[0].items.length).assertEqual(7);
+      const packing = capsuleOf('{"schemaVersion":0,"id":"pack","name":"Packing list","permissions":[],"ui":[' +
+        '{"type":"text","text":"Clothes"},{"type":"checklist","id":"clothes","items":["Jumper","Socks","Boots","Hat"]},' +
+        '{"type":"text","text":"Documents"},{"type":"checklist","id":"docs","items":["Passport","Wallet","Tickets"]}]}');
+      const pv = buildWidgetView(packing, initialState(packing), gate([], true, false), NOW, true);
+      expect(`${pv.status} ${pv.layout}`).assertEqual('ok rows');
+      expect(pv.rows.filter((r: WidgetRow) => r.kind === 'checklist').length).assertEqual(2);
+    });
+
+    it('the checklist widget shows only unticked items; all ticked = nothing left to show (T4-21)', 0, () => {
+      const chicken = capsuleOf('{"schemaVersion":0,"id":"chicken","name":"Chicken and rice","permissions":[],' +
+        '"ui":[{"type":"checklist","id":"steps","items":["Rinse rice","Boil water","Season chicken","Fry chicken",' +
+        '"Cook rice","Chop onions","Serve"]}]}');
+      let s = initialState(chicken);
+      s = applyWidgetMessage(chicken, s, msg('toggle', 'steps', 0), NOW);
+      s = applyWidgetMessage(chicken, s, msg('toggle', 'steps', 2), NOW);
+      const v = buildWidgetView(chicken, s, gate([], true, false), NOW, false);
+      expect(v.caption).assertEqual('2 / 7 done');
+      expect(v.rows[0].open.map((i: WidgetCheckItem) => i.text).join(',')).assertEqual('Boil water,Fry chicken,Cook rice,Chop onions,Serve');
+      expect(v.rows[0].open[0].index).assertEqual(1); // taps still toggle the right item
+      for (let i = 0; i < 7; i++) {
+        if (i !== 0 && i !== 2) {
+          s = applyWidgetMessage(chicken, s, msg('toggle', 'steps', i), NOW);
+        }
+      }
+      const done = buildWidgetView(chicken, s, gate([], true, false), NOW, false);
+      expect(done.rows[0].open.length).assertEqual(0);
+      expect(done.caption).assertEqual('7 / 7 done');
+    });
+
+    it('widget sizes: 1x2, 2x2, 2x4 and 4x4 map to s/m/w/l; older bindings keep m/w (T4-22)', 0, () => {
+      expect([1, 2, 3, 4, 7].map((d: number) => sizeForDimension(d)).join('')).assertEqual('smwlm');
+      expect(sizeOfBinding({ formId: '1', capsuleId: '', wide: true })).assertEqual('w');
+      expect(sizeOfBinding({ formId: '1', capsuleId: '', wide: false })).assertEqual('m');
+      expect(sizeOfBinding({ formId: '1', capsuleId: '', wide: true, size: 'l' })).assertEqual('l');
+      expect(`${isWideSize('l')} ${isWideSize('w')} ${isWideSize('m')} ${isWideSize('s')}`).assertEqual('true true false false');
+      const kept = planWidgetAssignments([{ formId: '1', capsuleId: '', wide: false, size: 's' }], [], [], noneRemoved);
+      expect(kept.bindings[0].size).assertEqual('s');
+    });
+
+    it('the compact 1x2 card gets one summary line per layout (T4-22)', 0, () => {
+      const all = gate(['reminders'], true, false);
+      const counter = rules('count coffees');
+      expect(buildWidgetView(counter, initialState(counter), all, NOW, false).summary).assertEqual('0');
+      const tea = rules('tea 4 min');
+      expect(buildWidgetView(tea, initialState(tea), all, NOW, false).summary).assertEqual('4:00');
+      const running = applyWidgetMessage(tea, initialState(tea), msg('start', 'tea', -1), NOW);
+      expect(buildWidgetView(tea, running, all, NOW + 60000, false).summary).assertEqual('3:00 left');
+      const water = rules('water 8 glasses');
+      const goalValues3: StateValues = {};
+      goalValues3['count'] = 3;
+      expect(buildWidgetView(water, initialState(water), all, NOW, false, goalValues3).summary).assertEqual('3 / 8');
+      const tennis = capsuleOf(TENNIS_CAPSULE);
+      expect(buildWidgetView(tennis, initialState(tennis), all, NOW, false, tennisValues()).summary).assertEqual('Games 3 – 2');
+      const list = rules('checklist: passport, keys, charger');
+      expect(buildWidgetView(list, initialState(list), all, NOW, false).summary).assertEqual('0 / 3 done');
+      expect(summaryLine(emptyView(false), NOW)).assertEqual('Tap to choose a capsule');
     });
   });
 }

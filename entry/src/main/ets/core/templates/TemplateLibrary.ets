@@ -131,15 +131,48 @@ function similar(a: string, b: string): boolean {
 // Minimal parser until T4-16's shared one lands (T6-4): "8am", "8:30 pm", "20:00", "at 8" ("at 8" in the evening
 // or at night means 20:00). Bare words like "morning" are not times.
 
-const TIME_RE: RegExp = /\b(\d{1,2}):(\d{2})\s*(am|pm)?\b|\b(\d{1,2})\s*(am|pm)\b|\bat\s+(\d{1,2})\b(?![:.]?\d)/g;
+const TIME_RE: RegExp =
+  /\b(\d{1,2}):(\d{2})\s*(am|pm)?\b|\b(\d{1,2})\s*(am|pm)\b|\bat\s+(\d{1,2})\b(?![:.]?\d)(?!\s*(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|people|persons|times|x\b|%))/g;
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
 /** Times of day in the request as "HH:MM", in order of appearance, without duplicates (max 5). */
+/** "at 9 and 21", "at 8, 12 and 18": each number after a time becomes "at N" too. */
+function chainedTimes(folded: string): string {
+  const chain = /(\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:,|and|&)\s*(\d{1,2}(?::\d{2})?)\b(?!\s*(?:minutes?|mins?|hours?|people|times|x)\b)/;
+  let out = folded;
+  for (let i = 0; i < MAX_TRIGGERS && chain.test(out); i++) {
+    out = out.replace(chain, '$1 at $2');
+  }
+  return out;
+}
+
+/**
+ * Bare hours ("at 8" with no am/pm, minutes or morning/evening hint), read as 08:00: the caller adds a note
+ * so the user can say "8pm" instead.
+ */
+export function ambiguousTimes(request: string): string[] {
+  const folded = chainedTimes(foldText(request));
+  if (/\b(morning|evening|night|tonight|afternoon|noon|midnight)\b/.test(folded)) {
+    return [];
+  }
+  const out: string[] = [];
+  const re = /\bat\s+(\d{1,2})\b(?![:.]?\d)(?!\s*(?:am|pm)\b)/g;
+  let m = re.exec(folded);
+  while (m !== null) {
+    const h = Number(m[1]);
+    if (h >= 1 && h <= 12) {
+      out.push(`${pad2(h)}:00`);
+    }
+    m = re.exec(folded);
+  }
+  return out;
+}
+
 export function parseTimes(request: string): string[] {
-  const folded = foldText(request);
+  const folded = chainedTimes(foldText(request));
   const evening = /\b(evening|night|tonight|afternoon|pm)\b/.test(folded);
   const out: string[] = [];
   const re = new RegExp(TIME_RE.source, 'g');
@@ -186,7 +219,7 @@ export function takesTimeTriggers(t: TemplateEntry): boolean {
 }
 
 /** Adds one daily "time" trigger per time (a notification), with the permissions and schema version they need. */
-function addTimeTriggers(capsuleJson: string, times: string[], what: string): string {
+export function addTimeTriggers(capsuleJson: string, times: string[], what: string): string {
   if (times.length === 0) {
     return capsuleJson;
   }

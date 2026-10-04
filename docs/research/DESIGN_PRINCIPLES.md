@@ -2,6 +2,8 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04, about 01:00–01:30). Read from the rules, this repository at `origin/main` and public sources. Nothing was run on a device or emulator and no code was changed. Line references are to the commit named in the text and will drift as work lands.
 
+> **Status since writing (re-checked on 2026-10-04):** the redesign is **in progress**: tokens, shell, Create tab, capsule frame, consent sheet and Capsules tab are in the code behind per-area switches in `theme/Flags.ets`. The 13 audit changes in section D were not checked one by one; treat each as **planned** unless the code shows it.
+
 **Date:** 2026-10-04. **How this was produced:** AI-assisted research (web search and page fetches, plus a read of `capsules-harmonyos` at `origin/main` `7292381`). No code was changed, nothing was run on a device. Line numbers refer to that commit.
 
 **Source labels used on every rule**

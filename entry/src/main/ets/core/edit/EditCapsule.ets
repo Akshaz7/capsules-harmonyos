@@ -11,7 +11,7 @@
  * Apply, and moves the user's state across with carryState(). `previous` is kept for "Undo last change".
  */
 import { Capsule, CapsuleComponent, CapsuleOrigin, ChecklistComponent, CounterComponent, FailureKind, Permission,
-  StateVar, TimerComponent } from '../CapsuleTypes';
+  Scalar, StateVar, TimerComponent, Value } from '../CapsuleTypes';
 import { validateCapsule } from '../CapsuleValidator';
 import { allComponents, StateValues } from '../CapsuleProgram';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from '../Language';
@@ -124,6 +124,10 @@ function varText(v: StateVar): string {
   return JSON.stringify(v.initial);
 }
 
+function listTexts(v: Value): string[] {
+  return Array.isArray(v) ? (v as Scalar[]).map((x: Scalar) => `${x}`) : [];
+}
+
 /** What changed between two versions of a capsule, in plain English, one line each. */
 export function editSummary(before: Capsule, after: Capsule): string[] {
   const out: string[] = [];
@@ -171,6 +175,19 @@ export function editSummary(before: Capsule, after: Capsule): string[] {
   Object.keys(is).forEach((n: string) => {
     if (was[n] === undefined) {
       out.push(`Added value ${n}`);
+    } else if (was[n].type === 'list' && is[n].type === 'list') {
+      // A list's items in plain words ("Adds to tasks: Buy bread"), never the raw arrays.
+      const before = listTexts(was[n].initial);
+      const after = listTexts(is[n].initial);
+      const lower = (t: string) => t.toLowerCase();
+      const added = after.filter((t: string) => !before.map(lower).includes(t.toLowerCase()));
+      const removed = before.filter((t: string) => !after.map(lower).includes(t.toLowerCase()));
+      if (added.length > 0) {
+        out.push(`Adds to ${n}: ${added.join(', ')}`);
+      }
+      if (removed.length > 0) {
+        out.push(`Removes from ${n}: ${removed.join(', ')}`);
+      }
     } else if (varText(was[n]) !== varText(is[n])) {
       out.push(`Starting ${n}: ${varText(was[n])} → ${varText(is[n])}`);
     }
@@ -246,15 +263,30 @@ export function carryState(before: Capsule, after: Capsule, state: CapsuleState)
   return out;
 }
 
-/** v1 values whose variable still exists with the same type and starting value. */
+/**
+ * v1 values whose variable still exists with the same type and starting value. A list whose starting items
+ * changed keeps its current items (finished ones stay gone) with the edit applied: new starting items are
+ * added, removed ones are taken out (T4-28).
+ */
 export function carryValues(before: Capsule, after: Capsule, values: StateValues): StateValues {
   const was: Record<string, StateVar> = before.state ?? {};
   const is: Record<string, StateVar> = after.state ?? {};
   const out: StateValues = {};
   Object.keys(values).forEach((n: string) => {
-    if (was[n] !== undefined && is[n] !== undefined && was[n].type === is[n].type &&
-      varText(was[n]) === varText(is[n])) {
+    if (was[n] === undefined || is[n] === undefined || was[n].type !== is[n].type) {
+      return;
+    }
+    if (varText(was[n]) === varText(is[n])) {
       out[n] = values[n];
+    } else if (is[n].type === 'list' && Array.isArray(values[n])) {
+      const oldInitial = listTexts(was[n].initial);
+      const newInitial = (is[n].initial as Scalar[]);
+      const current = (values[n] as Scalar[]);
+      const removed = oldInitial.filter((t: string) => !newInitial.some((x: Scalar) => `${x}` === t));
+      const kept = current.filter((x: Scalar) => !removed.includes(`${x}`));
+      const added = newInitial.filter((x: Scalar) => !oldInitial.includes(`${x}`) &&
+        !kept.some((k: Scalar) => `${k}` === `${x}`));
+      out[n] = kept.concat(added);
     }
   });
   return out;
@@ -274,6 +306,37 @@ export function editMessage(capsule: Capsule, instruction: string): string {
   return `Current capsule:\n${JSON.stringify(capsule)}\n\nChange: ${instruction}`;
 }
 
+/**
+ * The first list that an edit empties or replaces completely: a v1 list var (or a checklist) that is still there,
+ * had items and keeps none of them. '' when every list keeps at least one item (or was removed on purpose).
+ */
+export function wipedList(before: Capsule, after: Capsule): string {
+  const was: Record<string, StateVar> = before.state ?? {};
+  const is: Record<string, StateVar> = after.state ?? {};
+  for (const n of Object.keys(was)) {
+    const old = was[n].type === 'list' ? listTexts(was[n].initial) : [];
+    if (old.length === 0 || is[n] === undefined) {
+      continue; // removing the whole list on purpose is a different change
+    }
+    const now = is[n].type === 'list' ? listTexts(is[n].initial).map((t: string) => t.toLowerCase()) : [];
+    if (!old.some((t: string) => now.includes(t.toLowerCase()))) {
+      return n;
+    }
+  }
+  for (const c of withId(before).filter((x: CapsuleComponent) => x.type === 'checklist')) {
+    const old = (c as ChecklistComponent).items;
+    const same = withId(after).find((x: CapsuleComponent) => x.type === 'checklist' && idOf(x) === idOf(c));
+    if (same === undefined) {
+      continue;
+    }
+    const now = (same as ChecklistComponent).items.map((t: string) => t.toLowerCase());
+    if (old.length > 0 && !old.some((t: string) => now.includes(t.toLowerCase()))) {
+      return labelOf(c).length > 0 ? labelOf(c) : 'the checklist';
+    }
+  }
+  return '';
+}
+
 /** Validates an edited capsule, puts the original id back, and builds the result. */
 function finish(previous: Capsule, edited: Capsule, origin: CapsuleOrigin): EditResult {
   // Compare like with like: the validator normalises what it returns, so normalise the original too.
@@ -290,6 +353,11 @@ function finish(previous: Capsule, edited: Capsule, origin: CapsuleOrigin): Edit
   const capsule = v.capsule;
   if (JSON.stringify(capsule) === JSON.stringify(before)) {
     return fail(previous, EDIT_NO_CHANGE);
+  }
+  const wiped = wipedList(before, capsule);
+  if (wiped.length > 0) {
+    // A model that rewrote the list from scratch: never offer a change that would lose all its items (T4-29).
+    return fail(previous, `That change would remove every item from ${wiped}, so it was not applied.`);
   }
   return {
     ok: true, capsule: capsule, previous: previous, summary: editSummary(before, capsule),

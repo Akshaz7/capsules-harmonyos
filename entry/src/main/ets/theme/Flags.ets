@@ -6,8 +6,8 @@ export class Flags {
   static readonly NEW_THEME: boolean = true;
   static readonly NEW_SHELL: boolean = true;
   static readonly NEW_FRAME: boolean = true;
-  static readonly NEW_PATTERNS: boolean = true;
-  static readonly NEW_CREATE: boolean = true;
+  static readonly NEW_PATTERNS: boolean = true; // only FINISHED_PATTERNS (emulator-passed, T6-11) use it; the rest stay classic
+  static readonly NEW_CREATE: boolean = false;
   static readonly NEW_PROGRESS: boolean = true;
   static readonly NEW_CONSENT: boolean = true;
   static readonly NEW_CAPSULES: boolean = true;
@@ -17,4 +17,22 @@ export class Flags {
   static readonly NEW_SNAP: boolean = true;
   static readonly NEW_SHARE: boolean = true;
   static readonly NEW_WIDE: boolean = true;
+  static readonly NEW_ERRORS: boolean = true;
+  /** T3-28: the live build card (step line + shimmering skeleton + Cancel) on both Create layouts. */
+  static readonly NEW_BUILD_LIVE: boolean = true;
+  /** T3-29: Snap (camera) on Create. Off: the dictation mic takes its place; the Snap code stays. */
+  static readonly CREATE_SNAP: boolean = false;
+  /** The old Create layout (NEW_CREATE false) in the new theme. Off until the user has checked it. */
+  static readonly NEW_CREATE_CLASSIC: boolean = false;
+  /** Create screen extras: the Recent row and the suggestion chips (off: brand, question, prompt bar only). */
+  static readonly CREATE_RECENT: boolean = false;
+  static readonly CREATE_SUGGESTIONS: boolean = false;
+  /** Lewis's visual polish pass (polish/visual): every new visual sits behind this. */
+  static readonly NEW_POLISH: boolean = true;
+  /**
+   * T4-31 (Ash): Claude is the only cloud provider. Core uses only the anthropic entry of config.local.json
+   * (mistral/openai entries are ignored); the UI hides Mistral / EU-cloud choices. Off: the old provider choice.
+   * Core mirrors this as CLOUD_CLAUDE_ONLY in core/CloudPolicy.ets (core imports nothing from theme/).
+   */
+  static readonly CLOUD_CLAUDE_ONLY: boolean = true;
 }

@@ -14,6 +14,7 @@ import {
   permissionForAction,
   permissionForComponent
 } from '../core';
+import { canSendToDevice, grantsWith, grantsWithout } from '../core/Consent';
 
 const DOMAIN = 0x0001;
 const TAG = 'Gatekeeper';
@@ -112,6 +113,35 @@ export class Gatekeeper {
     this.add(capsule.id, 'blocked', `action ${action}: ${reason}`);
     this.save();
     return false;
+  }
+
+  /**
+   * "devices" (T4-13): true once the user allowed sending this capsule to a paired device. Until then the app
+   * asks (once); the answer is stored with allowDevices / denyDevices and undone with revoke or forget.
+   */
+  canSendToDevice(capsuleId: string): boolean {
+    return canSendToDevice(this.grants(capsuleId));
+  }
+
+  /** The user allowed "devices" for this capsule: later sends do not ask again. Logged. */
+  allowDevices(capsuleId: string, detail: string): void {
+    this.put(`grants:${capsuleId}`, grantsWith(this.grants(capsuleId), 'devices'));
+    this.add(capsuleId, 'allow', `devices allowed by user: ${detail}`);
+    this.save();
+  }
+
+  /** The user refused "devices" for this capsule: nothing is sent. Logged; the app may ask again next time. */
+  denyDevices(capsuleId: string, detail: string): void {
+    this.put(`grants:${capsuleId}`, grantsWithout(this.grants(capsuleId), 'devices'));
+    this.add(capsuleId, 'deny', `devices denied by user: ${detail}`);
+    this.save();
+  }
+
+  /** Undoes one permission for a capsule (e.g. "devices" from the log screen). Logged as an undo. */
+  revoke(capsuleId: string, p: Permission): void {
+    this.put(`grants:${capsuleId}`, grantsWithout(this.grants(capsuleId), p));
+    this.add(capsuleId, 'undo', `${p} revoked by user`);
+    this.save();
   }
 
   /** Logs a "Show on another device" send ('allow') or a refusal ('blocked'): every send is on the record. */

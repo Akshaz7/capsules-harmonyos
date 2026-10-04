@@ -1,3 +1,4 @@
+import { Flags } from '../theme/Flags';
 import { Effects, Palette } from '../theme/Tokens';
 
 export interface TabItem {
@@ -34,9 +35,11 @@ export struct TabBar {
           .height(32)
           .borderRadius(16)
           .backgroundColor(i === this.selected ? Palette.tint : Color.Transparent)
+          // Polish: the pill fades in and out as the selection moves (160 ms).
+          .animation(Flags.NEW_POLISH ? { duration: 160, curve: Curve.EaseOut } : undefined)
           Text(item.label)
             .fontSize(12)
-            .fontWeight(600)
+            .fontWeight(Flags.NEW_POLISH && i === this.selected ? 700 : 600)
             .fontColor(i === this.selected ? Palette.blue : Palette.text2)
             .maxLines(1)
         }

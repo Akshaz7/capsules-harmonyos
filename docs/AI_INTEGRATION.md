@@ -10,12 +10,13 @@ The safety principle behind the whole design: **no model output ever runs as cod
 | --- | --- | --- | --- | --- |
 | 0 | **Request cache**, no model | On the device | First. Reuses a model-made capsule for the same normalised request (200 entries, re-validated). Skipped by "Make it smarter". | Our code, Apache-2.0 |
 | 0 | **Rule parser** (`core/RuleParser.ets`), no model | On the device | Timers, counters, goals, schedules, bill splits, Pomodoro and checklists. Returns at once on a match. | Our code, Apache-2.0 |
-| 0 | **Template library** (`core/templates/`), 108 templates, plus a live marketplace search (T6-5, 1.5 s budget) | On the device; the search goes to the marketplace server | After the rules. Fills a matching template by rule; unclear slots go to the on-device model (grounded values only). Badge "Made on your phone · no internet". The templates were generated with Claude ahead of time and validated; no model runs at request time unless a slot is unclear. | Our code, Apache-2.0 |
+| 0 | **Template library** (`core/templates/`), 108 templates, plus a live marketplace search (1.5 s budget) | On the device; the search goes to the marketplace server | After the rules. Fills a matching template by rule; unclear slots go to the on-device model (grounded values only). Badge "Made on your phone · no internet". The templates were generated with Claude ahead of time and validated; no model runs at request time unless a slot is unclear. | Our code, Apache-2.0 |
 | 1 | **LFM2-VL-450M** (Liquid AI), 4-bit `cq4` build, on the **Cactus** engine v2.2.2, which we ported to HarmonyOS (arm64-v8a, Node-API) | On the device. Weights are in the app sandbox (about 480 MB), not in the `.hap`. | Simple requests no rule matches. Skipped if the model isn't installed. | LFM Open License v1.0; Cactus Compute licence (see [`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 | 2 | **Mistral `ministral-14b-latest`** (Mistral AI, EU), JSON output mode | Mistral API (EU) | Requests that need logic (maths, scoring, converters, quizzes, streaks, inputs), or ones tier 1 rejects. **Default cloud provider.** | Mistral API terms |
 | 0 | **System OCR** (Core Vision Kit `textRecognition`) | On the device | Photos: reads the text first, then the local tiers build from it | HarmonyOS platform API |
 | 2 | **Mistral `pixtral-12b-latest`** (Mistral AI, EU) | Mistral API (EU) | Photos only, when OCR found no text and the cloud is allowed | Mistral API terms |
-| 2 | **Claude `claude-sonnet-5-5`** (Anthropic) | Anthropic API (outside the EU) | Only if **Settings → Advanced → Allow non-EU providers** is on | Anthropic API terms |
+| 2 | **Claude `claude-haiku-4-5-20251001`** (Anthropic), with the web search tool | Anthropic API (outside the EU) | **Live capsules:** requests that need live information (weather, opening hours, events, look-ups, or a trip or packing list for a bundled city; live news and live prices are refused before any model), while **Allow non-EU providers** is on (the default). Gets the Open-Meteo forecast for bundled cities, otherwise may search the web (at most 2 searches). | Anthropic API terms |
+| 2 | **Claude `claude-sonnet-5-5`** (Anthropic) | Anthropic API (outside the EU) | Ordinary cloud builds only when no EU provider is configured, or for **Make it smarter**, while **Allow non-EU providers** is on | Anthropic API terms |
 | 2 | Any OpenAI-compatible endpoint | That provider | Same rule as Claude (non-EU unless it is Mistral) | Provider's terms |
 
 Cloud providers are configured in a git-ignored `config.local.json` (one provider, or several with a `default`). With no config, the app runs with tiers 0 and 1 only.
@@ -32,6 +33,7 @@ request text (max 500 chars)
   ├─ Template library ── match (slots by rule / grounded on-device) ┤
   │                                                                  │
   ├─ refused actions (send SMS, calls, read contacts, email, websites, payments) ──► cloud first
+  ├─ needs live info (weather, trip, look-up…) and non-EU allowed? ── yes ─► Claude + forecast / web search ┤
   ├─ needs logic? ── yes ─► cloud (if allowed; otherwise needsCloud → app asks)
   │                 no ──► on-device LLM ── valid ─────────────────┤
   │                              └─ rejected / not installed ─► cloud (if allowed)
@@ -58,12 +60,16 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 | What | Where it goes |
 | --- | --- |
-| Request text, tiers 0–1 | Stays on the device, **except** the live marketplace search: when `marketplace.baseUrl` is set, the template step sends the request text to the marketplace server (`GET /api/capsules?q=…`), without a consent notice and also in On-device only mode. Flagged in [COMPLIANCE.md](COMPLIANCE.md). |
-| Photo (Snap button or a shared image) | Read by the system OCR on the phone. Only if no local build is possible: the OCR text is sent, or the photo itself if OCR found no text, to the chosen provider after the same consent as text; never to a non-EU provider unless that switch is on. |
+| Request text, tiers 0–1 | Stays on the device, **except** the live marketplace search: in Smart mode, when `marketplace.baseUrl` is set, the template step sends the request text to the marketplace server (`GET /api/capsules?q=…`) without a consent notice. On-device only mode skips it. Flagged in [COMPLIANCE.md](COMPLIANCE.md). |
+| Photo (a shared image; the Snap button is switched off for now) | Read by the system OCR on the phone. Only if no local build is possible: the OCR text is sent, or the photo itself if OCR found no text, to the chosen provider after the same consent as text; never to a non-EU provider unless that switch is on. |
 | Edit instruction ("Change it…"), cloud | Rule edits stay on the device. Otherwise the instruction and the capsule's definition (its JSON) go to the chosen provider under the same consent rules; the capsule's state values (counts, inputs) are never sent. |
+| Weather capsules | Only the chosen city's coordinates (from a bundled 12-city list) go to Open-Meteo, after the capsule's own consent; no request text, no identifiers. |
+| Dictated speech | Recognised on the device by Core Speech Kit offline; only the resulting text goes on, like typed text. |
+| Live capsules | The request text and, for a bundled city, one forecast line from Open-Meteo go to Anthropic; Claude may run web searches on Anthropic's side. Never capsule state, ids or keys. Live results are never cached. |
 | Request text, tier 2 | Sent to the chosen provider, along with our fixed system prompt. **Nothing else**: no capsule data, no app state, no identifiers. A unit test checks that the HTTP body holds only the system prompt and the request. |
+| Who decides | The user. By default Harmoniser picks the best model for the job: on the phone first, Mistral (EU) for logic, Claude (outside the EU) for live capsules. **Allow non-EU providers** (on by default) turns Claude off with one switch, making the cloud EU-only, and **On-device only** keeps everything on the phone. |
 | Consent | Before a provider's first request, a one-time notice names that provider and says whether it is outside the EU. Consent is stored per provider, so agreeing to Mistral does not cover Claude. **On-device only** mode never calls the cloud. |
-| API keys | Only in a git-ignored `config.local.json`, pushed to the app's private files directory (debug builds). They are never in the repository or the `.hap`: a byte scan of the release HAP found no key. |
+| API keys | Only in a git-ignored `config.local.json`, pushed to the app's private files directory (debug builds). They are never in the repository or the `.hap`: a byte scan of the `test-1` HAP found no key (re-run it on the final release). |
 | On-device engine | Cactus's telemetry is replaced with a no-op stub in our patch, so the engine makes no network calls. |
 | Logs | Failures are logged with hilog. The request text is logged as `%{private}`, which is redacted outside debug logging. |
 | Provider-side retention | Set by each provider's API terms, not by us. Choosing **On-device only** avoids it entirely. |
@@ -71,7 +77,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (249, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
+- **Unit tests (361, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
@@ -85,14 +91,14 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 | On-device, 15 requests (emulator) | 9/15 correct; 11/15 with the rule parser in front |
 | Photo → capsule, 10 synthetic photos, cloud path only (`scripts/eval-images.mjs`, before OCR was added) | Claude 10/10 valid, 9/10 correct · Mistral 9/10 valid, 5/10 correct · on-device 0/10 (vision blocked) |
 | Photo → capsule, cloud path, Mistral reading options (same 10 photos, host) | `pixtral-12b` reads + `ministral-14b` builds: 8/10 correct (the setup the app uses) · Ministral alone 5/10 · Pixtral for both 7/10 |
-| Photo → capsule on a real phone, same 10 photos, OCR first (T5-6) | 10/10 valid, 6/10 correct, all built on the phone with no internet, 0.35–1 s per photo. The 4 misses are text-converter issues (bill total, workout read as a recipe, no scoreboard converter), being fixed in T4-18. |
+| Photo → capsule on a real phone, same 10 photos, OCR first | 10/10 valid, 6/10 correct, all built on the phone with no internet, 0.35–1 s per photo. The 4 misses are text-converter issues (bill total, workout read as a recipe, no scoreboard converter); the converters have since been fixed (unit-tested; the photo eval has not been re-run). |
 | On-device speed (emulator, Apple M4 Pro host) | 92–114 tokens/s decode, about 0.3 s to first token, about 380 MB RSS |
 
 Known limitations:
 - **English only.** An English-only gate runs before every tier, so non-English input never reaches a model. Multilingual support was dropped for reliability: Ministral built only 3/5 Polish requests.
 - **Small samples.** The eval numbers are indicative, not a benchmark. The prompt changed after the held-out set was written.
-- **EU default trades accuracy for privacy:** Mistral is weaker than Claude on hard logic requests.
+- **Mistral for logic trades accuracy for privacy:** Mistral is weaker than Claude on hard logic requests. Live capsules use Claude by default; the user can switch to EU-only.
 - **The on-device model** handles only simple requests, and got 9 of 15 right in the eval. Phone performance hasn't been measured, and offline use wasn't strictly tested, because emulator airplane mode doesn't cut its network.
 - **Requests are capped at 500 characters**; shared text at 2,000.
-- **Not built:** vibration in capsules and motion counting. Voice input exists only in core (offline Core Speech Kit; 9/10 synthetic spoken requests within 20% word error on the emulator) and isn't in the app. Daily time triggers fire only while the app is open, and motion triggers don't fire at all.
+- **Not built:** capsules that vibrate. Reminders (`notify:<text>` and daily calendar reminders) are built but not yet checked on a device. Voice dictation is in the app (offline Core Speech Kit, mic permission; 9/10 synthetic spoken requests within 20% word error on the emulator) but not yet checked on a device. Daily time triggers fire only while the app is open. Motion counting and motion triggers are built (accelerometer while the app is in front) but not yet checked on a phone.
 - **Model weights** must be pushed separately (debug builds). A store build would need an in-app download.

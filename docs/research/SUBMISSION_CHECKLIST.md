@@ -2,6 +2,8 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04, about 01:00–01:30). Read from the rules, this repository at `origin/main` and public sources. Nothing was run on a device or emulator and no code was changed. Line references are to the commit named in the text and will drift as work lands.
 
+> **Status since writing (re-checked on 2026-10-04):** most items in section 3 are now fixed in the docs: the MCP wording, "nothing is simulated", the marketplace configuration note, the README tab-bar, shared-image and widget rows, the byte-scan wording, the On-device only wording, the compliance re-check and the status stamp. Still open: the vibration claim in the app text and cloud prompt (code), the recorded demo, the final release `.hap`, and per-run phone logs in `AI_WORKFLOW.md`.
+
 Written Sunday 4 Oct 2026, about 01:15 CEST. **Deadline: Sunday 4 Oct, 11:00, on HackTribe.** About 9 h 45 min left.
 
 State audited (read-only, nothing changed or pushed):

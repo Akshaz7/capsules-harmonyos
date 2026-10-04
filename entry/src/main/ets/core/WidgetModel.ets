@@ -9,16 +9,20 @@ import {
   ChecklistComponent,
   CounterComponent,
   DisplayComponent,
+  InputComponent,
+  ListComponent,
   Permission,
+  Scalar,
   RowComponent,
   TextComponent,
   TimerComponent,
+  Trigger,
   WhenComponent
 } from './CapsuleTypes';
 import { parseAction, permissionForAction, permissionForComponent } from './CapsuleValidator';
-import { routeCapsule } from './CapsuleRouter';
+import { isTaskList, routeCapsule, usesV1Features } from './CapsuleRouter';
 import {
-  allComponents, applyActions, initialState as initialValues, isEnabled, isShown, renderTemplate, restoreState, StateValues
+  allComponents, applyActions, finishListItem, initialState as initialValues, isEnabled, isShown, renderTemplate, restoreState, StateValues
 } from './CapsuleProgram';
 
 type JsonValue = Object | null | undefined;
@@ -54,7 +58,7 @@ export interface CapsuleState {
 }
 
 function isV1(capsule: Capsule): boolean {
-  return capsule.schemaVersion === 1 || capsule.state !== undefined || capsule.computed !== undefined;
+  return usesV1Features(capsule); // not schemaVersion alone: a v0 capsule with time triggers keeps its v0 card
 }
 
 export function initialState(capsule: Capsule): CapsuleState {
@@ -178,6 +182,29 @@ function hasButton(capsule: Capsule, action: string): boolean {
   return capsule.ui.some((c: CapsuleComponent) => c.type === 'button' && (c as ButtonComponent).action === action);
 }
 
+/** Row id prefix of a v1 list (a task list) on the card: "list:<state var>". */
+export const LIST_ROW: string = 'list:';
+
+function listOf(capsule: Capsule, rowId: string): ListComponent | undefined {
+  const source = rowId.substring(LIST_ROW.length);
+  return allComponents(capsule.ui).find((c: CapsuleComponent) => c.type === 'list' &&
+    (c as ListComponent).source === source) as ListComponent | undefined;
+}
+
+/** A v1 list as a card checklist: its items, none ticked; tapping one finishes (removes) it. */
+function listRow(l: ListComponent, i: number, values: StateValues): WidgetRow {
+  const r = row('checklist', `${LIST_ROW}${l.source}`, '');
+  const v = values[l.source];
+  const texts: string[] = Array.isArray(v) ? (v as Scalar[]).map((x: Scalar) => `${x}`) : [];
+  r.items = texts.map((text: string, n: number): WidgetCheckItem => {
+    const item: WidgetCheckItem = { index: n, text: text, checked: false };
+    return item;
+  });
+  r.open = r.items;
+  r.key = `${i}:list:${l.source}:${texts.join('\u0001')}`;
+  return r;
+}
+
 function component(capsule: Capsule, type: string, id: string): CapsuleComponent | undefined {
   return capsule.ui.find((c: CapsuleComponent) => c.type === type && (c as TimerComponent).id === id);
 }
@@ -202,6 +229,9 @@ export function declaredAction(capsule: Capsule, msg: WidgetMessage): string | n
       return b !== undefined ? '' : null; // its actions are checked one by one in pressWidgetButton
     }
     case 'toggle': {
+      if (msg.id.startsWith(LIST_ROW)) {
+        return listOf(capsule, msg.id) !== undefined && msg.index >= 0 ? '' : null; // a task: done = removed
+      }
       const list = component(capsule, 'checklist', msg.id);
       return list !== undefined && msg.index >= 0 && msg.index < (list as ChecklistComponent).items.length ? '' : null;
     }
@@ -224,6 +254,12 @@ export function applyWidgetMessage(capsule: Capsule, state: CapsuleState, msg: W
     const counter = next.counters.find((v: CounterValue) => v.id === msg.id);
     if (counter !== undefined) {
       counter.value += 1;
+    }
+  } else if (msg.op === 'toggle' && msg.id.startsWith(LIST_ROW)) {
+    const done = finishListItem(capsule, next.values ?? initialValues(capsule), msg.id.substring(LIST_ROW.length),
+      msg.index); // the same op as the app's tick circles (T4-26)
+    if (done.ok) {
+      next.values = done.state;
     }
   } else if (msg.op === 'toggle') {
     const list = next.checklists.find((l: ChecklistTicks) => l.id === msg.id);
@@ -347,6 +383,8 @@ export interface WidgetRow {
   value: number;
   canIncrement: boolean;
   items: WidgetCheckItem[];
+  /** Checklists: the items not ticked yet, in order. The card shows only these (ticked ones are hidden). */
+  open: WidgetCheckItem[];
 }
 
 /**
@@ -360,12 +398,30 @@ export interface WidgetRow {
 export type WidgetLayout = 'counter' | 'goal' | 'timer' | 'checklist' | 'logic' | 'rows' | 'message';
 
 /** The capsule icon (a system symbol chosen by the card). */
-export type WidgetIcon = 'counter' | 'goal' | 'timer' | 'checklist' | 'logic' | 'text' | 'blank';
+export type WidgetIcon = 'counter' | 'goal' | 'timer' | 'checklist' | 'logic' | 'text' | 'blank' | 'water' | 'walk' |
+  'trophy' | 'cooking';
+
+const THEMED_ICONS: [RegExp, WidgetIcon][] = [
+  [/\b(water|drink\w*|hydrat\w*|glass(es)?)\b/i, 'water'],
+  [/\b(run\w*|steps?|walk\w*|jog\w*|hike|hiking)\b/i, 'walk'],
+  [/\b(score\w*|match|game|tennis|football|ping ?pong|points?|tournament)\b/i, 'trophy'],
+  [/\b(cook\w*|chicken|rice|pasta|bake|baking|oven|recipe|boil\w*|eggs?|kitchen)\b/i, 'cooking'],
+  [/\b(timers?|countdown|pomodoro|minutes?)\b/i, 'timer']
+];
+
+/** A themed icon from the capsule name ("Water logger" -> drop, "Tennis score" -> trophy), else `fallback`. */
+export function themedIcon(name: string, fallback: WidgetIcon): WidgetIcon {
+  if (fallback === 'blank') {
+    return fallback;
+  }
+  const hit = THEMED_ICONS.find((t: [RegExp, WidgetIcon]) => t[0].test(name));
+  return hit !== undefined ? hit[1] : fallback;
+}
 
 /** One v1 display line: plain text, or a score line "label left - right" drawn as two big numbers. */
 export interface WidgetDisplay {
   key: string;
-  kind: 'line' | 'score';
+  kind: 'line' | 'score' | 'number';
   text: string;
   label: string;
   left: string;
@@ -380,6 +436,19 @@ export interface WidgetButton {
 }
 
 export type WidgetStatus = 'ok' | 'empty' | 'removed';
+
+/** Card sizes: s = 1x2 (compact), m = 2x2, w = 2x4 (wide), l = 4x4 (large). */
+export type CardSize = 's' | 'm' | 'w' | 'l';
+
+/** formInfo.FormDimension -> card size (Dimension_1_2 = 1, 2_2 = 2, 2_4 = 3, 4_4 = 4; anything else 2x2). */
+export function sizeForDimension(dimension: number): CardSize {
+  return dimension === 1 ? 's' : (dimension === 3 ? 'w' : (dimension === 4 ? 'l' : 'm'));
+}
+
+/** The layouts that use the extra width/height (more items, side-by-side columns). */
+export function isWideSize(size: CardSize): boolean {
+  return size === 'w' || size === 'l';
+}
 
 export interface WidgetView {
   status: WidgetStatus;
@@ -396,6 +465,8 @@ export interface WidgetView {
   /** The widget's palette slot (stable per widget) and its accent colour. */
   colorTag: number;
   accent: string;
+  /** Condensed cards (T4-19): "Open for more" or "Open to edit values" beside the title; '' otherwise. */
+  hint?: string;
   /** Small text under the hero: a checklist's "2 / 3 done", a goal's "5 to go", a capsule's text line. */
   caption: string;
   /** Layout "goal": the current value and the goal (progress = value / goal). */
@@ -403,6 +474,10 @@ export interface WidgetView {
   goal: number;
   displays: WidgetDisplay[];
   buttons: WidgetButton[];
+  /** The widget's size (set by the service from its binding; 'm'/'w' from `wide` until then). */
+  size: CardSize;
+  /** One line for the compact 1x2 card: the main value or status, e.g. "3", "3 / 8", "25:00", "2 / 5 done". */
+  summary: string;
 }
 
 export interface GateFacts {
@@ -451,7 +526,7 @@ export function withColor(view: WidgetView, colorTag: number): WidgetView {
 function row(kind: WidgetRowKind, id: string, label: string): WidgetRow {
   return {
     key: '', kind: kind, id: id, label: label, minutes: 0, endAt: 0, canStart: false, value: 0, canIncrement: false,
-    items: []
+    items: [], open: []
   };
 }
 
@@ -464,7 +539,8 @@ export const BLANK_WIDGET_MESSAGE: string = 'Tap to choose a capsule';
 function baseView(status: WidgetStatus, capsuleId: string, title: string, message: string, wide: boolean): WidgetView {
   return {
     status: status, capsuleId: capsuleId, title: title, message: message, rows: [], wide: wide, layout: 'message',
-    icon: 'blank', colorTag: 0, accent: accentFor(0), caption: '', value: 0, goal: 0, displays: [], buttons: []
+    icon: 'blank', colorTag: 0, accent: accentFor(0), caption: '', value: 0, goal: 0, displays: [], buttons: [],
+    size: wide ? 'w' : 'm', summary: message
   };
 }
 
@@ -508,6 +584,7 @@ function v0Row(capsule: Capsule, c: CapsuleComponent, i: number, state: CapsuleS
       };
       return item;
     });
+    r.open = r.items.filter((x: WidgetCheckItem) => !x.checked);
     r.key = `${i}:checklist:${l.id}:${r.items.map((x: WidgetCheckItem) => x.checked ? '1' : '0').join('')}`;
     return r;
   }
@@ -543,18 +620,57 @@ function arrangeV0(view: WidgetView): void {
   }
 }
 
-const GOAL_LINE: RegExp = /^\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*(.*)$/;
+/** "3 / 8 glasses", "Glasses: 3 / 8", "3 of 8 glasses": [label, value, goal, rest]. */
+const GOAL_LINE: RegExp = /^\s*(?:([^\d]{0,24}?)\s*:\s*)?(\d+(?:\.\d+)?)\s*(?:\/|\bof\b)\s*(\d+(?:\.\d+)?)\s*(.*)$/i;
+/** A line led by a number ("1 glass", "Glasses: 1"): [label, value, rest]. */
+const NUMBER_LINE: RegExp = /^\s*(?:([^\d]{0,24}?)\s*:\s*)?(\d+(?:\.\d+)?)\b\s*(.*)$/;
+const GOAL_VARS: RegExp = /^(daily_?)?(goal|target)$/i;
+
+export class GoalLine {
+  value: number = 0;
+  goal: number = 0;
+  caption: string = '';
+}
+
+/**
+ * The goal a v1 card shows as a ring: a first line "n / goal" or "n of goal", or a first line led by a number
+ * when the capsule has a numeric goal/target value. Null otherwise.
+ */
+export function goalOf(line: string, values: StateValues): GoalLine | null {
+  const g = new GoalLine();
+  const m = line.match(GOAL_LINE);
+  if (m !== null && parseFloat(m[3]) > 0) {
+    g.value = parseFloat(m[2]);
+    g.goal = parseFloat(m[3]);
+    g.caption = [m[1] ?? '', m[4].replace(/^[\s·•,\-–:|]+/, '').trim()].filter((t: string) => t.length > 0).join(' · ');
+    return g;
+  }
+  const key = Object.keys(values).find((k: string) => GOAL_VARS.test(k) && typeof values[k] === 'number');
+  const n = line.match(NUMBER_LINE);
+  if (key !== undefined && n !== null && (values[key] as number) > 0) {
+    g.value = parseFloat(n[2]);
+    g.goal = values[key] as number;
+    g.caption = [n[1] ?? '', n[3].trim()].filter((t: string) => t.length > 0).join(' · ');
+    return g;
+  }
+  return null;
+}
 const SCORE_LINE: RegExp = /^(.*?)\s*(\S{1,4})\s+[-–:]\s+(\S{1,4})$/;
 
 /** A display line; "Games 2 - 1" or "15 - 30" becomes a score line. */
 export function displayFor(key: string, text: string): WidgetDisplay {
   const d: WidgetDisplay = { key: key, kind: 'line', text: text, label: '', left: '', right: '' };
   const m = text.match(SCORE_LINE);
+  const n = text.match(NUMBER_LINE);
   if (m !== null && m[1].length <= 24) {
     d.kind = 'score';
     d.label = m[1].trim();
     d.left = m[2];
     d.right = m[3];
+  } else if (n !== null && n[3].length <= 40) {
+    d.kind = 'number'; // "1", "3 glasses today", "Glasses: 3": the card draws the number big, the rest under it
+    d.left = n[2];
+    d.label = [n[1] ?? '', n[3].trim()].filter((t: string) => t.length > 0).join(' · ');
   }
   return d;
 }
@@ -581,15 +697,34 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
   const buttons = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'button');
   const shown: CapsuleComponent[] = [];
   shownComponents(capsule, values, capsule.ui, shown);
+  // Typed text stays in the app: text inputs and the buttons that use them (a task list's "Add") are not drawn.
+  const typed: string[] = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'input' &&
+    (c as InputComponent).kind === 'text').map((c: CapsuleComponent) => (c as InputComponent).bind);
+  const usesTyping = (b: ButtonComponent): boolean => {
+    const json = JSON.stringify(b);
+    return typed.some((bind: string) => new RegExp(`\\b${bind}\\b`).test(json));
+  };
+  // Live display values first (scores, results), the capsule's static text lines after them: a card that
+  // only fits one line shows what changes, not the instructions.
   const lines: string[] = [];
+  const texts: string[] = [];
+  const stepped: number[] = [];
   shown.forEach((c: CapsuleComponent, i: number) => {
     if (c.type === 'display') {
       lines.push(renderTemplate(capsule, values, (c as DisplayComponent).text));
     } else if (c.type === 'text') {
-      lines.push((c as TextComponent).text);
+      texts.push((c as TextComponent).text);
+    } else if (c.type === 'list') {
+      view.rows.push(listRow(c as ListComponent, i, values));
     } else if (c.type === 'button') {
       const b = c as ButtonComponent;
+      if (usesTyping(b)) {
+        return;
+      }
       view.buttons.push({ index: buttons.indexOf(c), label: b.label, enabled: isEnabled(capsule, values, b) });
+      if (b.do !== undefined && b.do.length > 0) {
+        stepped.push(buttons.indexOf(c));
+      }
     } else if (permitted(permissionForComponent(c), gate.granted)) {
       const r = v0Row(capsule, c, i, state, gate);
       if (r !== null) {
@@ -597,23 +732,79 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
       }
     }
   });
-  const goal = lines.length > 0 && view.rows.length === 0 ? lines[0].match(GOAL_LINE) : null;
-  if (goal !== null && parseFloat(goal[2]) > 0) {
+  texts.forEach((t: string) => lines.push(t));
+  lines.splice(MAX_CARD_LINES); // condensed: the top values (live displays come first)
+  view.buttons = mostImportant(view.buttons, stepped);
+  view.rows.splice(MAX_CARD_PARTS);
+  const goal = lines.length > 0 && view.rows.length === 0 ? goalOf(lines[0], values) : null;
+  if (isTaskList(capsule) && view.rows.some((r: WidgetRow) => r.id.startsWith(LIST_ROW))) {
+    view.layout = 'checklist'; // the tasks fill the card; "Tasks to do: 3" (and the plan) as the caption
+    view.icon = 'checklist';
+    view.rows = view.rows.filter((r: WidgetRow) => r.id.startsWith(LIST_ROW));
+    view.caption = lines.slice(0, 1).join('');
+  } else if (goal !== null) {
     view.layout = 'goal';
     view.icon = 'goal';
-    view.value = parseFloat(goal[1]);
-    view.goal = parseFloat(goal[2]);
-    const rest = goal[3].replace(/^[\s·•,\-–:|]+/, '').trim();
-    view.caption = lines.length > 1 ? lines[1] : rest;
-    if (lines.length > 1 && rest.length > 0) {
-      view.caption = `${rest} · ${lines[1]}`;
-    }
+    view.value = goal.value;
+    view.goal = goal.goal;
+    view.caption = [goal.caption].concat(lines.slice(1, 2)).filter((t: string) => t.length > 0).join(' · ');
   } else {
     view.layout = 'logic';
     view.icon = view.rows.some((r: WidgetRow) => r.kind === 'timer') ? 'timer' : 'logic';
     view.displays = lines.map((t: string, n: number) => displayFor(`${n}:${t}`, t));
   }
   return view;
+}
+
+const MAX_CARD_LINES: number = 3;
+const MAX_CARD_BUTTONS: number = 3;
+const MAX_CARD_PARTS: number = 2;
+const MAX_CARD_ROWS: number = 3;
+export const HINT_MORE: string = 'Open for more';
+export const HINT_EDIT: string = 'Open to edit values';
+
+/** Up to 3 buttons, those with "do" steps first, shown in the capsule's order. */
+function mostImportant(all: WidgetButton[], stepped: number[]): WidgetButton[] {
+  if (all.length <= MAX_CARD_BUTTONS) {
+    return all;
+  }
+  const first = all.filter((b: WidgetButton) => stepped.includes(b.index));
+  const rest = all.filter((b: WidgetButton) => !stepped.includes(b.index));
+  const keep = first.concat(rest).slice(0, MAX_CARD_BUTTONS).map((b: WidgetButton) => b.index);
+  return all.filter((b: WidgetButton) => keep.includes(b.index));
+}
+
+function clock(ms: number): string {
+  const total = Math.max(Math.ceil(ms / 1000), 0);
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+}
+
+/** The compact (1x2) card's one line: the main value or status of the view's layout. */
+export function summaryLine(view: WidgetView, now: number): string {
+  const first = view.rows.find((r: WidgetRow) => r.kind !== 'text');
+  if (view.layout === 'goal') {
+    return `${view.value} / ${view.goal}`;
+  }
+  if (view.layout === 'logic' && view.displays.length > 0) {
+    const d = view.displays[0];
+    return d.kind === 'score' ? `${d.label.length > 0 ? d.label + ' ' : ''}${d.left} – ${d.right}` : d.text;
+  }
+  if (first === undefined) {
+    return view.message;
+  }
+  if (first.kind === 'counter') {
+    return `${first.value}`;
+  }
+  if (first.kind === 'timer') {
+    return first.endAt > now ? `${clock(first.endAt - now)} left` : (first.endAt > 0 ? 'Done' : clock(first.minutes * 60000));
+  }
+  if (first.id.startsWith(LIST_ROW)) {
+    return first.items.length === 0 ? 'All done' : `${first.items.length} to do`;
+  }
+  const done = first.items.filter((i: WidgetCheckItem) => i.checked).length;
+  return done === first.items.length ? 'All done' : `${done} / ${first.items.length} done`;
 }
 
 /**
@@ -629,9 +820,12 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
   }
   const route = routeCapsule(capsule);
   if (!route.widget) {
-    // Too big for the card (until T4-19 condenses it): the name and a tap into the app.
-    const v = baseView('empty', capsule.id, capsule.name, 'Tap to open', wide);
-    v.icon = capsule.schemaVersion === 1 ? 'logic' : 'blank';
+    // Only motion capsules (counted while open) and empty ones: the name, why, and a tap into the app.
+    const motion = allComponents(capsule.ui).some((c: CapsuleComponent) => c.type === 'counter' &&
+      (c as CounterComponent).source === 'motion') || (capsule.triggers ?? []).some((t: Trigger) => t.on === 'motion');
+    const why = motion ? 'Counts motion only while the capsule is open. Tap to open.' : 'Tap to open';
+    const v = baseView('empty', capsule.id, capsule.name, why, wide);
+    v.icon = themedIcon(capsule.name, capsule.schemaVersion === 1 ? 'logic' : 'text');
     return v;
   }
   let view: WidgetView;
@@ -640,8 +834,8 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
     view = buildLogicView(capsule, state, state.values ?? restoreState(capsule, values ?? {}), gate, wide);
   } else {
     view = baseView('ok', capsule.id, capsule.name, '', wide);
-    capsule.ui.forEach((c: CapsuleComponent, i: number) => {
-      if (c.type === 'button') {
+    allComponents(capsule.ui).forEach((c: CapsuleComponent, i: number) => { // rows flattened
+      if (c.type === 'button' || c.type === 'row') {
         return; // buttons become the start/+ controls on their rows
       }
       if (!permitted(permissionForComponent(c), gate.granted)) {
@@ -652,8 +846,17 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
         view.rows.push(r);
       }
     });
+    if (route.condensed === true) {
+      view.rows.splice(MAX_CARD_ROWS); // the first parts; the rest in the app
+    }
     arrangeV0(view);
   }
+  if (route.condensed === true) {
+    view.hint = allComponents(capsule.ui).some((c: CapsuleComponent) => c.type === 'input' || c.type === 'number') ?
+      HINT_EDIT : HINT_MORE;
+  }
+  view.icon = themedIcon(capsule.name, view.icon); // water -> drop, tennis -> trophy
+  view.summary = summaryLine(view, now);
   const hidden = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type !== 'button' &&
     !permitted(permissionForComponent(c), gate.granted)).length;
   if (hidden > 0) {
@@ -692,7 +895,7 @@ export interface PendingCapsule {
 }
 
 /** A pending capsule older than this is ignored (the user left the add-widget page without adding). */
-export const PENDING_TTL_MS: number = 10 * 60 * 1000;
+export const PENDING_TTL_MS: number = 3 * 60 * 1000;
 
 /**
  * The capsule a newly added widget shows: the pending one if it is recent and still available, else none
@@ -717,6 +920,12 @@ export interface WidgetBindingFact {
   addedAt?: number;
   /** The widget's palette slot (see WIDGET_PALETTE). Missing on older bindings: use stableColorTag(formId). */
   colorTag?: number;
+  /** The widget's size. Missing on older bindings: 'w' when wide, else 'm' (see sizeOfBinding). */
+  size?: CardSize;
+}
+
+export function sizeOfBinding(b: WidgetBindingFact): CardSize {
+  return b.size ?? (b.wide ? 'w' : 'm');
 }
 
 export class AssignmentPlan {
@@ -738,41 +947,25 @@ function widgetOrder(a: WidgetBindingFact, b: WidgetBindingFact): number {
 }
 
 /**
- * Keeps widgets in step with the saved capsules:
- *  1. A widget whose capsule is no longer saved (or was removed) goes blank ("Tap to choose a capsule").
- *  2. Each new widget-suitable capsule (not seen before, not shown anywhere) fills the first blank widget,
- *     oldest new capsule first.
- * `saved` is newest first. With `seen` null (first run) every saved capsule counts as already seen, so
- * existing capsules are not pushed onto widgets the user left blank.
+ * Keeps widgets in step with the saved capsules: a widget whose capsule is no longer saved (or was removed)
+ * goes blank ("Tap to choose a capsule"). New capsules are NOT put on blank widgets (T4-12): a widget shows a
+ * capsule only when the user assigns one, or adds a widget with a pending capsule ("Add to home screen").
+ * `seen` is kept for callers; with null (first run) every saved capsule counts as seen.
  */
 export function planWidgetAssignments(bindings: WidgetBindingFact[], saved: Capsule[], seen: string[] | null,
   isRemoved: (capsuleId: string) => boolean): AssignmentPlan {
   const plan = new AssignmentPlan();
-  const alive = saved.filter((c: Capsule) => !isRemoved(c.id));
-  const aliveIds = alive.map((c: Capsule) => c.id);
+  const aliveIds = saved.filter((c: Capsule) => !isRemoved(c.id)).map((c: Capsule) => c.id);
   const known = seen ?? saved.map((c: Capsule) => c.id);
-  const sorted = bindings.slice().sort(widgetOrder);
-  sorted.forEach((b: WidgetBindingFact) => {
+  bindings.slice().sort(widgetOrder).forEach((b: WidgetBindingFact) => {
     const next: WidgetBindingFact = {
-      formId: b.formId, capsuleId: b.capsuleId, wide: b.wide, addedAt: b.addedAt, colorTag: b.colorTag
+      formId: b.formId, capsuleId: b.capsuleId, wide: b.wide, addedAt: b.addedAt, colorTag: b.colorTag, size: b.size
     };
     if (next.capsuleId.length > 0 && !aliveIds.includes(next.capsuleId)) {
       next.capsuleId = '';
       plan.changed.push(next.formId);
     }
     plan.bindings.push(next);
-  });
-  const shown = plan.bindings.map((b: WidgetBindingFact) => b.capsuleId);
-  const fresh = alive.filter((c: Capsule) => !known.includes(c.id) && !shown.includes(c.id) && routeCapsule(c).widget)
-    .reverse(); // oldest new capsule first
-  fresh.forEach((c: Capsule) => {
-    const blank = plan.bindings.find((b: WidgetBindingFact) => b.capsuleId.length === 0);
-    if (blank !== undefined) {
-      blank.capsuleId = c.id;
-      if (!plan.changed.includes(blank.formId)) {
-        plan.changed.push(blank.formId);
-      }
-    }
   });
   const all = known.concat(saved.map((c: Capsule) => c.id));
   plan.seen = all.filter((id: string, i: number) => all.indexOf(id) === i && saved.some((c: Capsule) => c.id === id));

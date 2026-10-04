@@ -21,6 +21,22 @@
         "name": "ohos.permission.VIBRATE"
       },
       {
+        "name": "ohos.permission.GET_NETWORK_INFO",
+        "reason": "$string:network_info_reason",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.MICROPHONE",
+        "reason": "$string:mic_reason",
+        "usedScene": {
+          "abilities": ["EntryAbility"],
+          "when": "inuse"
+        }
+      },
+      {
         "name": "ohos.permission.READ_CALENDAR",
         "reason": "$string:calendar_reason",
         "usedScene": {

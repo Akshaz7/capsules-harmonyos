@@ -1,8 +1,8 @@
 # Compliance audit
 
-Checked against the official [`hackathon_challenge.md`](https://github.com/onirodeveloper/hackyeah2026-challenge/blob/main/hackathon_challenge.md) on 2026-10-03 at about 20:00, at commit `a9d853e` (main, local). Owners: **Ash** (team lead), **T1** (coordination, builds, phones), **T2** (docs), **T3** (app UI), **T4** (core), **T5** (Cactus).
+Checked against the official [`hackathon_challenge.md`](https://github.com/onirodeveloper/hackyeah2026-challenge/blob/main/hackathon_challenge.md) first on 2026-10-03; re-checked against the code on 2026-10-04 (main, local, up to `260e558`). Owners: **Ash** (team lead), **T1** (coordination, builds, phones), **T2** (docs), **T3** (app UI), **T4** (core), **T5** (Cactus).
 
-Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing. Updated after T2-5..T2-7: the AI integration doc, the `AI_WORKFLOW.md` sections and the `CLAUDE.md` signing fix are done; the recorded demo is still missing.
+Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing. Still missing: the recorded demo and a final release `.hap`.
 
 ## Technical requirements
 
@@ -12,29 +12,29 @@ Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing. Updated afte
 | Targets HarmonyOS/OpenHarmony/Oniro | ✅ | `build-profile.json5`: `runtimeOS: HarmonyOS` | – |
 | API 20+, with API 20 as the minimum | ✅ | `compatibleSdkVersion: 6.0.0(20)`, `targetSdkVersion: 6.1.1(24)` | – |
 | Compatible SDK and dev environment | ✅ | DevEco Studio 6.1.1, SDK API 24, hvigor, hdc | – |
-| Runs on an emulator or a compatible device | ✅ emulator / ⚠️ device | Emulator runs throughout `AI_WORKFLOW.md`. Phone runs on 2ML0124… are recorded in commit messages: create with the on-device model and Claude (`b1dd029`) and Share (`45321fa`). | **T1**: add one `AI_WORKFLOW.md` line for the phone runs (device model, build, what was checked). Calendar alerts with the app closed are still unseen. |
+| Runs on an emulator or a compatible device | ✅ emulator / ⚠️ device | Emulator runs throughout `AI_WORKFLOW.md`. On real phones: Share, and the photo path (10 photos through on-device OCR, all built on the phone). `AI_WORKFLOW.md` says Ash tested on two phones, without a per-run log. | **T1**: add one `AI_WORKFLOW.md` line per phone run (device, build, what was checked). Not yet checked on a phone: shake counting, widget taps after the fix, calendar alerts with the app closed. |
 | Reproducible setup, build and launch instructions | ✅ | README "Setup, build, install, launch" | Fixed: `CLAUDE.md` now points to DevEco Signing Configs (T2-7). |
-| Uses or improves a platform capability | ✅ | Calendar Kit, Notification Kit, Form Kit widget, Share Kit, Scan Kit, Core File Kit, Preferences, on-device inference through Node-API | – |
+| Uses or improves a platform capability | ✅ | Calendar Kit, Notification Kit, Form Kit widget, Share Kit, Scan Kit, Core File Kit, Core Vision Kit (OCR), Sensor Service Kit (accelerometer, vibrator), Basic Services Kit (battery), Network Kit, Preferences, on-device inference through Node-API | – |
 
 ## Required deliverables
 
 | # | Deliverable | Status | Evidence | Gap and owner |
 | --- | --- | --- | --- | --- |
-| 1 | Public source repository | ⚠️ | https://github.com/Akshaz7/capsules-harmonyos is public | 5 commits on local `main` are not pushed yet (task protocol says don't push). **T1**: push before the deadline. |
-| 2 | Setup, build, install and launch instructions | ✅ | README | See the `CLAUDE.md` signing note above |
-| 3 | Working `.hap` | ⚠️ | Pre-release `test-1` has `harmoniser-test-1.hap`, which I byte-scanned: no API key (the only match is the error string `"apiKey" is missing`) | It was built from `e493911`, which is many features behind, and it is unsigned, so emulator only. **T1**: publish a final release from the submission commit. Keep an unsigned emulator HAP, because judges default to the emulator, and add a signed one if it is meant for real devices. Byte-scan both for keys before uploading. |
-| 4 | Brief recorded demonstration | ❌ | None in the repo or releases | **Ash/T1**: record it following `docs/DEMO_SCRIPT.md` (now with the marketplace beat), on a build with the widget tap fix (`acfbaef`), then link it from the README |
+| 1 | Public source repository | ⚠️ | https://github.com/Akshaz7/capsules-harmonyos is public | 8 commits on local `main` were not pushed at the time of this check (the task protocol says don't push). **T1**: push before the deadline. |
+| 2 | Setup, build, install and launch instructions | ✅ | README | – |
+| 3 | Working `.hap` | ⚠️ | Releases: pre-release `test-1` (byte-scanned: no API key) and a draft "Test builds for Lewis (not for judging)". | `test-1` is many features behind and unsigned, so emulator only. **T1**: publish a final release from the submission commit. Keep an unsigned emulator HAP, because judges default to the emulator, and add a signed one if it is meant for real devices. Byte-scan both for keys before uploading. |
+| 4 | Brief recorded demonstration | ❌ | None in the repo or releases | **Ash/T1**: record it following `docs/DEMO_SCRIPT.md` (now with the marketplace beat), on a build with the widget tap fix, then link it from the README. Two beats need fixing first (see the warning in the demo script) |
 | 5 | Architecture and implementation description | ✅ | README "Architecture", stage table, Mermaid diagram, Cactus port section | – |
-| 6 | `AI_WORKFLOW.md` | ✅ (T2-7, `61d05d7`) | Tools table, prompts, detailed work log, and some unsuccessful approaches and lessons | The template placeholders are still there: "Ideation and architecture", "Implementation" and "Testing and debugging" are `[Describe …]`, and there are placeholder bullets under Unsuccessful approaches, Known limitations and Lessons learned. The challenge explicitly asks for the workflow "from ideation and architecture through implementation, testing and debugging" and for how output was reviewed. **T1** (or whoever owns `AI_WORKFLOW.md`): fill these in from the work log and delete the placeholders. |
-| 7 | AI integration documentation (the product has AI features) | ✅ (T2-6: `docs/AI_INTEGRATION.md`) | The `AI_WORKFLOW.md` "AI feature disclosure" section is still all placeholders (`[Name/version/provider]` …). README and `docs/THIRD_PARTY.md` cover parts. | The challenge requires the model or service, inference flow, data handling, limitations, validation approach and privacy. **T2** can write `docs/AI_INTEGRATION.md` (docs/ is T2's) from the existing material if T1 assigns it. `AI_WORKFLOW.md` should then link to it instead of the placeholders. |
+| 6 | `AI_WORKFLOW.md` | ✅ | Tools table (including the product's runtime models and Codex), prompts, work log, workflow sections, unsuccessful approaches, limitations and lessons | Keep the work log current until submission. |
+| 7 | AI integration documentation (the product has AI features) | ✅ | [`docs/AI_INTEGRATION.md`](AI_INTEGRATION.md): models, inference flow, data handling, validation, results and limitations; `AI_WORKFLOW.md` links to it | – |
 
 ## Use of AI rules
 
 | Rule | Status | Notes and owner |
 | --- | --- | --- |
-| List all models, agents, MCP servers, skills and tools | ✅ (T2-7) | The tools table lists Claude Code (Opus 5.5), a Sonnet subagent, `deveco-cli` and the hmos skills. Not listed: the product's own runtime models (LFM2-VL-450M with Cactus, Mistral `ministral-14b-latest`, Claude `claude-sonnet-5-5`), and `GEMINI.md` exists without saying whether Gemini was used. **T1**: add rows, or state that Gemini was not used. |
+| List all models, agents, MCP servers, skills and tools | ✅ | The tools table lists the coding agents (Claude Code, Codex), skills, and the product's runtime models, and states that Gemini was not used. | – |
 | Main prompts and reusable instructions | ✅ | Session briefs and `AGENTS.md` are summarised; the product prompt is in `core/CapsuleModel.ets` | – |
-| How output was reviewed and tested | ✅ (T2-7) | Covered row by row in the work log, but the "Implementation" and "Testing and debugging" sections are placeholders | Same owner as deliverable 6 |
+| How output was reviewed and tested | ✅ | Covered in the work log and the "Testing and debugging" section | – |
 | No keys, credentials or personal data | ✅ | History scan for key patterns (`sk-ant-…`, long `apiKey` values, private keys, signing passwords) found nothing. `config.local.json`, `*.p12`, `*.cer`, `*.p7b` and `local.properties` are git-ignored and untracked. The release HAP is clean. | Commit author emails include a university address and a contributor noreply address (public, not secret). Re-run the scan before the final push. |
 
 ## Evaluation risks (claims vs code)
@@ -43,18 +43,19 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 
 | Issue | Where | Owner |
 | --- | --- | --- |
-| The UI says capsules can use "vibration and the motion sensor", but neither is built for capsules: no capsule can vibrate or read a sensor, and there is no sensor permission (the app's own save vibration, UI-1, is not a capsule ability). Still in the text at d9bf333 | `pages/Index.ets` `CAPSULE_ABILITIES` | **T3**: remove the words, or build the features |
-| The cloud prompt tells the model "steps and reps can use the motion sensor" and that capsules can use "vibration, the motion sensor, location and a home [widget]". A user asking for automatic step counting gets a tap counter. | `core/CapsuleModel.ets` lines 135–137 | **T4**: align the prompt with what is built |
+| The UI and the cloud prompt say capsules can use **vibration**, but no capsule action vibrates (the app's own save vibration is not a capsule ability). The motion sensor, battery and weather claims are now backed by code. | `pages/Index.ets` `CAPSULE_ABILITIES`; `core/CapsuleModel.ets` ("Capsules can only use timers and reminders, notifications, vibration …") | **T3/T4**: remove "vibration", or build it |
+| Reminders (`notify:<text>` and daily time triggers ringing with the app closed) are now built (notification adapter, recurring daily Calendar Kit events) but not yet checked on the emulator or a phone. Until Ash's check, say "built", not "works". | `renderer/CapsuleRuntime.ets`, `core/Reminders.ets`, `adapters/NotificationAdapter.ets` | **Ash**: run the reminder check in the README |
 | The schema has `location` and `widget` permissions that nothing uses | `SCHEMA.md` | **Ash** decides (SCHEMA is the contract). The README already says so. |
+| Provider default (by Ash's decision): **Allow non-EU providers** is on by default, so live capsules go to Claude (Anthropic, outside the EU) after a one-time "Use Claude (outside the EU)?" notice, and logic capsules go to Mistral (EU). The docs present this as user choice and say plainly that requests may leave the EU by default; EU-only and On-device only are one switch away. Only the request text (plus a forecast line) is sent. The API key is never in the app or the `.hap` (`config.local.json` in the app's files directory, debug only) until a server-side proxy is live. Live capsules were checked on the emulator (notice before building, Kraków task and packing lists made with Claude, phone edit, widget); not yet on a phone. | `core/LiveCapsule.ets`, `pages/AppSettings.ets`, `core/index.ets` | – |
 | No screenshots | README | **Ash**: `docs/screenshots/` (widget, gatekeeper sheet, Calendar, tennis; dark mode is off while the redesign locks light mode); T2 adds the section |
-| The live marketplace search (T6-5, 28b7fa1) sends the request text to the marketplace server with no consent notice, also in **On-device only** mode. This contradicts "On-device only never calls the cloud" and "tiers 0–1 stay on the device" (both now corrected in the docs) | `core/templates/MarketMatch.ets`, `core/index.ets` `getMarketOptions()` | **Ash** decides; **T6/T4**: skip the search in On-device only mode and/or put it behind a consent notice |
+| The live marketplace search sends the request text to the marketplace server with no consent notice in **Smart** mode. **Fixed for On-device only:** the search is skipped in that mode, and the Marketplace tab then shows only the shipped examples and sends nothing (both unit-tested) | `core/CapsuleGenerator.ets`, `core/templates/MarketMatch.ets` | **Ash**: a consent notice for Smart mode, if wanted |
 
 ## Reproducibility
 
 | Item | Status | Notes and owner |
 | --- | --- | --- |
 | Tool versions | ✅ | DevEco Studio 6.1.1, SDK API 24 (min API 20), `devecocli` 1.3.4, Node 18+ for the eval |
-| Unit tests | ✅ | 249 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
+| Unit tests | ✅ | 361 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
 | On-device model | ✅ | URL, tag and sha256 in `docs/THIRD_PARTY.md`; `scripts/push-model.sh` |
-| Rebuilding `libcactus_engine.so` | ✅ | Fixed by T5-5 (`755fbc3`): `cactus/BUILD.md` and `cactus/build-engine.sh`; a clean rebuild matches the committed `.so` apart from the build ID |
-| Untracked `.cache/` folder | ✅ | Fixed: ignored in `783a1ee` |
+| Rebuilding `libcactus_engine.so` | ✅ | `cactus/BUILD.md` and `cactus/build-engine.sh`; a clean rebuild matches the committed `.so` apart from the build ID |
+| Untracked `.cache/` folder | ✅ | Ignored in `.gitignore` |

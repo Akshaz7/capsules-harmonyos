@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import {
-  libraryItems, MarketItem, marketErrorMessage, matchesSearch, parseMarketList
+  libraryItems, MarketItem, marketErrorMessage, MarketplaceClient, marketplaceSearchAllowed, matchesSearch,
+  parseMarketList
 } from '../main/ets/adapters/MarketplaceClient';
 
 const LIBRARY = '{"version":1,"templates":[' +
@@ -43,6 +44,20 @@ export default function marketplaceTest() {
       expect(matchesSearch(tea, '', 'games')).assertFalse();
       expect(matchesSearch(tea, 'pasta', '')).assertFalse();
       expect(libraryItems('not json').length).assertEqual(0);
+      const hidden = LIBRARY.replace('"id":"tea",', '"id":"tea","listed":false,');
+      expect(libraryItems(hidden).length).assertEqual(0); // listed:false stays out of the marketplace
+    });
+
+    it('sends nothing in on-device-only mode and shows the shipped examples (T3-25)', 0, () => {
+      expect(marketplaceSearchAllowed('on-device')).assertFalse();
+      expect(marketplaceSearchAllowed('smart')).assertTrue();
+      // A configured client still answers from the shipped examples without a request.
+      const client = new MarketplaceClient('https://market.invalid', '', LIBRARY);
+      const page = client.examples('tea', '');
+      expect(page.offline).assertTrue();
+      expect(page.items.length).assertEqual(1);
+      expect(page.nextCursor).assertEqual('');
+      expect(client.examples('nothing-matches', '').items.length).assertEqual(0);
     });
   });
 }

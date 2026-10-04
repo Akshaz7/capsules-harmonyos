@@ -1,5 +1,5 @@
 /** Redesign shared components (section 4) and the capsule frame (section 5). */
-export { PrimaryButton, SecondaryButton, GhostButton, SoftButton, IconButton } from './Buttons';
+export { PrimaryButton, SecondaryButton, GhostButton, SoftButton, IconButton, CompactPillButton } from './Buttons';
 export {
   Chip, OriginChip, OriginKind, originKindOf, originIconOf, IconTile, Card, HeroCard, GroupHeader, EmptyState, ErrorCard
 } from './Surfaces';

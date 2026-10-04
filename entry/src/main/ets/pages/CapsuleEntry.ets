@@ -1,5 +1,6 @@
 import { Capsule, CapsuleComponent, CapsuleRoute, CounterComponent } from '../core';
 import { CapsuleRuntime } from '../renderer/CapsuleRuntime';
+import { Flags } from '../theme/Flags';
 
 /** One saved, approved capsule plus its live runtime and widget route. */
 @ObservedV2
@@ -29,6 +30,30 @@ export function isCloudOrigin(origin: string): boolean {
 }
 
 /** Badge text for a stored GenerateResult.origin; '' for capsules saved before origins were kept. */
+/** Polish: a one-line origin label for capsule tiles ("On phone", "Claude", "Marketplace"). */
+export function originShort(origin: string): string {
+  switch (origin) {
+    case 'rules':
+    case 'on-device':
+    case 'template':
+      return 'On phone';
+    case 'cloud-eu:mistral':
+    case 'cloud':
+      return Flags.CLOUD_CLAUDE_ONLY ? 'Cloud AI' : 'Mistral (EU)';
+    case 'cloud:anthropic':
+      return 'Claude';
+    case 'cloud:openai':
+      return 'OpenAI';
+    case 'imported':
+      return 'Shared';
+    case 'marketplace':
+    case 'community':
+      return 'Marketplace';
+    default:
+      return '';
+  }
+}
+
 export function originBadge(origin: string): string {
   switch (origin) {
     case 'rules':
@@ -39,7 +64,7 @@ export function originBadge(origin: string): string {
       return 'Made on your phone · no internet';
     case 'cloud-eu:mistral':
     case 'cloud': // saved before core named the provider; only Mistral was used then
-      return 'Made with Mistral (EU)';
+      return Flags.CLOUD_CLAUDE_ONLY ? 'Made with cloud AI' : 'Made with Mistral (EU)';
     case 'cloud:anthropic':
       return 'Made with Claude';
     case 'cloud:openai':
@@ -101,7 +126,11 @@ export function capsuleIcon(capsule: Capsule): Resource {
   return $r('sys.symbol.doc_text');
 }
 
-/** Short, friendly version of the router's decision. */
+/** Short, friendly version of the router's decision; '' when there is nothing to say (T4-19: almost every
+ * capsule fits a widget now, so "Opens in the app" is gone). */
 export function routeHeadline(route: CapsuleRoute): string {
-  return route.widget ? 'Simple enough for a widget' : 'Opens in the app';
+  if (!route.widget) {
+    return '';
+  }
+  return route.condensed === true ? 'Widget shows the main values' : 'Simple enough for a widget';
 }

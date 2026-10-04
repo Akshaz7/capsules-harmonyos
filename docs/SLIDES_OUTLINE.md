@@ -1,6 +1,6 @@
 # Pitch deck outline (6 slides)
 
-Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim vibration, motion counting, alerts firing with the app closed, marketplace publishing, or the Snap button working in the app (the photo path was checked headless on a phone; the button itself hasn't been).
+Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim capsules that vibrate, step counting (motion counts shakes, and has no phone check yet), reminders ringing with the app closed (built, not yet checked), alerts firing with the app closed, marketplace publishing, or a Snap button (switched off for now; the photo path itself was checked headless on a phone).
 
 ## 1. Problem
 
@@ -14,7 +14,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 ## 2. Solution
 
-**Title:** Harmoniser: tiny apps, made by asking
+**Title:** Harmoniser: tiny apps you don't need to download
 
 - Describe it in one sentence, and get a working native mini-app (a *capsule*) in seconds.
 - A capsule is JSON, not code. A strict schema plus our own expression interpreter means nothing from a model ever executes.
@@ -33,7 +33,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 3. `demo tennis`: a full scoreboard (deuce, advantage) run by the safe interpreter.
 4. Marketplace: search `squat`, Install, consent "From the marketplace", Run.
 5. `read my contacts and text them…`: refused by design.
-6. Real phone: the on-device LLM, with no network.
+6. Real phone: the on-device LLM, no cloud needed (record with airplane mode visibly on before saying "offline").
 
 *Visual:* the step list beside a QR code to the recorded demo.
 
@@ -45,7 +45,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
 - **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **249 unit tests**, plus a provider eval with held-out and refusal sets.
+- **361 unit tests**, plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 
@@ -54,8 +54,10 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 | Capability | Used for |
 | --- | --- |
 | **Cactus ported to HarmonyOS** (Node-API, arm64-v8a) | On-device LLM (LFM2-VL-450M): 92–114 tok/s decode, about 0.3 s to first token, about 380 MB (emulator figures) |
-| **Form Kit** | Home-screen widgets (2x2 and 2x4), synced both ways with the app |
+| **Form Kit** | Home-screen widgets (1x2, 2x2, 2x4 and 4x4), synced both ways with the app |
 | **Core Vision Kit** (`textRecognition`) | Photo → capsule: reads the text on the phone, offline (10/10 valid, 6/10 correct on a real phone) |
+| **Sensor Service Kit** | Shake counting with the accelerometer while a capsule is open (built; phone check pending) |
+| **Basic Services Kit + Network Kit** | Battery reading; live weather from Open-Meteo (checked on the emulator) |
 | **Calendar Kit** | Capsule timers become system calendar events |
 | **Notification Kit** | Timer-finished notifications |
 | **Share Kit / Scan Kit / Document picker** | Share capsules as files or QR codes |
@@ -67,10 +69,10 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 **Title:** Intelligent, and on your side
 
-- **Local first:** rules and the on-device model need no network. The **On-device only** mode guarantees nothing leaves the phone.
-- **EU-first cloud:** used automatically only with Mistral (EU). Claude or OpenAI only if you enable non-EU providers. Each provider gets its own consent. Only the request text is sent.
-- **Honest trade-off:** Mistral 14/15 tuning and 4/5 held-out; Claude 14/15 and 5/5. On hard logic requests Claude led 4/4 to 2/4. We default to EU anyway, and the validator catches the failures.
+- **Local first:** rules and the on-device model need no network. In **On-device only** mode no request leaves the phone: no AI provider, no marketplace search (device sends are a separate, consented action).
+- **Your choice of cloud:** by default Harmoniser picks the best model for the job: Mistral (EU) for logic, Claude (outside the EU) with a live forecast or web search for live capsules. One switch makes it EU-only; another keeps everything on the phone. Each provider gets its own consent. Only the request text (plus a forecast line for live capsules) is sent.
+- **Honest trade-off:** Mistral 14/15 tuning and 4/5 held-out; Claude 14/15 and 5/5. On hard logic requests Claude led 4/4 to 2/4. Logic stays on Mistral (EU) anyway, and the validator catches the failures.
 - **Transparency:** every capsule shows how it was made: rules, on your phone (template), on-device, Mistral (EU), Claude, or from someone else.
 - **Built openly with AI:** coding agents throughout, with the full log in `AI_WORKFLOW.md`.
 
-*Closing line:* "Rules, on-device AI, an EU-first cloud, and a gatekeeper you control."
+*Closing line:* "Rules, on-device AI, the cloud you choose, and a gatekeeper you control."

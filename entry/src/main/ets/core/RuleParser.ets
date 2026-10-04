@@ -36,6 +36,7 @@ import {
   TimerComponent,
   WhenComponent
 } from './CapsuleTypes';
+import { addTimeTriggers, parseTimes } from './templates/TemplateLibrary';
 import { cityIdFromText, cityName } from '../capabilities/WeatherData';
 
 /** Requests with these words need logic (scores, games, quizzes, ...) and are left to the models. */
@@ -402,12 +403,15 @@ function formatTime(raw: string): string {
 
 function parseSchedule(req: string): Capsule | null {
   const re = new RegExp(`^([a-z][a-z ]*?)\\s+(?:at\\s+)?(${TIME_PATTERN}(?:\\s*(?:,|and|&)\\s*${TIME_PATTERN})*)$`);
-  const m = req.match(re);
+  // After "at" a bare hour counts too ("medication at 8", read as 08:00 and noted by the generator).
+  const ANY = `(?:${TIME_PATTERN}|\\d{1,2})`;
+  const bare = new RegExp(`^([a-z][a-z ]*?)\\s+at\\s+(${ANY}(?:\\s*(?:,|and|&)\\s*${ANY})*)$`);
+  const m = req.match(re) ?? req.match(bare);
   if (m === null) {
     return null;
   }
   const what = capitalize(m[1].trim());
-  const times = (m[2].match(new RegExp(TIME_PATTERN, 'g')) ?? []).map((t: string) => formatTime(t));
+  const times = (m[2].match(new RegExp(`${TIME_PATTERN}|\\d{1,2}`, 'g')) ?? []).map((t: string) => formatTime(t));
   if (times.length === 0) {
     return null;
   }
@@ -522,8 +526,20 @@ export function parseRequest(request: string): Capsule | null {
   for (const rule of rules) {
     const result = rule(req);
     if (result !== null) {
-      return result;
+      return withRequestTimes(result, request);
     }
   }
   return null;
+}
+
+/**
+ * Times of day in the request ("at 7pm", "every morning at 8", "8am and 8pm", "at 9 and 21") become daily time
+ * triggers that notify (schema v1.1, T4-16). No time in the request, no trigger.
+ */
+function withRequestTimes(c: Capsule, request: string): Capsule {
+  const times = parseTimes(request);
+  if (times.length === 0 || (c.triggers ?? []).length > 0) {
+    return c;
+  }
+  return JSON.parse(addTimeTriggers(JSON.stringify(c), times, c.name)) as Capsule;
 }
