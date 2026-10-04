@@ -441,12 +441,12 @@ struct Index {
   private async installFromMarket(item: MarketItem): Promise<void> {
     const got = await this.market.capsuleJson(item);
     if (got.json === undefined) {
-      this.toast(got.error ?? "Couldn't download that capsule");
+      this.toast(got.error ?? "Couldn't download that capsule. Check your connection and try again.");
       return;
     }
     const prepared = prepareImport(got.json);
     if (!prepared.ok || prepared.capsule === undefined) {
-      this.toast(prepared.error ?? "That capsule isn't valid");
+      this.toast(prepared.error ?? "That capsule isn't valid, so nothing was installed.");
       return;
     }
     this.nav.pop();
@@ -474,7 +474,7 @@ struct Index {
           this.store?.setPublished(entry.capsule.id, id);
           this.publishedIds = this.publishedIds.filter((x: string) => x !== entry.capsule.id).concat([entry.capsule.id]);
         }
-        this.toast(r.id !== undefined ? 'Published. Anyone can install it now.' : r.error ?? "Couldn't publish it");
+        this.toast(r.id !== undefined ? 'Published. Anyone can install it now.' : r.error ?? "Couldn't publish it. Try again later.");
       } }
     });
   }
@@ -518,7 +518,7 @@ struct Index {
       this.devices = this.deviceStore.add(r.device);
       this.toast(`Paired with ${deviceName(r.device)}`);
     } else {
-      this.toast(r.error ?? "Couldn't pair that device");
+      this.toast(r.error ?? "Couldn't pair that device. Check the code and try again.");
     }
   }
 
@@ -989,7 +989,7 @@ struct Index {
     const v = validateCapsule(JSON.stringify(updated));
     if (!v.ok || !v.capsule) {
       hilog.error(0x0001, 'Index', 'edited triggers invalid: %{public}s', v.errors.join('; '));
-      this.toast("That change isn't valid");
+      this.toast("That change isn't valid. Try saying it another way.");
       return;
     }
     const capsule = v.capsule;
@@ -1063,7 +1063,7 @@ struct Index {
     }
     const ok = await assignCapsuleToWidget(this.ctx, formId, capsuleId);
     const name = this.entries.find((e: CapsuleEntry) => e.capsule.id === capsuleId)?.capsule.name ?? 'It';
-    this.toast(ok ? `${name} is now on your home screen` : "That widget isn't available any more");
+    this.toast(ok ? `${name} is now on your home screen` : "That widget isn't there any more. Add a new one from the home screen.");
     this.launch.formId = '';
     this.loadWidgets();
     this.nav.pop();
@@ -1104,7 +1104,7 @@ struct Index {
     const ok = await assignCapsuleToWidget(this.ctx, formId, entry.capsule.id);
     this.loadWidgets();
     const index = this.widgets.findIndex((w: WidgetInfo) => w.formId === formId);
-    this.toast(ok ? `Showing ${entry.capsule.name} on Widget ${index + 1}` : "Couldn't show it on that widget");
+    this.toast(ok ? `Showing ${entry.capsule.name} on Widget ${index + 1}` : "Couldn't show it on that widget. Try another one.");
   }
 
   private toast(text: string): void {
@@ -1653,7 +1653,7 @@ struct Index {
     this.snapNeedsCloud = false;
     const path = copyToCache(ctx, uri);
     if (path.length === 0) {
-      this.toast("Couldn't open that photo");
+      this.toast("Couldn't open that photo. Try another one.");
       return;
     }
     this.busy = true;
