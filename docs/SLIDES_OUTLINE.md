@@ -45,7 +45,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
 - **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **Unit tests** (last recorded runs: 249, then 269 on the capabilities branch; 278 cases counted at `bfa70f5`, not re-run), plus a provider eval with held-out and refusal sets.
+- **Unit tests** (last recorded runs: 249, then 269 on the capabilities branch; then 283 passing, as reported by the author of PR #15 and not re-run here; 286 cases counted on `main` at `b54cbfe`), plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 
@@ -67,7 +67,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 **Title:** Intelligent, and on your side
 
-- **Local first:** rules and the on-device model need no network. In **On-device only** mode no request is sent to an AI provider. Two things can still leave the phone when they are configured: the marketplace search (the request text; on `main` at `bfa70f5` this happens in On-device only mode too, and PR #16 stops it there) and a send to another device.
+- **Local first:** rules and the on-device model need no network. In **On-device only** mode no request is sent to an AI provider, and creating a capsule makes no marketplace search (PR #16). In Smart mode, with a marketplace URL configured, the marketplace search sends the request text with no notice of its own. A send to another device is separate from the AI mode and is confirmed each time.
 - **EU-first cloud:** used automatically only with Mistral (EU). Claude or OpenAI only if you enable non-EU providers. Each provider gets its own consent. For a typed request, only the request text and our fixed prompt are sent.
 - **Honest trade-off:** Mistral 14/15 tuning and 4/5 held-out; Claude 14/15 and 5/5. On hard logic requests Claude led 4/4 to 2/4. We default to EU anyway, and the validator catches the failures.
 - **Transparency:** every capsule shows how it was made: rules, on your phone (template), on-device, Mistral (EU), Claude, or from someone else.

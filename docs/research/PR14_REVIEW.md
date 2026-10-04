@@ -2,7 +2,7 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04). Written from the code and tests of the PR branch and from the pull request's description. Nothing was built or run on a device or emulator; the branch's pure modules were executed offline, as labelled below. Line references are to the commit named in the text and will drift.
 
-> **Update, 2026-10-04 (after this review was written):** section 4 suggested rebasing PR #13 after PR #14. Instead, PR #14's branch was merged into PR #13's branch and the `README.md` conflict was resolved there, so PR #13 merges cleanly after PR #14 and no rebase is needed.
+> **Update, 2026-10-04, about 04:00 (after this review was written; code read at `main` `b54cbfe`):** PRs #14, #15 and #16 are merged. Section 4 suggested rebasing PR #13; instead `main` was merged into PR #13's branch and the `README.md` conflict was resolved there. The first item under "Phrasings to avoid" and the "no make/create in front" caveat no longer hold: `9926b02` removes a leading "make", "create" or "build" (optionally followed by "me", then "a" or "an") before the rules run. The other misses were re-run on `b54cbfe` and still hold. The author's emulator check of the combined request is now recorded in a comment on PR #14. The current list is in the Weather row of the root `README.md`.
 
 Reviewed head `08a365d` (5 commits on `main` bfa70f5; GitHub: MERGEABLE/CLEAN). Read-only: nothing changed, pushed,
 merged or built. Paths are under `entry/src/main/ets/` on the PR branch unless stated.

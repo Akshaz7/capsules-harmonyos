@@ -11,7 +11,7 @@ People want small single-purpose tools: a pasta timer, a squat counter, a bill s
 ## Solution
 
 Each app Harmoniser makes is a **capsule**: JSON, not code, checked against a strict schema ([`SCHEMA.md`](SCHEMA.md)) and drawn with native ArkUI components.
-- **Smart routing:** a request cache, on-device rules and 108 built-in templates first (no internet), then a small on-device LLM (LFM2-VL-450M on our HarmonyOS port of the Cactus engine), then a cloud model for logic. The cloud is EU-only by default (Mistral); Claude only if the user opts in. Each provider gets its own consent. For a typed request only the request text and our fixed prompt are sent; editing a capsule also sends its definition, a photo can send its recognised text, and with a marketplace URL configured the request text is also sent to the marketplace as a search (details in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md)).
+- **Smart routing:** a request cache, on-device rules and 108 built-in templates first (no internet), then a small on-device LLM (LFM2-VL-450M on our HarmonyOS port of the Cactus engine), then a cloud model for logic. The cloud is EU-only by default (Mistral); Claude only if the user opts in. Each provider gets its own consent. For a typed request only the request text and our fixed prompt are sent; editing a capsule also sends its definition, a photo can send its recognised text, and with a marketplace URL configured the request text is also sent to the marketplace as a search, except in On-device only mode (details in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md)).
 - **Safety:** every capsule is re-validated; our own expression interpreter runs v1 logic (no `eval`); a gatekeeper consent sheet lets the user allow or deny each permission, and blocked actions are logged.
 - **Marketplace:** browse and install capsules from a shared catalogue, still validated and behind the same consent sheet. It is live only when a local `config.local.json` sets `marketplace.baseUrl`; without it the app lists the 108 bundled examples. Most live listings are example templates made by the team.
 - **Platform:** Core Vision Kit text recognition (photos read offline), Calendar Kit timers, Notification Kit, Form Kit home-screen widgets, Share Kit / Scan Kit sharing (file and QR), and a system share target.
@@ -34,7 +34,7 @@ We started from the HackYeah Hackathon Template: an empty ArkTS project, `AGENTS
 - the gatekeeper, widgets, sharing and triggers
 - the template library
 - the ESP32 wrist companion
-- the unit tests (last recorded runs: 249, then 269 on the capabilities branch; 278 cases counted at `bfa70f5`, not re-run) and the provider and photo evals
+- the unit tests (last recorded runs: 249, then 269 on the capabilities branch; then 283 passing, as reported by the author of PR #15 and not re-run here; 286 cases counted on `main` at `b54cbfe`) and the provider and photo evals
 
 The commit history shows the progression. AI coding agents were used throughout, and [`AI_WORKFLOW.md`](AI_WORKFLOW.md) logs how.
 
@@ -47,9 +47,9 @@ The commit history shows the progression. AI coding agents were used throughout,
 | Gatekeeper, log, widgets (incl. picker), timer pause/stop | Calendar alerts with the app closed: not seen working |
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
 | Marketplace: browse, install with consent, run (reported by Ash against the live API, which needs a pushed `config.local.json`; over 100 listings, 108 of them example templates) | Marketplace publishing: not tested |
-| Battery reading and a weather reading for one bundled city (emulator, per the PR author). Once PR #14 is merged, "a task list and the weather for Kraków" builds one capsule with a task list and the weather, by rule (verified by unit tests and reported on the emulator by its author; not re-run). Tasks can be added but not ticked off, and requests that start with "make" or "create" still miss the rule | Capsules that vibrate: not built; the `notify` action does nothing yet; voice input: core only |
+| Battery reading and a weather reading for one bundled city (emulator, per the PR author). "A task list and the weather for Kraków" builds one capsule with a task list and the weather, by rule (verified by unit tests; emulator run reported by the author; not re-run). Tasks can be added but not ticked off, and some close phrasings still miss the rule (README, Weather row) | Capsules that vibrate: not built; the `notify` action does nothing yet; voice input: core only |
 | Editing a capsule ("Change it…", with undo) | Photo → capsule: on-phone OCR path checked on a real phone (10/10 valid, 6/10 correct, offline); Snap button in the app not yet checked |
-| | Wrist companion (an ESP32 board, not a Huawei device, does not run HarmonyOS) works on its own hardware and against the live relay. The app's **Show on another device** panel exists but is hidden without a relay URL in `config.local.json`, and the app has not been run against the live relay |
+| | Wrist companion (an ESP32 board, not a Huawei device, does not run HarmonyOS) works on its own hardware and against the live relay. The app's **Show on another device** panel exists but is hidden without a relay URL in `config.local.json`, and the app has not been run against the live relay. It is one-way: the phone sends the capsule once and then shows the status the device reports; taps on either side do not reach the other |
 
 No sensor data is simulated. The app contains one simulation, a simulated second device for the **Show on another device** panel (`SimulatedDeviceRelay` in `adapters/DeviceRelay.ets`): it is behind the dev flag `devices.simulate`, off by default, labelled "Simulated device" in the panel when on, and never used in the demo. Eval figures and limits are in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
 
