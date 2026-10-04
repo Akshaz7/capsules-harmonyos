@@ -20,6 +20,7 @@ import editCapsuleTest from './EditCapsule.test';
 import motionDetectTest from './MotionDetect.test';
 import deviceComponentsTest from './DeviceComponents.test';
 import weatherTest from './Weather.test';
+import rowPairsTest from './RowPairs.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -44,4 +45,5 @@ export default function testsuite() {
   motionDetectTest();
   deviceComponentsTest();
   weatherTest();
+  rowPairsTest();
 }

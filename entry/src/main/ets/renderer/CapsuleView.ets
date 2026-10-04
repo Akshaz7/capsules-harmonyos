@@ -1,5 +1,4 @@
 import { common } from '@kit.AbilityKit';
-import { LengthMetrics } from '@kit.ArkUI';
 import {
   ButtonComponent,
   ButtonStep,
@@ -21,6 +20,7 @@ import { DeviceReadout } from '../capabilities/DeviceReadout';
 import { weatherSymbolKey, WEATHER_URL } from '../capabilities/WeatherData';
 import { CapsuleRuntime, ChecklistState, CounterState, formatClock, NumberState, TimerState } from './CapsuleRuntime';
 import { Flags } from '../theme/Flags';
+import { rowPairs } from './RowPairs';
 import { PatternView, usesPattern } from './patterns/PatternView';
 
 /** True if some button in the capsule increments this counter, so the row needn't show a + icon too. */
@@ -512,17 +512,27 @@ export struct CapsuleNode {
         .width('100%')
       }
     } else if (this.component.type === 'row' && (this.component as RowComponent).items.length >= 3) {
-      // 3+ children wrap at a usable minimum width instead of squeezing into equal slivers.
-      Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(12), cross: LengthMetrics.vp(12) } }) {
-        ForEach((this.component as RowComponent).items, (child: CapsuleComponent) => {
-          Column() {
-            CapsuleNode({
-              runtime: this.runtime, component: child, motionNote: this.motionNote, onPickCity: this.onPickCity
-            })
+      // 3+ children go two per line (2+1, 2+2, ...), each half the width, so no button is squeezed. Pairs
+      // rather than a wrapping Flex: full-width children (width '100%') made a Flex give each its own line.
+      Column({ space: 12 }) {
+        ForEach(rowPairs((this.component as RowComponent).items), (pair: CapsuleComponent[]) => {
+          Row({ space: 12 }) {
+            ForEach(pair, (child: CapsuleComponent) => {
+              Column() {
+                CapsuleNode({
+                  runtime: this.runtime, component: child, motionNote: this.motionNote, onPickCity: this.onPickCity
+                })
+              }
+              .layoutWeight(1)
+            }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)
+            if (pair.length === 1) {
+              Blank()
+                .layoutWeight(1)
+            }
           }
-          .flexGrow(1)
-          .flexBasis(140)
-        }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)
+          .width('100%')
+          .alignItems(VerticalAlign.Top)
+        }, (pair: CapsuleComponent[], i: number) => `${i}-${pair.length}`)
       }
       .width('100%')
     } else if (this.component.type === 'row') {
