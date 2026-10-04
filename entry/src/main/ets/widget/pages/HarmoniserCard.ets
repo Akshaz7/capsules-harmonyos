@@ -420,6 +420,7 @@ struct HarmoniserCard {
       .textAlign(TextAlign.Center)
       .padding({ left: 12, right: 12 })
       .height(BIG_BUTTON)
+      .width('100%')
       .constraintSize({ minWidth: 64 })
       .borderRadius(BIG_BUTTON / 2)
       .backgroundColor(fill ? v.accent : tint(v.accent))
@@ -478,7 +479,10 @@ struct HarmoniserCard {
         .justifyContent(FlexAlign.Center)
         Row({ space: 8 }) {
           ForEach(v.buttons.slice(0, 2), (b: CardButton, i: number) => {
-            this.pill(v, b, i === 0)
+            Row() {
+              this.pill(v, b, i === 0)
+            }
+            .layoutWeight(1) // two buttons share the 2x2 width instead of pushing the second off the card
           }, (b: CardButton) => `${b.index}:${b.enabled}`)
         }
         .width('100%')
@@ -760,6 +764,11 @@ struct CompactRow {
             this.control('play', 'start')
           }
         }
+      } else if (this.row.kind === 'checklist') {
+        Text(`${this.row.items.filter((i: CardCheckItem) => i.checked).length}/${this.row.items.length}`)
+          .fontSize(20)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
       } else {
         Text(`${this.row.value}`)
           .fontSize(22)

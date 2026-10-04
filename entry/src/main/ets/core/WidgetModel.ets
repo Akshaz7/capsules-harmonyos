@@ -582,12 +582,15 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
   const buttons = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'button');
   const shown: CapsuleComponent[] = [];
   shownComponents(capsule, values, capsule.ui, shown);
+  // Live display values first (scores, results), the capsule's static text lines after them: a card that
+  // only fits one line shows what changes, not the instructions.
   const lines: string[] = [];
+  const texts: string[] = [];
   shown.forEach((c: CapsuleComponent, i: number) => {
     if (c.type === 'display') {
       lines.push(renderTemplate(capsule, values, (c as DisplayComponent).text));
     } else if (c.type === 'text') {
-      lines.push((c as TextComponent).text);
+      texts.push((c as TextComponent).text);
     } else if (c.type === 'button') {
       const b = c as ButtonComponent;
       view.buttons.push({ index: buttons.indexOf(c), label: b.label, enabled: isEnabled(capsule, values, b) });
@@ -598,6 +601,7 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
       }
     }
   });
+  texts.forEach((t: string) => lines.push(t));
   const goal = lines.length > 0 && view.rows.length === 0 ? lines[0].match(GOAL_LINE) : null;
   if (goal !== null && parseFloat(goal[2]) > 0) {
     view.layout = 'goal';
