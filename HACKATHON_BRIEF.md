@@ -11,7 +11,7 @@ People want small single-purpose tools: a pasta timer, a squat counter, a bill s
 ## Solution
 
 Each app Harmoniser makes is a **capsule**: JSON, not code, checked against a strict schema ([`SCHEMA.md`](SCHEMA.md)) and drawn with native ArkUI components.
-- **Smart routing:** a request cache, on-device rules and 108 built-in templates first (no internet), then a small on-device LLM (LFM2-VL-450M on our HarmonyOS port of the Cactus engine), then a cloud model for logic. The cloud is EU-only by default (Mistral); Claude only if the user opts in. Each provider gets its own consent, and only the request text is sent.
+- **Smart routing:** a request cache, on-device rules and 108 built-in templates first (no internet), then a small on-device LLM (LFM2-VL-450M on our HarmonyOS port of the Cactus engine), then a cloud model for logic. You choose where requests go: by default Mistral (EU) builds logic capsules and Claude (outside the EU) builds live capsules with a weather forecast or web search; one switch makes it EU-only, another keeps everything on the phone. Each provider gets its own consent, and only the request text (plus a forecast line) is sent.
 - **Safety:** every capsule is re-validated; our own expression interpreter runs v1 logic (no `eval`); a gatekeeper consent sheet lets the user allow or deny each permission, and blocked actions are logged.
 - **Marketplace:** browse and install capsules other people published, still validated and behind the same consent sheet.
 - **Platform:** Core Vision Kit text recognition (photos read offline), the accelerometer (shake counting), battery and live weather readings, Calendar Kit timers, Notification Kit, Form Kit home-screen widgets, Share Kit / Scan Kit sharing (file and QR), and a system share target.
@@ -19,7 +19,7 @@ Each app Harmoniser makes is a **capsule**: JSON, not code, checked against a st
 ## Themes
 
 - **Intelligent Experiences (lead):** plain-language requests become working apps, with on-device AI first.
-- **Human-Centric Technology: responsible tech:** no generated code runs, permissions are consented per capsule, refusals are by design (SMS, contacts, payments…), every capsule shows how it was made, and AI is EU-first and opt-in.
+- **Human-Centric Technology: responsible tech:** no generated code runs, permissions are consented per capsule, refusals are by design (SMS, contacts, payments…), every capsule shows how it was made, and the user decides where AI requests go (EU-only and On-device only are one switch away).
 
 ## Target
 
@@ -34,7 +34,7 @@ We started from the HackYeah Hackathon Template: an empty ArkTS project, `AGENTS
 - the gatekeeper, widgets, sharing and triggers
 - the template library
 - the ESP32 wrist companion
-- 346 unit tests and the provider and photo evals
+- 356 unit tests and the provider and photo evals
 
 The commit history shows the progression. AI coding agents were used throughout, and [`AI_WORKFLOW.md`](AI_WORKFLOW.md) logs how.
 

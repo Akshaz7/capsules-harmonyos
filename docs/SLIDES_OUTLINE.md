@@ -45,7 +45,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
 - **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **346 unit tests**, plus a provider eval with held-out and refusal sets.
+- **356 unit tests**, plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 
@@ -69,10 +69,10 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 **Title:** Intelligent, and on your side
 
-- **Local first:** rules and the on-device model need no network. In **On-device only** mode no request is sent to an AI provider (the marketplace search and device sends are separate, see the compliance gaps).
-- **EU-first cloud:** used automatically only with Mistral (EU). Claude or OpenAI only if you enable non-EU providers. Each provider gets its own consent. Only the request text is sent.
-- **Honest trade-off:** Mistral 14/15 tuning and 4/5 held-out; Claude 14/15 and 5/5. On hard logic requests Claude led 4/4 to 2/4. We default to EU anyway, and the validator catches the failures.
+- **Local first:** rules and the on-device model need no network. In **On-device only** mode no request leaves the phone: no AI provider, no marketplace search (device sends are a separate, consented action).
+- **Your choice of cloud:** by default Harmoniser picks the best model for the job: Mistral (EU) for logic, Claude (outside the EU) with a live forecast or web search for live capsules. One switch makes it EU-only; another keeps everything on the phone. Each provider gets its own consent. Only the request text (plus a forecast line for live capsules) is sent.
+- **Honest trade-off:** Mistral 14/15 tuning and 4/5 held-out; Claude 14/15 and 5/5. On hard logic requests Claude led 4/4 to 2/4. Logic stays on Mistral (EU) anyway, and the validator catches the failures.
 - **Transparency:** every capsule shows how it was made: rules, on your phone (template), on-device, Mistral (EU), Claude, or from someone else.
 - **Built openly with AI:** coding agents throughout, with the full log in `AI_WORKFLOW.md`.
 
-*Closing line:* "Rules, on-device AI, an EU-first cloud, and a gatekeeper you control."
+*Closing line:* "Rules, on-device AI, the cloud you choose, and a gatekeeper you control."
