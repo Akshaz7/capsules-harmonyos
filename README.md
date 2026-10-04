@@ -172,7 +172,7 @@ $HDC -t 127.0.0.1:5555 shell aa start -a EntryAbility -b com.hackyeah.capsules
 
 ### Optional: enable the cloud AI fallback
 
-Cloud AI needs a key file. In the default **Smart** mode an EU provider (`mistral`) is used for logic capsules, and `anthropic` is used for live capsules while **Settings → Advanced → Allow non-EU providers** is on (the default); each after a one-time notice. Without an EU provider in the file, other providers are used only while that switch is on. Until a server-side proxy is live, the key lives only in this file on a debug build, never in the app or the `.hap`. **On-device only** mode never uses the cloud. The home status line shows the on-device model's state and the cloud state, e.g. "Mistral (EU) when needed" or "No EU cloud provider". To add a key, create `config.local.json` in the repository root. This file is git-ignored and never packed into the `.hap`:
+Rules, templates and on-device AI work without any key. **Optional cloud AI:** `config.local.json` must set the provider to Claude, with your own Anthropic API key. Most requests are built on the phone. When one needs a cloud model, the app names the provider first, which may be outside the EU, and sends nothing before you agree. The app calls `claude-sonnet-5-5` for ordinary cloud builds (or the `"model"` set in the file; default in `core/ModelProvider.ets`) and `claude-haiku-4-5-20251001` for live capsules (`LIVE_MODEL` in `core/LiveCapsule.ets`). **On-device only** mode never uses the cloud. This file is git-ignored and never packed into the `.hap`:
 
 ```json
 { "provider": "anthropic", "apiKey": "<your key>" }
@@ -215,6 +215,12 @@ DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk \
 tail -1 entry/.test/default/intermediates/test/coverage_data/test_result.txt
 # Tests run: 361, Failure: 0, Error: 0, Pass: 361, Ignore: 0
 ```
+
+## Known issues
+
+- After pressing Back on the "Use Claude" notice, the Create button can stop responding. Restart the app.
+- After a restart, that request builds on the phone without offering Claude again.
+- Mistral code is still in the app but switched off; it is being removed.
 
 ## What's real and what's simulated
 
