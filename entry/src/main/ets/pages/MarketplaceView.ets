@@ -17,6 +17,68 @@ function itemIcon(item: MarketItem): Resource {
   return $r('sys.symbol.bag');
 }
 
+/** Polish: an icon from what the text is about (live listings carry no capsule JSON); undefined when nothing matches.
+ * Only symbols already used elsewhere in the app, so each is known to compile. */
+function keywordIcon(text: string): Resource | undefined {
+  const t = text.toLowerCase();
+  const has = (words: string[]): boolean => words.some((w: string) => t.includes(w));
+  if (has(['weather', 'rain', 'forecast', 'sunny'])) {
+    return $r('sys.symbol.cloud_and_sun_fill');
+  }
+  if (has(['water', 'drink', 'hydrat'])) {
+    return $r('sys.symbol.drop');
+  }
+  if (has(['coffee', 'tea ', 'cup'])) {
+    return $r('sys.symbol.cup');
+  }
+  if (has(['timer', 'pomodoro', 'countdown', 'minute', 'nap', 'cooking'])) {
+    return $r('sys.symbol.timer');
+  }
+  if (has(['step', 'walk', 'shake', 'run'])) {
+    return $r('sys.symbol.figure_walk');
+  }
+  if (has(['squat', 'push', 'workout', 'gym', 'fitness', 'rep', 'plank', 'lap'])) {
+    return $r('sys.symbol.dumbbell');
+  }
+  if (has(['score', 'match', 'tennis', 'game', 'versus', ' vs', 'ping', 'chess', 'tally', 'golf', 'basketball'])) {
+    return $r('sys.symbol.flag_checkered');
+  }
+  if (has(['quiz', 'trivia', 'flashcard', 'spelling', 'question', 'capital'])) {
+    return $r('sys.symbol.flag');
+  }
+  if (has(['habit', 'streak', 'medication', 'vitamin', 'reminder', 'daily'])) {
+    return $r('sys.symbol.alarm');
+  }
+  if (has(['mood', 'team', 'people', 'split', 'share'])) {
+    return $r('sys.symbol.person_2');
+  }
+  if (has(['tip', 'bill', 'calculat', 'convert', 'bmi', 'budget', 'loan', 'discount', 'price'])) {
+    return $r('sys.symbol.list_number');
+  }
+  if (has(['shopping', 'grocer', 'packing'])) {
+    return $r('sys.symbol.bag');
+  }
+  if (has(['checklist', 'todo', 'to-do', 'task', 'list'])) {
+    return $r('sys.symbol.list_checkmask');
+  }
+  if (has(['count', 'counter', 'motivation', 'journal', 'note'])) {
+    return $r('sys.symbol.plus_circle');
+  }
+  return undefined;
+}
+
+/** Polish: name first, then the capsule's own icon, then tags/description, the bag last. */
+function polishIcon(item: MarketItem): Resource {
+  const byName = keywordIcon(item.name);
+  if (byName !== undefined) {
+    return byName;
+  }
+  if (item.capsuleJson !== undefined) {
+    return itemIcon(item);
+  }
+  return keywordIcon(`${item.tags.join(' ')} ${item.description}`) ?? $r('sys.symbol.bag');
+}
+
 /** Marketplace: search, categories, Install (-> the app's own import + "From the marketplace" consent). */
 @ComponentV2
 export struct MarketplaceView {
@@ -252,9 +314,13 @@ export struct MarketplaceView {
 
   /** Polish (NEW_POLISH, spec 4.4): a square-ish grid card: icon tile, name, by-line, Install pill bottom-right. */
   @Builder
-  polishCard(item: MarketItem) {
+  polishCard(item: MarketItem, index: number) {
     Column() {
-      IconTile({ icon: itemIcon(item), tileSize: 40, iconSize: 22 })
+      IconTile({
+        icon: polishIcon(item), tileSize: 40, iconSize: 22,
+        fill: index % 3 === 2 ? Palette.indigoTint : Palette.tint,
+        color: index % 3 === 2 ? Palette.indigo : Palette.blue
+      })
       Text(item.name)
         .fontSize(15)
         .fontWeight(700)
@@ -305,9 +371,9 @@ export struct MarketplaceView {
   @Builder
   polishGrid() {
     Grid() {
-      ForEach(this.items, (item: MarketItem) => {
+      ForEach(this.items, (item: MarketItem, index: number) => {
         GridItem() {
-          this.polishCard(item)
+          this.polishCard(item, index)
         }
       }, (item: MarketItem) => item.id)
       if (this.cursor.length > 0) {
@@ -326,8 +392,8 @@ export struct MarketplaceView {
     .layoutWeight(1)
     .width('100%')
     .scrollBar(BarState.Off)
-    .clip(false)
-    .padding({ bottom: Flags.NEW_POLISH ? Space.tabClear : (this.embedded ? 120 : 16) }) // the last row clears the tab bar
+    .clip(true) // scrolled rows must never draw over the search field and filters above
+    .padding({ left: 2, right: 2, top: 4, bottom: Flags.NEW_POLISH ? Space.tabClear : (this.embedded ? 120 : 16) }) // room for card shadows; the last row clears the tab bar
   }
 
   @Builder
