@@ -21,6 +21,7 @@ import motionDetectTest from './MotionDetect.test';
 import deviceComponentsTest from './DeviceComponents.test';
 import weatherTest from './Weather.test';
 import rowPairsTest from './RowPairs.test';
+import buildStagesTest from './BuildStages.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -46,4 +47,5 @@ export default function testsuite() {
   deviceComponentsTest();
   weatherTest();
   rowPairsTest();
+  buildStagesTest();
 }

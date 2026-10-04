@@ -18,6 +18,8 @@ export class Flags {
   static readonly NEW_SHARE: boolean = true;
   static readonly NEW_WIDE: boolean = true;
   static readonly NEW_ERRORS: boolean = true;
+  /** T3-28: the live build card (step line + shimmering skeleton + Cancel) on both Create layouts. */
+  static readonly NEW_BUILD_LIVE: boolean = true;
   /** The old Create layout (NEW_CREATE false) in the new theme. Off until the user has checked it. */
   static readonly NEW_CREATE_CLASSIC: boolean = false;
   /** Create screen extras: the Recent row and the suggestion chips (off: brand, question, prompt bar only). */

@@ -86,6 +86,8 @@ import { storeWidthClass } from '../theme/Breakpoint';
 import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../components';
 import { PromptBar } from '../components/PromptBar';
 import { BuildCard, BuildStep } from '../components/BuildCard';
+import { BuildSkeleton } from '../components/BuildSkeleton';
+import { BuildStage, buildStageIndex, BUILD_STAGES, buildStageText } from './BuildStages';
 import { CapsuleTile } from '../components/CapsuleTile';
 import { EmptyState, ErrorCard } from '../components';
 import { RecentRow, RecentTile, SuggestionChips } from '../components/CreateParts';
@@ -289,6 +291,12 @@ struct Index {
   @Local wide: boolean = false;
   /** Height of the Create tab, to place the heading about 40% down the screen. */
   @Local createHeight: number = 0;
+  /** T3-28: where the current build is, for the live step line. */
+  @Local buildStage: BuildStage = 'reading';
+  /** The provider the model step asks ("Claude"), or '' for the phone's own model. */
+  @Local buildCloud: string = '';
+  /** Bumped by every build and by Cancel; a result whose number is stale is dropped. */
+  private createSeq: number = 0;
   /** Redesign frame: the "Change it…" card shows after the footer pill is tapped (or while it has news). */
   @Local changeOpenId: string = '';
   /** UI-1: the placeholder as typed so far (types and erases the examples). */
@@ -1181,6 +1189,10 @@ struct Index {
   }
 
   private async createFrom(text: string): Promise<void> {
+    const seq = ++this.createSeq;
+    this.buildStage = 'reading';
+    this.buildCloud = '';
+    this.dismissKeyboard();
     this.busy = true;
     this.snapNeedsCloud = false;
     this.message = '';
@@ -1197,6 +1209,7 @@ struct Index {
       return;
     }
     // T3-12: when the rules don't cover it but a built-in template does, offer it first.
+    this.buildStage = 'templates';
     if (!isNotEnglish(text) && parseRequest(text) === null) {
       const m = matchTemplate(text);
       if (m !== null) {
@@ -1212,7 +1225,14 @@ struct Index {
     }
     const smart = this.settings.aiMode === 'smart';
     const consent = this.settings.hasCloudConsent(this.cloudKey());
+    // Until core reports its stages (T4-25), the model step names the cloud only when it may be used.
+    this.buildCloud = smart && consent && this.cloudUsable() ? this.cloudName() : '';
+    this.buildStage = 'model';
     const result = await this.generate(text, smart && consent);
+    if (seq !== this.createSeq) {
+      return; // cancelled, or replaced by a newer build: drop the late result
+    }
+    this.buildStage = 'checking';
     this.busy = false;
     if (!result.ok && result.failure === undefined && !isUnsupportedLanguage(result) && smart && !consent &&
       this.cloudUsable()) {
@@ -1271,8 +1291,15 @@ struct Index {
   }
 
   private async retryWithCloud(text: string): Promise<void> {
+    const seq = ++this.createSeq;
+    this.buildCloud = this.cloudName();
+    this.buildStage = 'model';
     this.busy = true;
     const result = await this.generate(text, true);
+    if (seq !== this.createSeq) {
+      return; // cancelled
+    }
+    this.buildStage = 'checking';
     this.busy = false;
     try {
       this.finishCreate(text, result);
@@ -1281,6 +1308,38 @@ struct Index {
       this.unsupported = [];
       this.languageFailed = false;
         this.failed = true;
+    }
+  }
+
+  /** T3-28 Cancel: the build keeps running in core, but its result is ignored when it arrives. */
+  private cancelBuild(): void {
+    this.createSeq++;
+    this.busy = false;
+    this.buildStage = 'reading';
+    hilog.info(0x0001, 'Index', 'build cancelled by the user');
+  }
+
+  private dismissKeyboard(): void {
+    try {
+      this.getUIContext().getFocusController().clearFocus();
+    } catch (e) {
+      // no focused input: nothing to dismiss
+    }
+  }
+
+  /** T3-28: the live build card under the prompt, fading and scaling out as the sheet or capsule takes over. */
+  @Builder
+  buildLive() {
+    if (this.busy) {
+      BuildSkeleton({
+        stepText: buildStageText(this.buildStage, this.buildCloud),
+        stepIndex: buildStageIndex(this.buildStage),
+        stepCount: BUILD_STAGES.length,
+        reduceMotion: reduceMotion(),
+        onCancel: () => this.cancelBuild()
+      })
+        .transition(TransitionEffect.OPACITY.combine(TransitionEffect.scale({ x: 0.96, y: 0.96 }))
+          .animation({ duration: reduceMotion() ? 0 : 250, curve: Curve.EaseOut }))
     }
   }
 
@@ -2278,6 +2337,9 @@ struct Index {
             .width('100%')
         }
         this.inputCard()
+        if (Flags.NEW_BUILD_LIVE) {
+          this.buildLive()
+        }
         this.statusRow()
         this.createNotices()
         this.recentSection()
@@ -2353,7 +2415,9 @@ struct Index {
           }
           .padding({ left: 20, right: 20 })
           Column({ space: 14 }) {
-            if (Flags.NEW_PROGRESS && this.busy) {
+            if (Flags.NEW_BUILD_LIVE) {
+              this.buildLive()
+            } else if (Flags.NEW_PROGRESS && this.busy) {
               BuildCard({
                 request: this.request.trim().length > 0 ? this.request.trim() : 'Reading your photo',
                 steps: this.buildSteps()
