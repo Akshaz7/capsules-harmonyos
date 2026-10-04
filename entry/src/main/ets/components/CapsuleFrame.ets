@@ -36,6 +36,8 @@ export struct CapsuleFrame {
   @BuilderParam body: () => void = nothing;
   @BuilderParam sidePanel: () => void = nothing;
   @BuilderParam addToHome: () => void = nothing;
+  /** Polish: the ⋯ action menu at the end of the full-page title bar. */
+  @BuilderParam headerAction: () => void = nothing;
   /** T3-31: "Change it…" opens its card at the top of the body, so the body scrolls there. */
   private scroller: Scroller = new Scroller();
 
@@ -57,6 +59,9 @@ export struct CapsuleFrame {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+      if (this.fullPage) {
+        this.headerAction()
+      }
       if (!this.fullPage) {
         IconButton({ icon: $r('sys.symbol.xmark'), label: 'Close', soft: true, onTap: () => this.onClose() })
       }

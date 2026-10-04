@@ -305,6 +305,8 @@ struct Index {
   private pendingMarketItem: MarketItem | undefined = undefined;
   /** Capsule ids this install has published, to show "Remove from marketplace". */
   @Local publishedIds: string[] = [];
+  /** Polish: bumped by the ⋯ menu's "Show as QR code" to open SharingBar's QR sheet. */
+  @Local qrAsk: number = 0;
   /** Time of the last trigger check; the trigger cards re-read "Next: ..." from it. */
   @Local triggerNow: number = Date.now();
   @Local placeholderIndex: number = 0;
@@ -3131,6 +3133,9 @@ struct Index {
         },
         addToHome: () => {
           this.frameAddToHome(entry)
+        },
+        headerAction: () => {
+          this.capsuleMenu(entry)
         }
       })
     }
@@ -3197,8 +3202,9 @@ struct Index {
       })
     }
     // Share only (with "Show as QR code"); the footer's Share opens the same share panel.
-    SharingBar({ capsule: entry.capsule, showImport: false })
-    if (this.marketConfigured) {
+    // Polish: its buttons move to the ⋯ menu; it stays mounted for the QR sheet and its messages.
+    SharingBar({ capsule: entry.capsule, showImport: false, showButtons: !Flags.NEW_POLISH, qrRequest: this.qrAsk })
+    if (this.marketConfigured && !Flags.NEW_POLISH) {
       if (this.publishedIds.includes(entry.capsule.id)) {
         Row({ space: 8 }) {
           Text('In the marketplace')
@@ -3238,6 +3244,47 @@ struct Index {
     }
     .width('100%')
     .justifyContent(FlexAlign.Center)
+  }
+
+  /** Polish: the full-page capsule's ⋯ menu. Same handlers as the buttons it replaces. */
+  private capsuleMenuItems(entry: CapsuleEntry): MenuElement[] {
+    const items: MenuElement[] = [
+      { value: 'Share', action: () => this.shareFromFrame(entry) },
+      { value: 'Show as QR code', action: () => {
+        this.qrAsk++;
+      } }
+    ];
+    if (this.marketConfigured) {
+      if (this.publishedIds.includes(entry.capsule.id)) {
+        items.push({ value: 'Remove from marketplace', action: () => {
+          this.unpublishFromMarket(entry);
+        } });
+      } else {
+        items.push({ value: 'Publish to marketplace', action: () => this.publishToMarket(entry) });
+      }
+    }
+    if (this.devicesEnabled && payloadFor(entry.capsule) !== null) {
+      items.push({ value: 'Send to device', action: () => this.sendFromButton(entry.capsule.id) });
+    }
+    items.push({ value: 'Remove capsule', action: () => {
+      this.undo(entry);
+    } });
+    return items;
+  }
+
+  @Builder
+  capsuleMenu(entry: CapsuleEntry) {
+    Button({ type: ButtonType.Circle }) {
+      SymbolGlyph($r('sys.symbol.dot_grid_1x2'))
+        .fontSize(20)
+        .fontColor([Palette.blue])
+    }
+    .width(40)
+    .height(40)
+    .backgroundColor(Palette.indigoTint)
+    .responseRegion({ x: -2, y: -2, width: 44, height: 44 })
+    .accessibilityText('More actions')
+    .bindMenu(this.capsuleMenuItems(entry))
   }
 
   /** The frame footer's slot for T4's button, mounted exactly as T4 provides it. */

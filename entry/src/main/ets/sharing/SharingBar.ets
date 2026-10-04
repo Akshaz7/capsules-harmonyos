@@ -20,6 +20,10 @@ export struct SharingBar {
   @Param showImport: boolean = true;
   /** Import only, as a small round icon button (e.g. in a header). Errors show as a toast. */
   @Param compact: boolean = false;
+  /** Polish: false hides Share / Show as QR code (they live in the capsule's ⋯ menu); the QR sheet still opens. */
+  @Param showButtons: boolean = true;
+  /** Polish: bump to open the QR sheet from outside (the capsule's ⋯ menu). */
+  @Param qrRequest: number = 0;
   /** A scanned device pairing QR: the page pairs that device. */
   @Event onPairCode: (code: string) => void = () => {
   };
@@ -76,6 +80,11 @@ export struct SharingBar {
     } catch (e) {
       this.report((e as Error).message);
     }
+  }
+
+  @Monitor('qrRequest')
+  onQrRequest(): void {
+    this.showQr();
   }
 
   private showQr(): void {
@@ -187,7 +196,7 @@ export struct SharingBar {
   bar() {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
-        if (this.showShare) {
+        if (this.showShare && this.showButtons) {
           Button('Share')
             .layoutWeight(1)
             .height(Flags.NEW_SHARE ? 48 : undefined)
@@ -209,7 +218,7 @@ export struct SharingBar {
         }
       }
       .width('100%')
-      if (this.showShare) {
+      if (this.showShare && this.showButtons) {
         Button('Show as QR code', { buttonStyle: ButtonStyleMode.TEXTUAL })
           .fontColor(Flags.NEW_SHARE ? Palette.blue : undefined)
           .fontWeight(Flags.NEW_SHARE ? 600 : undefined)
