@@ -52,7 +52,8 @@ export struct SettingsView {
   @Builder
   motionRow(scope: string, title: string, detail: string) {
     Row({ space: 12 }) {
-      this.rowIcon($r('sys.symbol.figure_walk'))
+      // Shakes, not steps: one window for "while a capsule is open", a grid for "anywhere" (every capsule).
+      this.rowIcon(scope === 'app' ? $r('sys.symbol.square_grid_2x2') : $r('sys.symbol.rectangle_portrait'))
       Column({ space: 2 }) {
         Text(title)
           .fontSize(TITLE_SIZE)
