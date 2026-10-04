@@ -9,6 +9,7 @@
  * - goal:     "water 8 glasses", "drink 8 glasses of water", "pushups goal 50" (schema v1: live progress)
  * - battery:  "phone battery", "battery level" (schema v1: a read-only reading from the phone)
  * - weather:  "weather", "weather in Kraków" (schema v1: Open-Meteo; the user picks the city when unnamed)
+ * - list+weather: "a task list and the weather for Kraków" (schema v1: one capsule, no model)
  * - split:    "split 84 between 4", "split the bill 120.50 among 3 people" (schema v1: live bill split)
  * - checklist: "checklist for leaving home: keys, wallet, charger", "packing list: socks, charger"
  *
@@ -26,6 +27,7 @@ import {
   DeviceComponent,
   DisplayComponent,
   InputComponent,
+  ListComponent,
   Permission,
   SCHEMA_VERSION,
   StateVar,
@@ -64,6 +66,14 @@ const TIME_PATTERN: string = '(?:\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)|\\d{1,2}:\\d{
 
 function normalize(request: string): string {
   return request.toLowerCase().replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '').trim();
+}
+
+/** "make me a …", "create a …", "build an …": the request without the leading verb, so rules see what to build. */
+const LEADING_VERB = /^(?:make|create|build)\s+(?:me\s+)?(?:(?:a|an)\s+)?/;
+
+function stripLeadingVerb(req: string): string {
+  const rest = req.replace(LEADING_VERB, '').trim();
+  return rest.length > 0 ? rest : req;
 }
 
 export function slug(text: string): string {
@@ -135,6 +145,11 @@ function parseWeather(req: string): Capsule | null {
       return null;
     }
     cityText = before[1].trim();
+    // Only a bundled city may stand before "weather", so "task list and weather" cannot become
+    // a weather-only capsule that silently drops the list.
+    if (cityIdFromText(cityText).length === 0) {
+      return null;
+    }
   }
   const reading: DeviceComponent = { type: 'device', bind: 'weather' };
   if (cityText.length > 0) {
@@ -146,6 +161,49 @@ function parseWeather(req: string): Capsule | null {
   const named: string = reading.city !== undefined ? ` · ${cityName(reading.city)}` : '';
   const c: Capsule = {
     schemaVersion: 1, id: 'weather', name: `Weather${named}`, permissions: ['weather'], ui: [reading]
+  };
+  return c;
+}
+
+/**
+ * "a task list and the weather for Kraków", "task list and weather", "todo list with today's weather",
+ * "weather in Warsaw and a to-do list": one capsule with a task list and a weather reading, built by rule.
+ * A city is used only when it is one of the bundled ids; otherwise the card offers "Choose city".
+ */
+function parseListAndWeather(req: string): Capsule | null {
+  const LIST: string = '(?:an?\\s+|my\\s+)?(?:task|to-?do|todo|check)\\s*list';
+  const WX: string = '(?:the\\s+|today\'?s\\s+)?(?:weather|forecast)(?:\\s+(?:in|for|at)\\s+([a-z\\u00c0-\\u024f -]+))?';
+  const JOIN: string = '\\s+(?:and|with|plus|&)\\s+';
+  let m = req.match(new RegExp(`^${LIST}${JOIN}${WX}$`));
+  if (m === null) {
+    m = req.match(new RegExp(`^${WX}${JOIN}${LIST}$`));
+  }
+  if (m === null) {
+    return null;
+  }
+  const city: string = m[1] !== undefined ? cityIdFromText(m[1].trim()) : '';
+  const reading: DeviceComponent = { type: 'device', bind: 'weather' };
+  if (city.length > 0) {
+    reading.city = city;
+  }
+  const state: Record<string, StateVar> = {};
+  state['tasks'] = { type: 'list', initial: [] };
+  state['newTask'] = { type: 'text', initial: '' };
+  const push: StepObject = { push: 'tasks', value: 'newTask' };
+  const clear: StepObject = { set: 'newTask', to: "''" };
+  const add: ButtonComponent = {
+    type: 'button', label: 'Add', action: '', enabledIf: 'len(newTask) > 0', do: [push, clear]
+  };
+  const tasks: ListComponent = { type: 'list', source: 'tasks' };
+  const newTask: InputComponent = { type: 'input', bind: 'newTask', kind: 'text', label: 'New task' };
+  const ui: CapsuleComponent[] = [reading, display('Tasks to do: {len(tasks)}'), tasks, newTask, add];
+  const c: Capsule = {
+    schemaVersion: 1,
+    id: 'tasks-weather',
+    name: city.length > 0 ? `Tasks and weather · ${cityName(city)}` : 'Tasks and weather',
+    permissions: ['weather'],
+    state: state,
+    ui: ui
   };
   return c;
 }
@@ -453,13 +511,13 @@ function parseChecklist(req: string): Capsule | null {
 
 /** Returns a capsule for a recognised request, or null. Output is meant to pass the validator. */
 export function parseRequest(request: string): Capsule | null {
-  const req = normalize(request);
+  const req = stripLeadingVerb(normalize(request));
   if (req.length === 0 || SKIP_RULES.some((p: RegExp) => p.test(req))) {
     return null;
   }
   const rules: ((r: string) => Capsule | null)[] = [
-    parsePomodoro, parseTimers, parseSplit, parseChecklist, parseCounter, parseSchedule, parseGoal, parseBattery,
-    parseWeather
+    parseListAndWeather, parsePomodoro, parseTimers, parseSplit, parseChecklist, parseCounter, parseSchedule,
+    parseGoal, parseBattery, parseWeather
   ];
   for (const rule of rules) {
     const result = rule(req);

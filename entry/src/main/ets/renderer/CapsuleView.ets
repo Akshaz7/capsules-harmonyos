@@ -232,14 +232,18 @@ export struct CapsuleNode {
         Text(this.deviceTitle(c))
           .fontSize($r('sys.float.Subtitle_M'))
           .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
-        Text(this.deviceValue(c))
-          .fontSize($r('sys.float.Title_S'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('sys.color.font_primary'))
-          .fontFeature('"tnum" on')
       }
       .width('100%')
+      // The value gets its own line: "10°C · Clear · Wind 5 km/h" squeezed the label into one letter per line.
+      Text(this.deviceValue(c))
+        .fontSize($r('sys.float.Title_S'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('sys.color.font_primary'))
+        .fontFeature('"tnum" on')
+        .width('100%')
       if (this.deviceDetail(c).length > 0) {
         Text(this.deviceDetail(c))
           .fontSize($r('sys.float.Caption_M'))

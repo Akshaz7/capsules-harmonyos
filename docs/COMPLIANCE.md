@@ -47,7 +47,7 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 | Template reminders (habit, vitamin, medication with a time) fire a daily trigger whose only step is `notify:<text>`, and the runtime ignores `notify`, so no notification appears. | `core/templates/TemplateLibrary.ets` (trigger `do: notify:…`); `renderer/CapsuleRuntime.ets` (`case 'notify'` does nothing) | **T3/T4**: deliver `notify` through the notification adapter, or don't promise reminders |
 | The schema has `location` and `widget` permissions that nothing uses | `SCHEMA.md` | **Ash** decides (SCHEMA is the contract). The README already says so. |
 | No screenshots | README | **Ash**: `docs/screenshots/` (widget, gatekeeper sheet, Calendar, tennis; dark mode is off while the redesign locks light mode); T2 adds the section |
-| The live marketplace search sends the request text to the marketplace server with no consent notice, also in **On-device only** mode. This contradicts "On-device only never calls the cloud" and "tiers 0–1 stay on the device" (both now corrected in the docs) | `core/templates/MarketMatch.ets`, `core/index.ets` `getMarketOptions()` | **Ash** decides; **T6/T4**: skip the search in On-device only mode and/or put it behind a consent notice |
+| The live marketplace search sends the request text to the marketplace server with no consent notice in **Smart** mode. **Fixed for On-device only:** PR #16 (`b54cbfe`) skips the search in that mode (unit-tested); the Marketplace tab gate is T3-25 | `core/CapsuleGenerator.ets`, `core/templates/MarketMatch.ets` | **Ash**: a consent notice for Smart mode, if wanted |
 
 ## Reproducibility
 

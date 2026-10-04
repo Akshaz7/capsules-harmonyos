@@ -55,7 +55,6 @@ export class WeatherAdapter {
     if (city === undefined) {
       return { state: 'error', reading: null };
     }
-    this.lastFetch.set(cityId, now);
     const body: string | null = await this.get(city);
     if (body === null) {
       return cached === undefined ?
@@ -67,6 +66,8 @@ export class WeatherAdapter {
       return cached === undefined ?
         { state: 'error', reading: null } : { state: 'stale', reading: cached.reading };
     }
+    // The cooldown starts only after a successful fetch, so a failure can be retried at once.
+    this.lastFetch.set(cityId, Date.now());
     this.cache.set(cityId, { reading: reading, at: Date.now() });
     return { state: 'ok', reading: reading };
   }

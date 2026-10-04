@@ -13,8 +13,9 @@
  *      not allow it (allowCloud false), return needsCloud instead of a simplified on-device capsule.
  *   3. Otherwise the on-device model; if it fails or is ungrounded, the cloud.
  * A cloud provider may be used only if it is in the EU (Mistral), or the caller allows non-EU providers.
- * Mode "on-device-only" never calls the cloud. Option cloudOnly skips rules and on-device (same cloud
- * policy). Only the request text is ever sent to the cloud.
+ * Mode "on-device-only" never calls the cloud and never searches the marketplace (a network call), so
+ * bundled templates are used alone. Option cloudOnly skips rules and on-device (same cloud policy).
+ * Only the request text is ever sent to the cloud or the marketplace.
  */
 import { CapsuleOrigin, GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
@@ -172,8 +173,10 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
   }
 
   // A built-in template or a marketplace capsule that explains the whole request, without a model.
+  // On-device only: the marketplace is a network call, so bundled templates are searched alone.
+  const market: MarketOptions | undefined = mode === 'on-device-only' ? undefined : local?.market;
   let template: TemplateMatch | null = local?.library !== undefined ?
-    await matchTemplateAsync(local.library, request, local.market) : null;
+    await matchTemplateAsync(local.library, request, market) : null;
   if (template !== null) {
     if (template.unfilledSlots.length > 0 && local?.slotModel !== undefined) {
       template = await fillUnclearSlots(template, request, local.slotModel); // never worse than the rules' values

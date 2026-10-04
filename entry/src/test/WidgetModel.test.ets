@@ -8,6 +8,7 @@ import {
 import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
 import { StateValues } from '../main/ets/core/CapsuleProgram';
 import { parseRequest } from '../main/ets/core/RuleParser';
+import { routeCapsule } from '../main/ets/core/CapsuleRouter';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import { Capsule, ChecklistComponent, Permission } from '../main/ets/core/CapsuleTypes';
 
@@ -113,9 +114,13 @@ export default function widgetModelTest() {
 
     it('never draws a motion capsule: motion runs only while the capsule is open in the app', 0, () => {
       const c = rules('count my shakes');
+      const route = routeCapsule(c);
+      expect(route.widget).assertFalse();
+      expect(route.reason).assertContain('motion');
       const view = buildWidgetView(c, initialState(c), gate([], true, false), NOW, false);
       expect(view.rows.length).assertEqual(0);
-      expect(view.message).assertContain('motion');
+      // App-only capsules end with "Tap to open" (the motion widget also says why).
+      expect(view.message).assertContain('Tap to open');
       expect(buildWidgetView(c, initialState(c), gate(['motion'], true, false), NOW, false).rows.length).assertEqual(0);
     });
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import { routeCapsule } from '../main/ets/core/CapsuleRouter';
 import { parseRequest } from '../main/ets/core/RuleParser';
-import { Capsule, DeviceComponent } from '../main/ets/core/CapsuleTypes';
+import { Capsule, CapsuleComponent, ChecklistComponent, DeviceComponent, StateVar } from '../main/ets/core/CapsuleTypes';
 import {
   CITIES, City, cityById, cityIdFromText, cityName, parseOpenMeteo, WeatherReading, weatherLabel, weatherSymbolKey,
   weatherValue
@@ -21,6 +21,12 @@ function errorsOf(json: string): string {
 function weatherCapsule(permissions: string, extra: string): string {
   return `{"schemaVersion":1,"id":"w","name":"W","permissions":${permissions},"ui":` +
     `[{"type":"device","bind":"weather"${extra}}]}`;
+}
+
+function built(req: string): Capsule {
+  const c = parseRequest(req);
+  expect(c !== null).assertTrue();
+  return c as Capsule;
 }
 
 export default function weatherTest() {
@@ -107,6 +113,96 @@ export default function weatherTest() {
       expect(text.includes('weather')).assertTrue();
       expect(text.includes('gyroscope')).assertFalse();
       expect(text.includes('pedometer')).assertFalse();
+    });
+
+    it('builds a task list with the weather in one capsule, by rule', 0, () => {
+      const inputs: string[] = [
+        'a task list and the weather for Kraków',
+        'task list and weather',
+        'todo list with today\'s weather',
+        'weather in Warsaw and a to-do list'
+      ];
+      inputs.forEach((req: string) => {
+        const c = built(req);
+        expect(validateCapsule(JSON.stringify(c)).errors.join(' | ')).assertEqual('');
+        expect(`${req} -> ${c.permissions.join()}`).assertEqual(`${req} -> weather`);
+        const wx = c.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent;
+        expect(wx === undefined).assertFalse();
+        expect(wx.bind).assertEqual('weather');
+        const hasList: boolean = c.ui.some((x: CapsuleComponent) => x.type === 'list');
+        expect(`${req} list ${hasList}`).assertEqual(`${req} list true`);
+        expect(c.state !== undefined).assertTrue();
+        expect((c.state as Record<string, StateVar>)['tasks'] !== undefined).assertTrue();
+        expect(routeCapsule(c).widget).assertFalse();
+      });
+      const named = built('a task list and the weather for Kraków');
+      expect((named.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent).city)
+        .assertEqual('krakow');
+      expect(named.name).assertContain('Kraków');
+      const unnamed = built('task list and weather');
+      expect((unnamed.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent).city === undefined)
+        .assertTrue();
+      expect(unnamed.name).assertEqual('Tasks and weather');
+    });
+
+    it('no longer swallows unknown city-first requests, and still takes a real city', 0, () => {
+      expect(parseRequest('nice weather') === null).assertTrue();
+      expect(parseRequest('task list and weather') !== null).assertTrue();
+      const paris = built('paris weather');
+      expect((paris.ui[0] as DeviceComponent).city).assertEqual('paris');
+    });
+
+    it('keeps the bundled city through lower-case, upper-case and diacritic phrasings', 0, () => {
+      const phrases: string[] = [
+        'task list and weather for london',
+        'TASK LIST and Weather for krakow',
+        'task list and weather for kraków',
+        'weather in Krakow and a task list'
+      ];
+      const cities: string[] = ['london', 'krakow', 'krakow', 'krakow'];
+      phrases.forEach((req: string, i: number) => {
+        const c = built(req);
+        const wx = c.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent;
+        expect(`${req} -> ${wx === undefined ? 'no weather' : wx.city}`).assertEqual(`${req} -> ${cities[i]}`);
+        expect(c.ui.some((x: CapsuleComponent) => x.type === 'list')).assertTrue();
+      });
+      expect(built('task list and weather for london').name).assertContain('London');
+      expect(built('task list and weather for kraków').name).assertContain('Kraków');
+    });
+
+    it('documents "a checklist: milk, eggs and the weather in Warsaw": checklist, not the compound rule', 0, () => {
+      const c = built('a checklist: milk, eggs and the weather in Warsaw');
+      expect(c.id.startsWith('checklist')).assertTrue();
+      expect(c.ui.some((x: CapsuleComponent) => x.type === 'device')).assertFalse();
+      const list = c.ui.find((x: CapsuleComponent) => x.type === 'checklist') as ChecklistComponent;
+      expect(list === undefined).assertFalse();
+      expect(list.items.join(',')).assertEqual('Milk,Eggs,The weather in warsaw');
+    });
+
+    it('builds the compound capsule when the request starts with make/create/build', 0, () => {
+      const phrases: string[] = [
+        'make a task list and the weather for Kraków',
+        'create me a task list and the weather for Krakow',
+        'build a task list and the weather for Krakow'
+      ];
+      phrases.forEach((req: string) => {
+        const c = built(req);
+        const wx = c.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent;
+        expect(`${req} -> ${wx === undefined ? 'no weather' : wx.city}`).assertEqual(`${req} -> krakow`);
+        expect(`${req} -> ${c.ui.some((x: CapsuleComponent) => x.type === 'list')}`).assertEqual(`${req} -> true`);
+      });
+      // Only the leading verb goes; a request that is just the verb is left alone.
+      expect(parseRequest('make') === null).assertTrue();
+      expect((built('make me a pomodoro').name)).assertEqual((built('pomodoro').name));
+    });
+
+    it('does not let the compound rule swallow weather-only or bare list requests', 0, () => {
+      const weatherOnly = built('weather in London');
+      expect(weatherOnly.id).assertEqual('weather');
+      const wx = weatherOnly.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent;
+      expect(wx.city).assertEqual('london');
+      expect(weatherOnly.ui.some((x: CapsuleComponent) => x.type === 'list')).assertFalse();
+      expect(parseRequest('task list') === null).assertTrue();
     });
   });
 }

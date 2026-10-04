@@ -48,7 +48,7 @@ If the live API fails, the screen falls back to the shipped examples with a note
 4. Create `phone battery`: the card shows the level and charging state, read on the phone.
 5. Create `weather in Kraków`: the card shows the city's weather with "Updated HH:MM" and "Weather data by Open-Meteo.com"; tap the link for the source. Airplane mode shows the offline state instead of a fake value.
 
-On a device without an accelerometer (the default emulator), the motion capsule says "Motion sensor unavailable on this device" — that is the honest state; never imply a count happened.
+On hardware without an accelerometer, the motion capsule says "Motion sensor unavailable on this device" — that is the honest state; never imply a count happened. (Our emulator reports a virtual accelerometer, so it shows "Shake the phone to count" instead; both states are in the app.)
 
 ## What not to claim
 

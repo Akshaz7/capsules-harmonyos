@@ -2,9 +2,11 @@ import { describe, it, expect } from '@ohos/hypium';
 import { createProvider, HttpResponse, HttpTransport, ModelConfig, parseModelConfig } from '../main/ets/core/ModelProvider';
 import { CapsuleModel, PLAN_PROMPT, SYSTEM_PROMPT } from '../main/ets/core/CapsuleModel';
 import {
-  CapsuleSource, CLOUD_OFF, generateCapsuleWith, generateFromSharedTextWith, needsLogic,
+  CapsuleSource, CLOUD_OFF, generateCapsuleWith, generateFromSharedTextWith, LocalSources, needsLogic,
   ON_DEVICE_ONLY, pickCloud
 } from '../main/ets/core/CapsuleGenerator';
+import { TemplateLibrary } from '../main/ets/core/templates/TemplateLibrary';
+import { MarketReply, MarketTransport } from '../main/ets/core/templates/MarketMatch';
 import { SHARED_TOO_LONG } from '../main/ets/core/SharedText';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE } from '../main/ets/core/Language';
 import { Capsule, GenerateResult } from '../main/ets/core/CapsuleTypes';
@@ -65,6 +67,16 @@ function onDeviceReturning(json: string): FakeOnDevice {
 
 function onDeviceFailing(): FakeOnDevice {
   return new FakeOnDevice({ ok: false, error: 'The on-device model is not sure.', details: [] });
+}
+
+/** Counts marketplace GETs; an empty result keeps the routing outcome unchanged. */
+class CountingMarket implements MarketTransport {
+  calls: number = 0;
+
+  async get(url: string, timeoutMs: number): Promise<MarketReply> {
+    this.calls++;
+    return { status: 200, body: '{"capsules":[]}' };
+  }
 }
 
 const LOCAL: string =
@@ -278,6 +290,30 @@ export default function capsuleGeneratorTest() {
       expect(r.ok).assertFalse();
       expect(r.error).assertContain(CLOUD_OFF);
       expect(t.calls).assertEqual(0);
+      done();
+    });
+
+    it('on-device-only mode never searches the marketplace', 0, async (done: Function) => {
+      const market = new CountingMarket();
+      const local: LocalSources = {
+        library: new TemplateLibrary([]),
+        market: { baseUrl: 'https://m.example', transport: market }
+      };
+      const r = await generateCapsuleWith(PLAIN, [], '', onDeviceFailing(), { mode: 'on-device-only' }, local);
+      expect(market.calls).assertEqual(0);
+      expect(r.ok).assertFalse();
+      done();
+    });
+
+    it('smart mode still searches the marketplace for unmatched requests', 0, async (done: Function) => {
+      const market = new CountingMarket();
+      const local: LocalSources = {
+        library: new TemplateLibrary([]),
+        market: { baseUrl: 'https://m.example', transport: market }
+      };
+      const r = await generateCapsuleWith(PLAIN, [], '', onDeviceFailing(), undefined, local);
+      expect(market.calls).assertEqual(1);
+      expect(r.ok).assertFalse();
       done();
     });
 
