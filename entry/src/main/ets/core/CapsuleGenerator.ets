@@ -63,6 +63,11 @@ export interface GenerateOptions {
    * Still respects mode, allowNonEu and allowCloud: if the cloud may not be used, it fails with the reason.
    */
   cloudOnly?: boolean;
+  /**
+   * Skip the request cache, the built-in templates and the marketplace ("Not quite right? Build fresh"):
+   * rules, then on-device and the cloud as usual. Default false.
+   */
+  skipTemplates?: boolean;
   /** Reports each stage (cache, rules, template, ..., done/failed) for the build animation. Never throws. */
   onStage?: StageListener;
 }
@@ -181,10 +186,11 @@ async function generateRouted(request: string, cloud: CapsuleModel[],
     return chosen !== null ? askCloud(chosen, request, onStage) : { ok: false, error: cloudWhy, details: [] };
   }
 
-  if (local?.cache !== undefined) {
+  const fresh = options?.skipTemplates === true;
+  if (local?.cache !== undefined && !fresh) {
     emitStage(onStage, 'cache');
   }
-  const cached = local?.cache !== undefined ? local.cache.get(request) : null;
+  const cached = local?.cache !== undefined && !fresh ? local.cache.get(request) : null;
   if (cached !== null) {
     return { ok: true, capsule: cached.capsule, origin: cached.origin as CapsuleOrigin, details: [] };
   }
@@ -203,13 +209,13 @@ async function generateRouted(request: string, cloud: CapsuleModel[],
   // A built-in template or a marketplace capsule that explains the whole request, without a model.
   // On-device only: the marketplace is a network call, so bundled templates are searched alone.
   const market: MarketOptions | undefined = mode === 'on-device-only' ? undefined : local?.market;
-  if (local?.library !== undefined) {
+  if (local?.library !== undefined && !fresh) {
     emitStage(onStage, 'template');
     if (market !== undefined) {
       emitStage(onStage, 'marketplace'); // searched together with the templates
     }
   }
-  let template: TemplateMatch | null = local?.library !== undefined ?
+  let template: TemplateMatch | null = local?.library !== undefined && !fresh ?
     await matchTemplateAsync(local.library, request, market) : null;
   if (template !== null) {
     if (template.unfilledSlots.length > 0 && local?.slotModel !== undefined) {

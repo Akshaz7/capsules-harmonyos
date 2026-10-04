@@ -153,6 +153,27 @@ export default function capsuleGeneratorTest() {
         done();
       });
 
+    it('skipTemplates skips the cache, templates and marketplace but keeps rules, on-device and cloud', 0,
+      async (done: Function) => {
+        const market = new CountingMarket();
+        const local: LocalSources = {
+          library: new TemplateLibrary(CORE_TEMPLATES),
+          market: { baseUrl: 'https://m.example', transport: market }
+        };
+        const usual = await generateCapsuleWith('tennis scoreboard me vs Sam', [], '', null, undefined, local);
+        expect(usual.origin).assertEqual('template');
+        const log = new StageLog();
+        const device = onDeviceReturning(GOOD);
+        const fresh = await generateCapsuleWith('tennis scoreboard me vs Sam', [], '', device,
+          { skipTemplates: true, onStage: log.listener() }, local);
+        expect(fresh.origin).assertEqual('on-device');
+        expect(log.stages.join(',')).assertEqual('rules,on-device,validating,done');
+        expect(market.calls).assertEqual(1); // only the first, usual build searched the marketplace
+        const rules = await generateCapsuleWith('count my squats', [], '', null, { skipTemplates: true }, local);
+        expect(rules.origin).assertEqual('rules');
+        done();
+      });
+
     it('never lets the listener break the build, and sends no request text', 0, async (done: Function) => {
       const r = await generateCapsuleWith('count my squats', [], '', null, { onStage: throwingListener });
       expect(r.ok).assertTrue();
