@@ -34,7 +34,7 @@ We started from the HackYeah Hackathon Template: an empty ArkTS project, `AGENTS
 - the gatekeeper, widgets, sharing and triggers
 - the template library
 - the ESP32 wrist companion
-- 303 unit tests and the provider and photo evals
+- 320 unit tests and the provider and photo evals
 
 The commit history shows the progression. AI coding agents were used throughout, and [`AI_WORKFLOW.md`](AI_WORKFLOW.md) logs how.
 
@@ -47,8 +47,8 @@ The commit history shows the progression. AI coding agents were used throughout,
 | Gatekeeper, log, widgets (incl. picker), timer pause/stop | Calendar alerts with the app closed: not seen working |
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
 | Marketplace: browse, install with consent, run (live API, 108 templates listed) | Marketplace publishing: not tested |
-| Battery and weather readings (emulator) | Shake counting: built, not yet checked on a phone; capsules that vibrate: not built; voice input: core only |
-| Editing a capsule ("Change it…", with undo) | Photo → capsule: on-phone OCR path checked on a real phone (10/10 valid, 6/10 correct, offline); Snap button in the app not yet checked |
+| Battery and weather readings (emulator) | Shake counting: built, not yet checked on a phone; capsules that vibrate: not built; voice dictation: built, not yet checked on a device |
+| Editing a capsule ("Change it…", with undo) | Photo → capsule: on-phone OCR path checked on a real phone (10/10 valid, 6/10 correct, offline); the Snap button is switched off for now, so photos come in as shared images |
 | | Wrist companion: works against the live relay; the app's side isn't tested against it yet |
 
 No sensor or device data is simulated in normal use. A labelled, dev-only device-relay simulation exists behind a config flag (`devices.simulate`). Eval figures and limits are in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).

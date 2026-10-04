@@ -59,9 +59,10 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 | What | Where it goes |
 | --- | --- |
 | Request text, tiers 0–1 | Stays on the device, **except** the live marketplace search: in Smart mode, when `marketplace.baseUrl` is set, the template step sends the request text to the marketplace server (`GET /api/capsules?q=…`) without a consent notice. On-device only mode skips it. Flagged in [COMPLIANCE.md](COMPLIANCE.md). |
-| Photo (Snap button or a shared image) | Read by the system OCR on the phone. Only if no local build is possible: the OCR text is sent, or the photo itself if OCR found no text, to the chosen provider after the same consent as text; never to a non-EU provider unless that switch is on. |
+| Photo (a shared image; the Snap button is switched off for now) | Read by the system OCR on the phone. Only if no local build is possible: the OCR text is sent, or the photo itself if OCR found no text, to the chosen provider after the same consent as text; never to a non-EU provider unless that switch is on. |
 | Edit instruction ("Change it…"), cloud | Rule edits stay on the device. Otherwise the instruction and the capsule's definition (its JSON) go to the chosen provider under the same consent rules; the capsule's state values (counts, inputs) are never sent. |
 | Weather capsules | Only the chosen city's coordinates (from a bundled 12-city list) go to Open-Meteo, after the capsule's own consent; no request text, no identifiers. |
+| Dictated speech | Recognised on the device by Core Speech Kit offline; only the resulting text goes on, like typed text. |
 | Request text, tier 2 | Sent to the chosen provider, along with our fixed system prompt. **Nothing else**: no capsule data, no app state, no identifiers. A unit test checks that the HTTP body holds only the system prompt and the request. |
 | Consent | Before a provider's first request, a one-time notice names that provider and says whether it is outside the EU. Consent is stored per provider, so agreeing to Mistral does not cover Claude. **On-device only** mode never calls the cloud. |
 | API keys | Only in a git-ignored `config.local.json`, pushed to the app's private files directory (debug builds). They are never in the repository or the `.hap`: a byte scan of the `test-1` HAP found no key (re-run it on the final release). |
@@ -72,7 +73,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (303, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
+- **Unit tests (320, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
@@ -95,5 +96,5 @@ Known limitations:
 - **EU default trades accuracy for privacy:** Mistral is weaker than Claude on hard logic requests.
 - **The on-device model** handles only simple requests, and got 9 of 15 right in the eval. Phone performance hasn't been measured, and offline use wasn't strictly tested, because emulator airplane mode doesn't cut its network.
 - **Requests are capped at 500 characters**; shared text at 2,000.
-- **Not built:** capsules that vibrate, and the `notify:<text>` action (so template reminders fire without a visible notification). Voice input exists only in core (offline Core Speech Kit; 9/10 synthetic spoken requests within 20% word error on the emulator) and isn't in the app. Daily time triggers fire only while the app is open. Motion counting and motion triggers are built (accelerometer while the app is in front) but not yet checked on a phone.
+- **Not built:** capsules that vibrate, and the `notify:<text>` action (so template reminders fire without a visible notification). Voice dictation is in the app (offline Core Speech Kit, mic permission; 9/10 synthetic spoken requests within 20% word error on the emulator) but not yet checked on a device. Daily time triggers fire only while the app is open. Motion counting and motion triggers are built (accelerometer while the app is in front) but not yet checked on a phone.
 - **Model weights** must be pushed separately (debug builds). A store build would need an in-app download.

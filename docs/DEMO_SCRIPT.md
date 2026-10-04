@@ -52,7 +52,7 @@ On hardware without an accelerometer, the motion capsule says "Motion sensor una
 
 ## What not to claim
 
-- Capsules that vibrate: not built. Motion counts **shakes** while a capsule is open, never steps or reps; say that on camera. Voice input: not in the app yet.
+- Capsules that vibrate: not built. Motion counts **shakes** while a capsule is open, never steps or reps; say that on camera. Voice dictation: built but not checked on a device; dry-run it before showing it. The Snap (photo) button is switched off.
 - Calendar alerts firing with the app closed: not seen working.
 - On-device accuracy beyond the eval (9/15 correct).
 - Publishing to the marketplace (not tested).
