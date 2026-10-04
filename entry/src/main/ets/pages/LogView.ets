@@ -1,4 +1,7 @@
 import { GateLog, LogEntry, LogKind } from '../gatekeeper/Gatekeeper';
+import { Chip, IconTile } from '../components';
+import { Flags } from '../theme/Flags';
+import { Palette } from '../theme/Tokens';
 
 function formatTime(ms: number): string {
   const d = new Date(ms);
@@ -32,6 +35,34 @@ function kindIcon(kind: LogKind): Resource {
   }
 }
 
+/** Redesign (NEW_LOG): allow blue, deny/blocked orange, undo grey. */
+function kindFill(kind: LogKind): ResourceColor {
+  if (kind === 'allow') {
+    return Palette.tint;
+  }
+  return kind === 'undo' ? Palette.softButton : Palette.orangeTint;
+}
+
+function kindInk(kind: LogKind): ResourceColor {
+  if (kind === 'allow') {
+    return Palette.chipText;
+  }
+  return kind === 'undo' ? Palette.text3 : Palette.orangeText;
+}
+
+function kindLabel(kind: LogKind): string {
+  switch (kind) {
+    case 'allow':
+      return 'Allowed';
+    case 'blocked':
+      return 'Blocked';
+    case 'deny':
+      return 'Denied';
+    default:
+      return 'Undone';
+  }
+}
+
 /** Gatekeeper log, newest first. */
 @ComponentV2
 export struct LogView {
@@ -43,8 +74,8 @@ export struct LogView {
   content() {
     if (this.log.entries.length === 0) {
       Text('Nothing logged yet.')
-        .fontSize($r('sys.float.Body_M'))
-        .fontColor($r('sys.color.font_tertiary'))
+        .fontSize(Flags.NEW_LOG ? 15 : $r('sys.float.Body_M'))
+        .fontColor(Flags.NEW_LOG ? Palette.text2 : $r('sys.color.font_tertiary'))
         .width('100%')
         .textAlign(TextAlign.Center)
         .padding({ top: 48 })
@@ -52,25 +83,11 @@ export struct LogView {
       List({ space: 8 }) {
         ForEach(this.log.entries, (e: LogEntry) => {
           ListItem() {
-            Row({ space: 12 }) {
-              SymbolGlyph(kindIcon(e.kind))
-                .fontSize(20)
-                .fontColor([kindColor(e.kind)])
-              Column({ space: 2 }) {
-                Text(e.detail)
-                  .fontSize($r('sys.float.Body_M'))
-                  .fontColor($r('sys.color.font_primary'))
-                Text(`${formatTime(e.time)} · ${e.capsuleId}`)
-                  .fontSize($r('sys.float.Caption_M'))
-                  .fontColor($r('sys.color.font_tertiary'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .layoutWeight(1)
+            if (Flags.NEW_LOG) {
+              this.newRow(e)
+            } else {
+              this.oldRow(e)
             }
-            .width('100%')
-            .padding(14)
-            .borderRadius(16)
-            .backgroundColor($r('sys.color.comp_background_primary'))
           }
         }, (e: LogEntry, i: number) => `${e.time}-${i}-${e.detail}`)
       }
@@ -82,14 +99,62 @@ export struct LogView {
     }
   }
 
+  /** Same entry, canvas look: tinted icon tile, kind chip, full detail (wraps), time and capsule. */
+  @Builder
+  newRow(e: LogEntry) {
+    Row({ space: 12 }) {
+      IconTile({ icon: kindIcon(e.kind), tileSize: 40, iconSize: 20, fill: kindFill(e.kind), color: kindInk(e.kind) })
+      Column({ space: 6 }) {
+        Chip({ text: kindLabel(e.kind), fill: kindFill(e.kind), color: kindInk(e.kind) })
+        Text(e.detail)
+          .fontSize(15)
+          .fontWeight(500)
+          .fontColor(Palette.text)
+        Text(`${formatTime(e.time)} · ${e.capsuleId}`)
+          .fontSize(13)
+          .fontColor(Palette.text2)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .alignItems(VerticalAlign.Top)
+    .width('100%')
+    .padding(14)
+    .borderRadius(18)
+    .backgroundColor(Palette.surface)
+  }
+
+  @Builder
+  oldRow(e: LogEntry) {
+    Row({ space: 12 }) {
+      SymbolGlyph(kindIcon(e.kind))
+        .fontSize(20)
+        .fontColor([kindColor(e.kind)])
+      Column({ space: 2 }) {
+        Text(e.detail)
+          .fontSize($r('sys.float.Body_M'))
+          .fontColor($r('sys.color.font_primary'))
+        Text(`${formatTime(e.time)} · ${e.capsuleId}`)
+          .fontSize($r('sys.float.Caption_M'))
+          .fontColor($r('sys.color.font_tertiary'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .padding(14)
+    .borderRadius(16)
+    .backgroundColor($r('sys.color.comp_background_primary'))
+  }
+
   build() {
     if (this.embedded) {
       // A tab of the home screen (UI-2): no title bar, a large title, room for the floating tab bar.
       Column({ space: 8 }) {
         Text('Activity')
-          .fontSize(30)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary'))
+          .fontSize(Flags.NEW_LOG ? 28 : 30)
+          .fontWeight(Flags.NEW_LOG ? 800 : FontWeight.Bold)
+          .fontColor(Flags.NEW_LOG ? Palette.text : $r('sys.color.font_primary'))
           .width('100%')
           .padding({ left: 16, right: 16, top: 12 })
         Column() {
@@ -105,7 +170,7 @@ export struct LogView {
         this.content()
       }
       .title('Gatekeeper log')
-      .backgroundColor($r('sys.color.background_secondary'))
+      .backgroundColor(Flags.NEW_LOG ? Palette.bg : $r('sys.color.background_secondary'))
     }
   }
 }
