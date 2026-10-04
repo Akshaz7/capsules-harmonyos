@@ -103,6 +103,11 @@ export function parseMarketList(body: string): MarketPage | null {
 }
 
 /** Does an item match a search text and a category/tag? Case-insensitive, name/description/tags. */
+/** T3-25: "On-device only" sends nothing to the marketplace (same rule as Create's search, PR #16). */
+export function marketplaceSearchAllowed(aiMode: string): boolean {
+  return aiMode !== 'on-device';
+}
+
 export function matchesSearch(item: MarketItem, q: string, tag: string): boolean {
   if (tag.length > 0 && !item.tags.some((t: string) => t.toLowerCase() === tag.toLowerCase())) {
     return false;
@@ -207,6 +212,11 @@ export class MarketplaceClient {
     } finally {
       req?.destroy();
     }
+  }
+
+  /** The shipped examples only, with no network call (on-device-only mode). */
+  examples(q: string, tag: string): MarketPage {
+    return this.offlinePage(q, tag);
   }
 
   private offlinePage(q: string, tag: string): MarketPage {

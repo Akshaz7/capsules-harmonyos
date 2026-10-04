@@ -23,6 +23,10 @@ export struct MarketplaceView {
   /** Shown as a home tab (UI-2) instead of a pushed page. */
   @Param embedded: boolean = false;
   @Require @Param client: MarketplaceClient;
+  /** T3-25: "On-device only" is on, so nothing is sent: the shipped examples and a note. */
+  @Param onDeviceOnly: boolean = false;
+  @Event onOpenSettings: () => void = () => {
+  };
   @Event onInstall: (item: MarketItem) => void = () => {
   };
   @Local q: string = '';
@@ -37,10 +41,38 @@ export struct MarketplaceView {
     this.load(false);
   }
 
+  /** The tab stays alive, so switching AI mode reloads (examples only, or the live list again). */
+  @Monitor('onDeviceOnly')
+  onModeChange(): void {
+    this.cursor = '';
+    this.load(false);
+  }
+
+  @Builder
+  onDeviceNote() {
+    Column({ space: 8 }) {
+      Text("On-device only is on, so the marketplace isn't searched. Switch AI mode to Smart in Settings to browse it.")
+        .fontSize(Flags.NEW_MARKET ? 14 : $r('sys.float.Body_M'))
+        .fontColor(Flags.NEW_MARKET ? Palette.text : $r('sys.color.font_primary'))
+        .width('100%')
+      Button('Open Settings', { buttonStyle: ButtonStyleMode.NORMAL })
+        .height(40)
+        .fontColor(Flags.NEW_MARKET ? Palette.blue : undefined)
+        .backgroundColor(Flags.NEW_MARKET ? Palette.surface : undefined)
+        .onClick(() => this.onOpenSettings())
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .padding(14)
+    .borderRadius(Flags.NEW_MARKET ? 18 : 16)
+    .backgroundColor(Flags.NEW_MARKET ? Palette.tint : $r('sys.color.comp_background_primary'))
+  }
+
   private async load(more: boolean): Promise<void> {
     const mine = ++this.seq;
     this.loading = true;
-    const page: MarketPage = await this.client.search(this.q, this.tag, more ? this.cursor : '');
+    const page: MarketPage = this.onDeviceOnly ? this.client.examples(this.q, this.tag) :
+      await this.client.search(this.q, this.tag, more ? this.cursor : '');
     if (mine !== this.seq) {
       return; // a newer search replaced this one
     }
@@ -120,7 +152,9 @@ export struct MarketplaceView {
       .scrollable(ScrollDirection.Horizontal)
       .scrollBar(BarState.Off)
       .width('100%')
-      if (this.offline) {
+      if (this.onDeviceOnly) {
+        this.onDeviceNote()
+      } else if (this.offline) {
         Text(this.client.configured ? "The marketplace is offline right now. These examples come with the app." :
           'These examples come with the app.')
           .fontSize($r('sys.float.Caption_M'))
@@ -264,7 +298,9 @@ export struct MarketplaceView {
       .scrollable(ScrollDirection.Horizontal)
       .scrollBar(BarState.Off)
       .width('100%')
-      if (this.offline) {
+      if (this.onDeviceOnly) {
+        this.onDeviceNote()
+      } else if (this.offline) {
         Text(this.client.configured ? "The marketplace is offline right now. These examples come with the app." :
           'These examples come with the app.')
           .fontSize(13)

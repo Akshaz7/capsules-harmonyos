@@ -1842,6 +1842,8 @@ struct Index {
     } else if (name === MARKET_PAGE) {
       MarketplaceView({
         client: this.market,
+        onDeviceOnly: this.settings.aiMode === 'on-device',
+        onOpenSettings: () => this.nav.pushPath({ name: SETTINGS_PAGE }),
         onInstall: (item: MarketItem) => this.installFromMarket(item)
       })
     } else if (name === SETTINGS_PAGE) {
@@ -2655,6 +2657,8 @@ struct Index {
           MarketplaceView({
             client: this.market,
             embedded: true,
+            onDeviceOnly: this.settings.aiMode === 'on-device',
+            onOpenSettings: () => this.selectTab(TAB_SETTINGS),
             onInstall: (item: MarketItem) => this.installFromMarket(item)
           })
         }
