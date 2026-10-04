@@ -34,7 +34,7 @@ We started from the HackYeah Hackathon Template: an empty ArkTS project, `AGENTS
 - the gatekeeper, widgets, sharing and triggers
 - the template library
 - the ESP32 wrist companion
-- 320 unit tests and the provider and photo evals
+- 344 unit tests and the provider and photo evals
 
 The commit history shows the progression. AI coding agents were used throughout, and [`AI_WORKFLOW.md`](AI_WORKFLOW.md) logs how.
 
@@ -43,7 +43,7 @@ The commit history shows the progression. AI coding agents were used throughout,
 | Real (seen working) | Partial or not yet |
 | --- | --- |
 | Rules, EU cloud with consent, refusals, English-only gate | On-device model: 9/15 correct in the emulator eval, not yet shown through the main screen; phone speed not measured |
-| v1 capsules (tennis scoreboard, converter, bill split) | Daily triggers fire only while the app is open; template reminders don't show a notification yet |
+| v1 capsules (tennis scoreboard, converter, bill split) | Daily reminders with the app closed: built, not yet checked |
 | Gatekeeper, log, widgets (incl. picker), timer pause/stop | Calendar alerts with the app closed: not seen working |
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
 | Marketplace: browse, install with consent, run (live API, 108 templates listed) | Marketplace publishing: not tested |

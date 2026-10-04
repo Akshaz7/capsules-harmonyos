@@ -73,7 +73,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (320, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
+- **Unit tests (344, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
@@ -87,7 +87,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 | On-device, 15 requests (emulator) | 9/15 correct; 11/15 with the rule parser in front |
 | Photo → capsule, 10 synthetic photos, cloud path only (`scripts/eval-images.mjs`, before OCR was added) | Claude 10/10 valid, 9/10 correct · Mistral 9/10 valid, 5/10 correct · on-device 0/10 (vision blocked) |
 | Photo → capsule, cloud path, Mistral reading options (same 10 photos, host) | `pixtral-12b` reads + `ministral-14b` builds: 8/10 correct (the setup the app uses) · Ministral alone 5/10 · Pixtral for both 7/10 |
-| Photo → capsule on a real phone, same 10 photos, OCR first | 10/10 valid, 6/10 correct, all built on the phone with no internet, 0.35–1 s per photo. The 4 misses are text-converter issues (bill total, workout read as a recipe, no scoreboard converter); a fix is in progress. |
+| Photo → capsule on a real phone, same 10 photos, OCR first | 10/10 valid, 6/10 correct, all built on the phone with no internet, 0.35–1 s per photo. The 4 misses are text-converter issues (bill total, workout read as a recipe, no scoreboard converter); the converters have since been fixed (unit-tested; the photo eval has not been re-run). |
 | On-device speed (emulator, Apple M4 Pro host) | 92–114 tokens/s decode, about 0.3 s to first token, about 380 MB RSS |
 
 Known limitations:
@@ -96,5 +96,5 @@ Known limitations:
 - **EU default trades accuracy for privacy:** Mistral is weaker than Claude on hard logic requests.
 - **The on-device model** handles only simple requests, and got 9 of 15 right in the eval. Phone performance hasn't been measured, and offline use wasn't strictly tested, because emulator airplane mode doesn't cut its network.
 - **Requests are capped at 500 characters**; shared text at 2,000.
-- **Not built:** capsules that vibrate, and the `notify:<text>` action (so template reminders fire without a visible notification). Voice dictation is in the app (offline Core Speech Kit, mic permission; 9/10 synthetic spoken requests within 20% word error on the emulator) but not yet checked on a device. Daily time triggers fire only while the app is open. Motion counting and motion triggers are built (accelerometer while the app is in front) but not yet checked on a phone.
+- **Not built:** capsules that vibrate. Reminders (`notify:<text>` and daily calendar reminders) are built but not yet checked on a device. Voice dictation is in the app (offline Core Speech Kit, mic permission; 9/10 synthetic spoken requests within 20% word error on the emulator) but not yet checked on a device. Daily time triggers fire only while the app is open. Motion counting and motion triggers are built (accelerometer while the app is in front) but not yet checked on a phone.
 - **Model weights** must be pushed separately (debug builds). A store build would need an in-app download.

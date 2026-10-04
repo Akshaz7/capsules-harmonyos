@@ -1,6 +1,6 @@
 # Pitch deck outline (6 slides)
 
-Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim capsules that vibrate, step counting (motion counts shakes, and has no phone check yet), reminders from templates (their `notify` step does nothing yet), alerts firing with the app closed, marketplace publishing, or a Snap button (switched off for now; the photo path itself was checked headless on a phone).
+Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim capsules that vibrate, step counting (motion counts shakes, and has no phone check yet), reminders ringing with the app closed (built, not yet checked), alerts firing with the app closed, marketplace publishing, or a Snap button (switched off for now; the photo path itself was checked headless on a phone).
 
 ## 1. Problem
 
@@ -45,7 +45,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
 - **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **320 unit tests**, plus a provider eval with held-out and refusal sets.
+- **344 unit tests**, plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 

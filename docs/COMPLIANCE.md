@@ -1,6 +1,6 @@
 # Compliance audit
 
-Checked against the official [`hackathon_challenge.md`](https://github.com/onirodeveloper/hackyeah2026-challenge/blob/main/hackathon_challenge.md) first on 2026-10-03; re-checked against the code on 2026-10-04 (main, local, up to `e5974d5`). Owners: **Ash** (team lead), **T1** (coordination, builds, phones), **T2** (docs), **T3** (app UI), **T4** (core), **T5** (Cactus).
+Checked against the official [`hackathon_challenge.md`](https://github.com/onirodeveloper/hackyeah2026-challenge/blob/main/hackathon_challenge.md) first on 2026-10-03; re-checked against the code on 2026-10-04 (main, local, up to `318de85`). Owners: **Ash** (team lead), **T1** (coordination, builds, phones), **T2** (docs), **T3** (app UI), **T4** (core), **T5** (Cactus).
 
 Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing. Still missing: the recorded demo and a final release `.hap`.
 
@@ -44,7 +44,7 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 | Issue | Where | Owner |
 | --- | --- | --- |
 | The UI and the cloud prompt say capsules can use **vibration**, but no capsule action vibrates (the app's own save vibration is not a capsule ability). The motion sensor, battery and weather claims are now backed by code. | `pages/Index.ets` `CAPSULE_ABILITIES`; `core/CapsuleModel.ets` ("Capsules can only use timers and reminders, notifications, vibration …") | **T3/T4**: remove "vibration", or build it |
-| Template reminders (habit, vitamin, medication with a time) fire a daily trigger whose only step is `notify:<text>`, and the runtime ignores `notify`, so no notification appears. | `core/templates/TemplateLibrary.ets` (trigger `do: notify:…`); `renderer/CapsuleRuntime.ets` (`case 'notify'` does nothing) | **T3/T4**: deliver `notify` through the notification adapter, or don't promise reminders |
+| Reminders (`notify:<text>` and daily time triggers ringing with the app closed) are now built (notification adapter, recurring daily Calendar Kit events) but not yet checked on the emulator or a phone. Until Ash's check, say "built", not "works". | `renderer/CapsuleRuntime.ets`, `core/Reminders.ets`, `adapters/NotificationAdapter.ets` | **Ash**: run the reminder check in the README |
 | The schema has `location` and `widget` permissions that nothing uses | `SCHEMA.md` | **Ash** decides (SCHEMA is the contract). The README already says so. |
 | No screenshots | README | **Ash**: `docs/screenshots/` (widget, gatekeeper sheet, Calendar, tennis; dark mode is off while the redesign locks light mode); T2 adds the section |
 | The live marketplace search sends the request text to the marketplace server with no consent notice in **Smart** mode. **Fixed for On-device only:** the search is skipped in that mode, and the Marketplace tab then shows only the shipped examples and sends nothing (both unit-tested) | `core/CapsuleGenerator.ets`, `core/templates/MarketMatch.ets` | **Ash**: a consent notice for Smart mode, if wanted |
@@ -54,7 +54,7 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 | Item | Status | Notes and owner |
 | --- | --- | --- |
 | Tool versions | ✅ | DevEco Studio 6.1.1, SDK API 24 (min API 20), `devecocli` 1.3.4, Node 18+ for the eval |
-| Unit tests | ✅ | 320 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
+| Unit tests | ✅ | 344 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
 | On-device model | ✅ | URL, tag and sha256 in `docs/THIRD_PARTY.md`; `scripts/push-model.sh` |
 | Rebuilding `libcactus_engine.so` | ✅ | `cactus/BUILD.md` and `cactus/build-engine.sh`; a clean rebuild matches the committed `.so` apart from the build ID |
 | Untracked `.cache/` folder | ✅ | Ignored in `.gitignore` |
