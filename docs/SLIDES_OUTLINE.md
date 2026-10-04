@@ -45,7 +45,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
 - **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **297 unit tests**, plus a provider eval with held-out and refusal sets.
+- **303 unit tests**, plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 
@@ -54,7 +54,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 | Capability | Used for |
 | --- | --- |
 | **Cactus ported to HarmonyOS** (Node-API, arm64-v8a) | On-device LLM (LFM2-VL-450M): 92–114 tok/s decode, about 0.3 s to first token, about 380 MB (emulator figures) |
-| **Form Kit** | Home-screen widgets (2x2 and 2x4), synced both ways with the app |
+| **Form Kit** | Home-screen widgets (1x2, 2x2, 2x4 and 4x4), synced both ways with the app |
 | **Core Vision Kit** (`textRecognition`) | Photo → capsule: reads the text on the phone, offline (10/10 valid, 6/10 correct on a real phone) |
 | **Sensor Service Kit** | Shake counting with the accelerometer while a capsule is open (built; phone check pending) |
 | **Basic Services Kit + Network Kit** | Battery reading; live weather from Open-Meteo (checked on the emulator) |
