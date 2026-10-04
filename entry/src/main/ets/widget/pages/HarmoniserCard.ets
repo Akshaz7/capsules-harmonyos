@@ -82,6 +82,15 @@ function listMax(v: CardView): number {
   return sizeOf(v) === 'l' ? 8 : (v.wide ? 4 : 2);
 }
 
+/**
+ * Items the checklist card shows. On 2x2 two 48vp rows fill the card, so when "+N more" is needed too it shows
+ * one row (the line no longer overlaps the second row's tick, T4-28/29).
+ */
+function shownCount(v: CardView, open: number): number {
+  const max = listMax(v);
+  return open > max && sizeOf(v) === 'm' ? max - 1 : max;
+}
+
 /** The main value's font size: ~40fp on 2x2, ~56fp on 2x4, ~96fp on 4x4 (T4-24). */
 function heroSize(v: CardView): number {
   const size = sizeOf(v);
@@ -465,14 +474,15 @@ struct HarmoniserCard {
         .onClick(() => this.onTap())
       } else {
         Flex({ wrap: FlexWrap.Wrap }) {
-          ForEach(openItems(r).slice(0, listMax(v)), (item: CardCheckItem) => {
+          ForEach(openItems(r).slice(0, shownCount(v, openItems(r).length)), (item: CardCheckItem) => {
             CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
           }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}-${item.text}`)
         }
         .width('100%')
         .layoutWeight(1)
-        if (openItems(r).length > listMax(v)) {
-          Text(`+${openItems(r).length - listMax(v)} more`)
+        .clip(true)
+        if (openItems(r).length > shownCount(v, openItems(r).length)) {
+          Text(`+${openItems(r).length - shownCount(v, openItems(r).length)} more`)
             .fontSize(11)
             .fontColor($r('sys.color.font_secondary'))
             .width('100%')

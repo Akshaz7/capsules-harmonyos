@@ -306,6 +306,37 @@ export function editMessage(capsule: Capsule, instruction: string): string {
   return `Current capsule:\n${JSON.stringify(capsule)}\n\nChange: ${instruction}`;
 }
 
+/**
+ * The first list that an edit empties or replaces completely: a v1 list var (or a checklist) that is still there,
+ * had items and keeps none of them. '' when every list keeps at least one item (or was removed on purpose).
+ */
+export function wipedList(before: Capsule, after: Capsule): string {
+  const was: Record<string, StateVar> = before.state ?? {};
+  const is: Record<string, StateVar> = after.state ?? {};
+  for (const n of Object.keys(was)) {
+    const old = was[n].type === 'list' ? listTexts(was[n].initial) : [];
+    if (old.length === 0 || is[n] === undefined) {
+      continue; // removing the whole list on purpose is a different change
+    }
+    const now = is[n].type === 'list' ? listTexts(is[n].initial).map((t: string) => t.toLowerCase()) : [];
+    if (!old.some((t: string) => now.includes(t.toLowerCase()))) {
+      return n;
+    }
+  }
+  for (const c of withId(before).filter((x: CapsuleComponent) => x.type === 'checklist')) {
+    const old = (c as ChecklistComponent).items;
+    const same = withId(after).find((x: CapsuleComponent) => x.type === 'checklist' && idOf(x) === idOf(c));
+    if (same === undefined) {
+      continue;
+    }
+    const now = (same as ChecklistComponent).items.map((t: string) => t.toLowerCase());
+    if (old.length > 0 && !old.some((t: string) => now.includes(t.toLowerCase()))) {
+      return labelOf(c).length > 0 ? labelOf(c) : 'the checklist';
+    }
+  }
+  return '';
+}
+
 /** Validates an edited capsule, puts the original id back, and builds the result. */
 function finish(previous: Capsule, edited: Capsule, origin: CapsuleOrigin): EditResult {
   // Compare like with like: the validator normalises what it returns, so normalise the original too.
@@ -322,6 +353,11 @@ function finish(previous: Capsule, edited: Capsule, origin: CapsuleOrigin): Edit
   const capsule = v.capsule;
   if (JSON.stringify(capsule) === JSON.stringify(before)) {
     return fail(previous, EDIT_NO_CHANGE);
+  }
+  const wiped = wipedList(before, capsule);
+  if (wiped.length > 0) {
+    // A model that rewrote the list from scratch: never offer a change that would lose all its items (T4-29).
+    return fail(previous, `That change would remove every item from ${wiped}, so it was not applied.`);
   }
   return {
     ok: true, capsule: capsule, previous: previous, summary: editSummary(before, capsule),

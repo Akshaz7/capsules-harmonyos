@@ -3,7 +3,7 @@
  * Each rule returns the edited copy, or null when it does not understand the instruction (the caller then
  * asks the cloud). Never mutates its input. The result is not validated here; editCapsule does that.
  */
-import { Capsule, CapsuleComponent, ChecklistComponent, StateVar, TimerComponent } from '../CapsuleTypes';
+import { Capsule, CapsuleComponent, ChecklistComponent, ListComponent, Scalar, StateVar, TimerComponent } from '../CapsuleTypes';
 import { allComponents } from '../CapsuleProgram';
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -220,8 +220,52 @@ export function editChecklist(capsule: Capsule, instruction: string): Capsule | 
   return null;
 }
 
+/**
+ * The same "add X" / "remove X" for a v1 list (a task list or packing list, T4-29): only with exactly one list
+ * component and no checklist. "add" only appends to the list's starting items (the app adds them to the
+ * current list too, see carryValues); "remove" never empties it.
+ */
+export function editTaskList(capsule: Capsule, instruction: string): Capsule | null {
+  const lists = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'list') as ListComponent[];
+  const source = lists.length === 1 ? lists[0].source : '';
+  const v = source.length > 0 ? (capsule.state ?? {})[source] : undefined;
+  if (v === undefined || v.type !== 'list' || checklistsOf(capsule).length > 0) {
+    return null;
+  }
+  const text = instruction.trim().replace(/[.!]+$/, '');
+  const add = text.match(/^(?:please\s+)?(?:add|put)\s+(.+?)(?:\s+(?:to|on|onto|in|into)\s+(?:the\s+|my\s+|this\s+|a\s+)?(?:[a-z]+\s+)?(?:check)?list)?$/i);
+  const remove = text.match(/^(?:please\s+)?(?:remove|delete|drop|take|cross)\s+(.+?)(?:\s+(?:off|from|out of)(?:\s+(?:the|my|this))?(?:\s+[a-z]+)?\s+(?:check)?list|\s+off|\s+out)?$/i);
+  const explicit = /\blist\b/i.test(text);
+  const items: string[] = Array.isArray(v.initial) ? (v.initial as Scalar[]).map((x: Scalar) => `${x}`) : [];
+  const next = copyCapsule(capsule);
+  const target = (next.state as Record<string, StateVar>)[source];
+  if (add !== null) {
+    const wanted = splitItems(add[1]);
+    if (wanted.length === 0 || (!explicit && COMPONENT_WORDS.test(add[1]))) {
+      return null;
+    }
+    const fresh = wanted.filter((i: string) => !items.some((have: string) => have.toLowerCase() === i.toLowerCase()))
+      .map((i: string) => i.charAt(0).toUpperCase() + i.substring(1)); // tasks start with a capital
+    if (fresh.length === 0) {
+      return null;
+    }
+    target.initial = items.concat(fresh);
+    return next;
+  }
+  if (remove !== null) {
+    const gone = splitItems(remove[1]).map((t: string) => t.toLowerCase());
+    const kept = items.filter((i: string) => !gone.includes(i.toLowerCase()));
+    if (kept.length === items.length || kept.length === 0) {
+      return null;
+    }
+    target.initial = kept;
+    return next;
+  }
+  return null;
+}
+
 /** The first rule that understands the instruction, or null (then the cloud is asked). */
 export function ruleEdit(capsule: Capsule, instruction: string): Capsule | null {
-  return editName(capsule, instruction) ?? editChecklist(capsule, instruction) ?? editGoal(capsule, instruction) ??
-    editDuration(capsule, instruction);
+  return editName(capsule, instruction) ?? editChecklist(capsule, instruction) ??
+    editTaskList(capsule, instruction) ?? editGoal(capsule, instruction) ?? editDuration(capsule, instruction);
 }

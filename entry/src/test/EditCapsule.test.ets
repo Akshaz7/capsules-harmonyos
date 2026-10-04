@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium';
-import { Capsule, ChecklistComponent, CounterComponent, TimerComponent } from '../main/ets/core/CapsuleTypes';
+import { Capsule, ChecklistComponent, CounterComponent, StateVar, TimerComponent } from '../main/ets/core/CapsuleTypes';
 import { ChatMessage, ModelProvider, ProviderName } from '../main/ets/core/ModelProvider';
 import { CapsuleState } from '../main/ets/core/WidgetModel';
 import { carryState, carryValues, editCapsuleWith, editSummary, EditResult } from '../main/ets/core/edit/EditCapsule';
@@ -15,6 +15,12 @@ const SCORES: string = '{"schemaVersion":0,"id":"scores","name":"Scores","permis
 const SCORES_SAM: string = '{"schemaVersion":0,"id":"whatever","name":"Scores","permissions":[],"ui":[' +
   '{"type":"counter","id":"ana","label":"Ana","source":"manual"},{"type":"counter","id":"ben","label":"Ben","source":"manual"},' +
   '{"type":"counter","id":"sam","label":"Sam","source":"manual"}]}';
+const PACKING: string = '{"schemaVersion":1,"id":"tasks-weather-live","name":"Kraków Packing List","permissions":' +
+  '["weather"],"state":{"tasks":{"type":"list","initial":["Rain jacket","Umbrella","Warm socks"]},"newTask":' +
+  '{"type":"text","initial":""}},"ui":[{"type":"device","bind":"weather","city":"krakow"},{"type":"display","text":' +
+  '"Tasks to do: {len(tasks)}"},{"type":"list","source":"tasks"},{"type":"input","bind":"newTask","kind":"text",' +
+  '"label":"New task"},{"type":"button","label":"Add","enabledIf":"len(newTask) > 0","do":[{"push":"tasks","value":' +
+  '"newTask"},{"set":"newTask","to":"\'\'"}]}]}';
 const GOAL: string = '{"schemaVersion":1,"id":"water","name":"Water","permissions":[],"state":{' +
   '"glasses":{"type":"number","initial":0},"goal":{"type":"number","initial":8}},"ui":[' +
   '{"type":"display","text":"{glasses} of {goal}"},{"type":"button","label":"Drink","do":[{"set":"glasses","to":"glasses + 1"}]}]}';
@@ -45,6 +51,32 @@ function timerOf(r: EditResult): TimerComponent {
 }
 
 export default function editCapsuleTest() {
+  describe('Editing a Claude-made list on the phone (T4-29)', () => {
+    it('"add buy bread" appends on the phone, no cloud; a cloud edit that wipes the list is refused', 0,
+      async (done: Function) => {
+        const packing = capsuleOf(PACKING);
+        const cloud = new FakeProvider('mistral', []);
+        const r = await editCapsuleWith(packing, 'add buy bread', [cloud], { allowNonEu: true });
+        expect(`${r.ok} ${r.origin} ${cloud.calls.length}`).assertEqual('true rules 0');
+        expect(r.summary.join('|')).assertEqual('Adds to tasks: Buy bread');
+        const tasks = ((r.capsule as Capsule).state as Record<string, StateVar>)['tasks'].initial as string[];
+        expect(tasks.join('|')).assertEqual('Rain jacket|Umbrella|Warm socks|Buy bread');
+        const removed = await editCapsuleWith(packing, 'remove umbrella', [], {});
+        expect(`${removed.ok} ${removed.summary.join('|')}`).assertEqual('true Removes from tasks: Umbrella');
+        // A model that rewrites the list from scratch (what Mistral did): rejected, nothing is offered.
+        const wiped = PACKING.replace('["Rain jacket","Umbrella","Warm socks"]', '[]');
+        const bad = new FakeProvider('mistral', [wiped, wiped]);
+        const w = await editCapsuleWith(packing, 'make it nicer for a city break', [bad], { allowNonEu: true });
+        expect(w.ok).assertFalse();
+        expect(w.error ?? '').assertContain('remove every item from tasks');
+        const other = PACKING.replace('["Rain jacket","Umbrella","Warm socks"]', '["Sandals","Sun hat"]');
+        const swap = await editCapsuleWith(packing, 'make it for summer', [new FakeProvider('mistral', [other])],
+          { allowNonEu: true });
+        expect(swap.ok).assertFalse();
+        done();
+      });
+  });
+
   describe('Editing a task list (T4-28)', () => {
     it('summarises list items in words and keeps finished items gone', 0, () => {
       const tasks = (items: string): Capsule => JSON.parse('{"schemaVersion":1,"id":"t","name":"Tasks","permissions":[],' +
