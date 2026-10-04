@@ -1,8 +1,10 @@
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Freeze, useCurrentFrame} from 'remotion';
+import {Scene5Home} from './Scene5Home';
+import {wordAt} from '../lib/cues';
 import {Bg, FONT, Logo} from '../components/common';
 import {COLORS, S7, SCENES} from '../timeline';
-import {caretOn, lerp, pop, popStyle, slide, typed} from '../lib/motion';
+import {Easing, caretOn, lerp, pop, popStyle, slide, typed} from '../lib/motion';
 
 const F = (abs: number) => abs - SCENES.end.from;
 
@@ -45,16 +47,18 @@ export const Scene7End: React.FC = () => {
     ...S7.taglineDark.split(' ').map((w) => ({w, c: COLORS.text})),
     ...S7.taglineBlue.split(' ').map((w) => ({w, c: COLORS.blue})),
   ];
-  const tagAt = F(S7.taglineAt);
   const built = slide(frame, F(S7.builtAt), 12);
   const lift = slide(frame, F(S7.tryStart) - 10, 14);
   // The home screen shrinks into the glow.
-  const shrink = lerp(frame, [0, 12], [1, 0]);
+  const shrink = lerp(frame, [0, 14], [1, 0], Easing.in(Easing.cubic));
   return (
     <Bg>
       {shrink > 0 && (
-        <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center'}}>
-          <div style={{width: 430, height: 930, borderRadius: 64, background: '#11141C', transform: `translateY(${-400 * (1 - shrink)}px) scale(${shrink})`, opacity: shrink}} />
+        <AbsoluteFill style={{transform: `scale(${0.15 + 0.85 * shrink})`, transformOrigin: '50% 8%', opacity: shrink, filter: `blur(${(1 - shrink) * 12}px)`}}>
+          {/* The rebuilt home screen from scene 5, frozen on its last frame. */}
+          <Freeze frame={SCENES.home.to - SCENES.home.from - 1}>
+            <Scene5Home />
+          </Freeze>
         </AbsoluteFill>
       )}
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', flexDirection: 'column', transform: `translateY(${-110 * lift}px)`}}>
@@ -64,7 +68,7 @@ export const Scene7End: React.FC = () => {
         </div>
         <div style={{display: 'flex', gap: 16, marginTop: 40, fontSize: 56, fontWeight: 800, letterSpacing: -0.8}}>
           {tagWords.map(({w, c}, i) => (
-            <span key={i} style={{color: c, ...popStyle(frame, tagAt + i * 5)}}>
+            <span key={i} style={{color: c, ...popStyle(frame, F(wordAt('s7-tagline', i)) - 2)}}>
               {w}
             </span>
           ))}

@@ -1,8 +1,15 @@
 import React from 'react';
-import {AbsoluteFill, useCurrentFrame} from 'remotion';
+import {AbsoluteFill, Freeze, useCurrentFrame} from 'remotion';
+import {Scene2Pain} from './Scene2Pain';
 import {Bg, FONT, Logo} from '../components/common';
 import {COLORS, S3, SCENES} from '../timeline';
 import {Easing, lerp, pop, popStyle, slide} from '../lib/motion';
+import {wordAt} from '../lib/cues';
+
+// Lines land on their spoken words.
+const LINE1_AT = wordAt('s3-ask', 0);
+const LINE2_AT = wordAt('s3-ask', 5); // "Ask"
+const SUB_AT = wordAt('s3-meet', 2); // "for"
 
 const F = (abs: number) => abs - SCENES.turn.from;
 
@@ -12,7 +19,7 @@ export const Scene3Turn: React.FC = () => {
   // Everything collapses into a blinking cursor, which stretches into the logo.
   const logoAt = F(S3.logoAt);
   const stretch = lerp(frame, [logoAt - 6, logoAt + 4], [0, 1], Easing.out(Easing.cubic));
-  const cursorOn = frame < logoAt - 6 ? Math.floor(frame / 4) % 2 === 0 : true;
+  const cursorOn = frame < S3.pullFrames || frame >= logoAt - 6 || Math.floor((frame - S3.pullFrames) / 4) % 2 === 0;
   const tiles = [0, 3, 6].map((d) => pop(frame, logoAt + 4 + d).p) as [number, number, number];
 
   const logoSize = 180;
@@ -20,10 +27,24 @@ export const Scene3Turn: React.FC = () => {
   const wm = slide(frame, F(S3.wordmarkAt), 12);
   const groupShift = lerp(frame, [F(S3.wordmarkAt), F(S3.wordmarkAt) + 12], [0, -1], Easing.out(Easing.cubic));
   // Lift the lockup when the lines arrive.
-  const lift = slide(frame, F(S3.line1At) - 4, 12);
+  const lift = slide(frame, F(LINE1_AT) - 4, 12);
 
   return (
     <Bg>
+      {/* Scene 2's last frame is pulled into the cursor */}
+      {frame < S3.pullFrames && (
+        <AbsoluteFill
+          style={{
+            transform: `scale(${lerp(frame, [0, S3.pullFrames], [1, 0.01], Easing.in(Easing.cubic))}) rotate(${lerp(frame, [0, S3.pullFrames], [0, -25])}deg)`,
+            filter: `blur(${lerp(frame, [0, S3.pullFrames], [0, 10])}px)`,
+            opacity: lerp(frame, [S3.pullFrames - 2, S3.pullFrames], [1, 0]),
+          }}
+        >
+          <Freeze frame={SCENES.pain.to - SCENES.pain.from - 1}>
+            <Scene2Pain />
+          </Freeze>
+        </AbsoluteFill>
+      )}
       {/* Shockwave as everything is sucked in */}
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center'}}>
         <div
@@ -96,7 +117,7 @@ export const Scene3Turn: React.FC = () => {
                 fontWeight: 600,
                 color: COLORS.secondary,
                 whiteSpace: 'nowrap',
-                ...popStyle(frame, F(S3.subAt)),
+                ...popStyle(frame, F(SUB_AT)),
               }}
             >
               {S3.sub}
@@ -105,8 +126,8 @@ export const Scene3Turn: React.FC = () => {
         </div>
       </AbsoluteFill>
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', paddingTop: 300, gap: 18, flexDirection: 'column'}}>
-        <div style={{fontFamily: FONT, fontSize: 40, fontWeight: 600, color: COLORS.secondary, ...popStyle(frame, F(S3.line1At))}}>{S3.line1}</div>
-        <div style={{fontFamily: FONT, fontSize: 48, fontWeight: 800, color: COLORS.blue, ...popStyle(frame, F(S3.line2At))}}>{S3.line2}</div>
+        <div style={{fontFamily: FONT, fontSize: 40, fontWeight: 600, color: COLORS.secondary, ...popStyle(frame, F(LINE1_AT))}}>{S3.line1}</div>
+        <div style={{fontFamily: FONT, fontSize: 48, fontWeight: 800, color: COLORS.blue, ...popStyle(frame, F(LINE2_AT))}}>{S3.line2}</div>
       </AbsoluteFill>
     </Bg>
   );

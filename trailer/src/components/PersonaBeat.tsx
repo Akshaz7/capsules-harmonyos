@@ -1,6 +1,6 @@
 import React from 'react';
 import {AbsoluteFill, Sequence, useCurrentFrame} from 'remotion';
-import {BoardFit, Center, FONT, Phone, SCREEN_H, SCREEN_W} from './common';
+import {BoardFit, Center, FONT, Logo, Phone, SCREEN_H, SCREEN_W} from './common';
 import {FootageVideo, hasFootage} from './Footage';
 import {BOARDS} from '../boards';
 import {POMODORO_RING} from '../boards/Pomodoro';
@@ -41,46 +41,57 @@ const BAR_TOP = 600;
 
 /** Giant outlined name filling the background. */
 const GiantName: React.FC<{name: string; frame: number}> = ({name, frame}) => {
-  const size = Math.min(330, 1880 / (name.length * 0.72));
-  const drift = lerp(frame, [0, 200], [40, -40]);
+  // Long names wrap onto two lines so they never run under the phone.
+  const lines = name.length > 8 && name.includes(' ') ? name.split(' ') : [name];
+  const longest = Math.max(...lines.map((l) => l.length));
+  const size = Math.min(300, 860 / (longest * 0.74));
+  const drift = lerp(frame, [0, 200], [0, -50]);
   return (
-    <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center', transform: `translateX(${drift}px)`, ...popStyle(frame, 0)}}>
-      <div
-        style={{
-          fontFamily: FONT,
-          fontWeight: 800,
-          fontSize: size,
-          letterSpacing: -4,
-          color: 'transparent',
-          WebkitTextStroke: `3px rgba(47,91,255,0.28)`,
-          whiteSpace: 'nowrap',
-          marginTop: -160,
-        }}
-      >
-        {name}
-      </div>
-    </AbsoluteFill>
+    <div
+      style={{
+        position: 'absolute',
+        left: BAR_LEFT - 20,
+        top: BAR_TOP - 100 - size * 0.98 * lines.length,
+        fontFamily: FONT,
+        fontWeight: 800,
+        fontSize: size,
+        lineHeight: 1,
+        letterSpacing: -4,
+        // Stroke under a background-coloured fill hides the variable font's overlapping contours.
+        color: '#F1F4FB',
+        WebkitTextStroke: '6px rgba(47,91,255,0.35)',
+        paintOrder: 'stroke fill',
+        whiteSpace: 'nowrap',
+        transform: `translateX(${drift}px)`,
+        ...popStyle(frame, 0),
+      }}
+    >
+      {lines.map((l) => (
+        <div key={l}>{l}</div>
+      ))}
+    </div>
   );
 };
 
 const Initials: React.FC<{letters: string[]; frame: number}> = ({letters, frame}) => (
-  <AbsoluteFill style={{justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 60, marginTop: -160}}>
+  <AbsoluteFill style={{flexDirection: 'row', gap: 40, left: BAR_LEFT - 10, top: BAR_TOP - 380}}>
     {letters.map((l, i) => (
       <div
         key={l}
         style={{
-          width: 300,
-          height: 300,
-          borderRadius: 150,
+          width: 220,
+          height: 220,
+          borderRadius: 110,
           border: '3px solid rgba(47,91,255,0.28)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           fontFamily: FONT,
           fontWeight: 800,
-          fontSize: 150,
-          color: 'transparent',
-          WebkitTextStroke: '3px rgba(47,91,255,0.28)',
+          fontSize: 110,
+          color: '#F1F4FB',
+          WebkitTextStroke: '6px rgba(47,91,255,0.35)',
+          paintOrder: 'stroke fill',
           ...popStyle(frame, i * 3),
         }}
       >
@@ -129,9 +140,9 @@ const PromptBar: React.FC<{prompt: string; role?: string; frame: number; t: Retu
             ...barIn,
           }}
         >
-          <div style={{flex: 1, fontFamily: FONT, fontSize: 34, fontWeight: 600, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden'}}>
-            {shown}
-            <span style={{display: 'inline-block', width: 3, height: 40, marginLeft: 3, verticalAlign: 'middle', background: COLORS.blue, opacity: caretOn(frame) ? 1 : 0}} />
+          <div style={{flex: 1, display: 'flex', justifyContent: shown.length > 36 ? 'flex-end' : 'flex-start', fontFamily: FONT, fontSize: 34, fontWeight: 600, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', marginRight: 14}}>
+            <span>{shown}</span>
+            <span style={{display: 'inline-block', flexShrink: 0, alignSelf: 'center', width: 3, height: 40, marginLeft: 3, background: COLORS.blue, opacity: caretOn(frame) ? 1 : 0}} />
           </div>
           <div style={{width: 64, height: 64, borderRadius: 32, background: COLORS.blue, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: `scale(${lerp(frame, [t.sendAt - 3, t.sendAt - 1, t.sendAt], [1, 0.9, 1])})`}}>
             <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -146,7 +157,7 @@ const PromptBar: React.FC<{prompt: string; role?: string; frame: number; t: Retu
           const sx = BAR_LEFT + 36 + wordPos[i];
           const sy = BAR_TOP + 24;
           const tx = PHONE_X - 60;
-          const ty = 520;
+          const ty = 500;
           const d = Math.min(1, Math.max(0, fly * 1.3 - i * 0.06));
           return (
             <div
@@ -183,10 +194,15 @@ const Screen: React.FC<{p: PersonaBeatProps; frame: number; boardAt: number; tap
     const sh = lerp(frame, [boardAt - 12, boardAt], [0, 1]);
     return (
       <AbsoluteFill style={{background: 'linear-gradient(180deg, #DCE5FF 0px, #EEF2FB 200px, #F2F4F9 360px)', padding: 20}}>
-        <div style={{marginTop: 70, height: SCREEN_H - 140, borderRadius: 28, background: 'rgba(255,255,255,0.9)', overflow: 'hidden', position: 'relative'}}>
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} style={{margin: '22px 20px', height: i === 0 ? 40 : 70, borderRadius: 16, background: '#EEF2FF', opacity: Math.min(1, sh * 4 - i)}} />
+        <div style={{display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, fontFamily: FONT, fontSize: 20, fontWeight: 700, color: COLORS.text}}>
+          <Logo size={30} />
+          Harmoniser
+        </div>
+        <div style={{marginTop: 22, height: SCREEN_H - 120, borderRadius: 28, background: 'rgba(255,255,255,0.9)', overflow: 'hidden', position: 'relative'}}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} style={{margin: '22px 20px', height: i === 0 ? 40 : 64, borderRadius: 16, background: '#EEF2FF', opacity: Math.max(0, Math.min(1, sh * 5 - i))}} />
           ))}
+          <div style={{position: 'absolute', top: 0, bottom: 0, width: 140, left: -140 + ((frame * 22) % 600), background: 'linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.9), rgba(255,255,255,0))'}} />
         </div>
       </AbsoluteFill>
     );
@@ -250,8 +266,22 @@ const TrackLanes: React.FC<{frame: number; countAt: number}> = ({frame, countAt}
           <path key={i} d={`M-100 ${700 + i * 70} Q960 ${560 + i * 70} 2020 ${700 + i * 70}`} fill="none" stroke="#FF7A45" strokeOpacity={0.18} strokeWidth={4} strokeDasharray="120 120" strokeDashoffset={shift} />
         ))}
       </svg>
-      <div style={{position: 'absolute', left: 60, top: 40, fontFamily: FONT, fontWeight: 800, fontSize: 380, color: 'rgba(47,91,255,0.09)', letterSpacing: -10, fontVariantNumeric: 'tabular-nums'}}>
-        {v.toFixed(2)}
+      <div style={{position: 'absolute', left: 70, top: 560, display: 'flex', fontFamily: FONT, fontWeight: 800, fontSize: 380, lineHeight: 1, color: 'rgba(255,122,69,0.2)', letterSpacing: -10}}>
+        {/* Rolling digits: each digit scrolls vertically like an odometer. */}
+        {v.toFixed(2).split('').map((ch, i) => {
+          if (ch === '.') return <span key={i}>.</span>;
+          const place = [1, 0, 0.1, 0.01][i];
+          const pos = (v / place) % 10;
+          return (
+            <span key={i} style={{display: 'inline-block', height: 380, overflow: 'hidden', width: 232, position: 'relative'}}>
+              <span style={{position: 'absolute', left: 0, top: -pos * 380}}>
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((d, k) => (
+                  <div key={k} style={{height: 380}}>{d}</div>
+                ))}
+              </span>
+            </span>
+          );
+        })}
       </div>
     </AbsoluteFill>
   );
@@ -262,8 +292,8 @@ const TennisBall: React.FC<{frame: number}> = ({frame}) => {
   const ph = (frame % BEAT) / BEAT; // bounce every beat
   const y = 900 - Math.sin(ph * Math.PI) * 420;
   return (
-    <div style={{position: 'absolute', left: x, top: y, width: 70, height: 70, borderRadius: 35, background: '#D7F04A', boxShadow: 'inset -8px -8px 0 rgba(0,0,0,0.08)', transform: `rotate(${frame * 12}deg)`}}>
-      <svg width={70} height={70} viewBox="0 0 70 70">
+    <div style={{position: 'absolute', left: x, top: y, width: 96, height: 96, borderRadius: 48, background: '#D7F04A', boxShadow: 'inset -8px -8px 0 rgba(0,0,0,0.08)', transform: `rotate(${frame * 12}deg)`}}>
+      <svg width={96} height={96} viewBox="0 0 70 70">
         <path d="M10 18 Q35 35 10 54" fill="none" stroke="#fff" strokeWidth={4} />
         <path d="M60 18 Q35 35 60 54" fill="none" stroke="#fff" strokeWidth={4} />
       </svg>

@@ -149,11 +149,10 @@ export const S2 = {
 // ---------- Scene 3 ----------
 export const S3 = {
   cursorAt: 390,
-  logoAt: 396,
+  pullFrames: 7, // scene 2 is sucked into the cursor
+  logoAt: 401, // cursor stretches into the logo
   wordmarkAt: 412,
-  subAt: 424,
-  line1At: 462,
-  line2At: 490,
+  // the sub line and the two lines below land on their spoken words (src/lib/cues.ts)
   wordmark: 'Harmoniser',
   sub: 'for HarmonyOS',
   line1: "Don't search for an app.",
