@@ -385,5 +385,20 @@ export default function widgetModelTest() {
       const future: PendingCapsule = { capsuleId: 'count-coffees', at: 9000 };
       expect(capsuleForNewWidget(future, 2000, availableExceptGone)).assertEqual(''); // clock went back
     });
+
+    it('a long checklist builds checklist rows on the widget, not the "Tap to open" view (T4-20)', 0, () => {
+      const chicken = capsuleOf('{"schemaVersion":0,"id":"chicken","name":"Chicken and rice","permissions":[],' +
+        '"ui":[{"type":"checklist","id":"steps","items":["Rinse rice","Boil water","Season chicken","Fry chicken",' +
+        '"Cook rice","Chop onions","Serve"]}]}');
+      const v = buildWidgetView(chicken, initialState(chicken), gate([], true, false), NOW, false);
+      expect(`${v.status} ${v.layout} ${v.caption}`).assertEqual('ok checklist 0 / 7 done');
+      expect(v.rows[0].items.length).assertEqual(7);
+      const packing = capsuleOf('{"schemaVersion":0,"id":"pack","name":"Packing list","permissions":[],"ui":[' +
+        '{"type":"text","text":"Clothes"},{"type":"checklist","id":"clothes","items":["Jumper","Socks","Boots","Hat"]},' +
+        '{"type":"text","text":"Documents"},{"type":"checklist","id":"docs","items":["Passport","Wallet","Tickets"]}]}');
+      const pv = buildWidgetView(packing, initialState(packing), gate([], true, false), NOW, true);
+      expect(`${pv.status} ${pv.layout}`).assertEqual('ok rows');
+      expect(pv.rows.filter((r: WidgetRow) => r.kind === 'checklist').length).assertEqual(2);
+    });
   });
 }

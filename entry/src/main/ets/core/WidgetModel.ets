@@ -648,8 +648,8 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
     view = buildLogicView(capsule, state, state.values ?? restoreState(capsule, values ?? {}), gate, wide);
   } else {
     view = baseView('ok', capsule.id, capsule.name, '', wide);
-    capsule.ui.forEach((c: CapsuleComponent, i: number) => {
-      if (c.type === 'button') {
+    allComponents(capsule.ui).forEach((c: CapsuleComponent, i: number) => { // rows flattened
+      if (c.type === 'button' || c.type === 'row') {
         return; // buttons become the start/+ controls on their rows
       }
       if (!permitted(permissionForComponent(c), gate.granted)) {

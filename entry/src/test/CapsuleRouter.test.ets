@@ -35,10 +35,10 @@ export default function capsuleRouterTest() {
       expect(split.reason).assertContain('need typing');
     });
 
-    it('sends capsules with more than 4 components to the app', 0, () => {
+    it('sends capsules with more than 3 timers, counters or checklists to the app', 0, () => {
       const route = routeCapsule(fromRules('4 timers a 1 b 2 c 3 d 4'));
       expect(route.widget).assertFalse();
-      expect(route.reason).assertEqual('App only: 5 components (a widget fits at most 4).');
+      expect(route.reason).assertEqual('App only: 4 timers, counters or checklists (a widget fits at most 3).');
     });
 
     it('sends capsules with number inputs to the app', 0, () => {
@@ -47,12 +47,23 @@ export default function capsuleRouterTest() {
       expect(route.reason).assertContain('number inputs');
     });
 
-    it('allows checklists up to 6 items, not 7', 0, () => {
-      expect(routeCapsule(fromJson('[{"type":"checklist","id":"c","items":["1","2","3","4","5","6"]}]')).widget)
-        .assertTrue();
+    it('fits checklists of any length: the card shows the first items and +N more (T4-20)', 0, () => {
       const seven = routeCapsule(fromJson('[{"type":"checklist","id":"c","items":["1","2","3","4","5","6","7"]}]'));
-      expect(seven.widget).assertFalse();
-      expect(seven.reason).assertContain('7 items');
+      expect(seven.widget).assertTrue();
+      const twelve = '["1","2","3","4","5","6","7","8","9","10","11","12"]';
+      expect(routeCapsule(fromJson(`[{"type":"checklist","id":"c","items":${twelve}}]`)).widget).assertTrue();
+    });
+
+    it('fits a cloud-style packing list: a title, two headings and two checklists (5 components) (T4-20)', 0, () => {
+      const packing = fromJson('[{"type":"text","text":"Flying from Scotland"},{"type":"text","text":"Clothes"},' +
+        '{"type":"checklist","id":"clothes","items":["Jumper","Rain jacket","Socks","Boots"]},' +
+        '{"type":"text","text":"Documents"},{"type":"checklist","id":"docs","items":["Passport","Boarding pass","Wallet"]}]');
+      const route = routeCapsule(packing);
+      expect(route.reason).assertEqual('Widget-suitable: 5 components (text, text, checklist, text, checklist).');
+      expect(route.widget).assertTrue();
+      const tooWordy = fromJson('[{"type":"text","text":"a"},{"type":"text","text":"b"},{"type":"text","text":"c"},' +
+        '{"type":"text","text":"d"},{"type":"checklist","id":"x","items":["1"]}]');
+      expect(routeCapsule(tooWordy).reason).assertEqual('App only: 4 lines of text (a widget fits at most 3).');
     });
 
     it('sends an empty capsule to the app', 0, () => {

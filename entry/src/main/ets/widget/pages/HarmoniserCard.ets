@@ -506,12 +506,20 @@ struct HarmoniserCard {
               .width('100%')
               .maxLines(2)
           } else if (r.kind === 'checklist') {
+            // Several parts share the card: the first unticked items, then "+N more" (open the app for all).
             Flex({ wrap: FlexWrap.Wrap }) {
-              ForEach(r.items, (item: CardCheckItem) => {
-                CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
-              }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
+              ForEach(r.items.filter((i: CardCheckItem) => !i.checked).slice(0, v.wide ? 2 : 1),
+                (item: CardCheckItem) => {
+                  CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
+                }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
             }
             .width('100%')
+            Text(`${r.items.filter((i: CardCheckItem) => i.checked).length}/${r.items.length} done` +
+              (r.items.filter((i: CardCheckItem) => !i.checked).length > (v.wide ? 2 : 1) ?
+                ` · +${r.items.filter((i: CardCheckItem) => !i.checked).length - (v.wide ? 2 : 1)} more` : ''))
+              .fontSize(11)
+              .fontColor($r('sys.color.font_secondary'))
+              .width('100%')
           } else {
             CompactRow({ row: r, accent: v.accent })
           }
