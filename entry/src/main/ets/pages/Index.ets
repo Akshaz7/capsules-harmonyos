@@ -85,7 +85,7 @@ import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
 import { HomeHero } from './HomeHero';
 import { Flags } from '../theme/Flags';
-import { Palette, Radius, Space } from '../theme/Tokens';
+import { Effects, Palette, Radius, Space } from '../theme/Tokens';
 import { storeWidthClass } from '../theme/Breakpoint';
 import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../components';
 import { PromptBar } from '../components/PromptBar';
@@ -2190,49 +2190,86 @@ struct Index {
             .enabled(!this.busy)
         }
         Blank()
-        Button() {
-          Row({ space: 6 }) {
-            if (this.busy) {
-              LoadingProgress()
-                .width(20)
-                .height(20)
-                .color($r('sys.color.font_on_primary'))
+        if (Flags.NEW_POLISH) {
+          this.polishSend()
+        } else {
+          Button() {
+            Row({ space: 6 }) {
+              if (this.busy) {
+                LoadingProgress()
+                  .width(20)
+                  .height(20)
+                  .color($r('sys.color.font_on_primary'))
+              }
+              Text(this.busy ? 'Creating' : 'Create')
+                .fontSize($r('sys.float.Body_M'))
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('sys.color.font_on_primary'))
             }
-            Text(this.busy ? 'Creating' : 'Create')
-              .fontSize($r('sys.float.Body_M'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('sys.color.font_on_primary'))
+            .padding({ left: 18, right: 18 })
+            .height(40)
+            .overlay(this.shimmer(), { align: Alignment.Start })
           }
-          .padding({ left: 18, right: 18 })
-          .height(40)
-          .overlay(this.shimmer(), { align: Alignment.Start })
+          .height(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
+          .clip(true)
+          .backgroundColor(Flags.NEW_CREATE_CLASSIC ? (this.busy || this.request.trim().length > 0 ? Palette.blue : Palette.sendDisabled) :
+            $r('sys.color.brand'))
+          .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: 0.92 })
+          .enabled(!this.busy && this.request.trim().length > 0)
+          .opacity(Flags.NEW_CREATE_CLASSIC || this.busy || this.request.trim().length > 0 ? 1 : 0.4)
+          .onClick(() => {
+            this.create();
+          })
         }
-        .height(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
-        .clip(true)
-        .backgroundColor(Flags.NEW_CREATE_CLASSIC ? (this.busy || this.request.trim().length > 0 ? Palette.blue : Palette.sendDisabled) :
-          $r('sys.color.brand'))
-        .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: 0.92 })
-        .enabled(!this.busy && this.request.trim().length > 0)
-        .opacity(Flags.NEW_CREATE_CLASSIC || this.busy || this.request.trim().length > 0 ? 1 : 0.4)
-        .onClick(() => {
-          this.create();
-        })
       }
       .width('100%')
     }
     .width('100%')
     .padding(16)
-    .borderRadius(Flags.NEW_CREATE_CLASSIC ? 22 : 24)
+    .borderRadius(Flags.NEW_POLISH ? Radius.pillLarge : (Flags.NEW_CREATE_CLASSIC ? 22 : 24))
     // Frosted material over the hero gradient, with a soft shadow; a brand glow while typing.
     // NEW_CREATE_CLASSIC: a white card, 1vp line border (blue while typing), the same soft shadow.
-    .backgroundBlurStyle(Flags.NEW_CREATE_CLASSIC ? BlurStyle.NONE : BlurStyle.COMPONENT_THIN)
-    .backgroundColor(Flags.NEW_CREATE_CLASSIC ? Palette.surface : undefined)
-    .border({ width: Flags.NEW_CREATE_CLASSIC ? (this.inputFocused ? 1.5 : 1) : (this.inputFocused ? 1.5 : 0.5),
+    // NEW_POLISH: the prompt is the hero: a white card, radius 24, hairline border (blue while typing), one shadow.
+    .backgroundBlurStyle(Flags.NEW_CREATE_CLASSIC || Flags.NEW_POLISH ? BlurStyle.NONE : BlurStyle.COMPONENT_THIN)
+    .backgroundColor(Flags.NEW_CREATE_CLASSIC || Flags.NEW_POLISH ? Palette.surface : undefined)
+    .border(Flags.NEW_POLISH ? { width: this.inputFocused ? 1.5 : 1, color: this.inputFocused ? Palette.blue : Palette.hairline } :
+      { width: Flags.NEW_CREATE_CLASSIC ? (this.inputFocused ? 1.5 : 1) : (this.inputFocused ? 1.5 : 0.5),
       color: this.inputFocused ? (Flags.NEW_CREATE_CLASSIC ? Palette.blue : $r('sys.color.brand')) :
         (Flags.NEW_CREATE_CLASSIC ? Palette.line2 : $r('sys.color.comp_divider')) })
-    .shadow(this.inputFocused ? { radius: 28, color: '#335B8CFF', offsetY: 6 } :
-      { radius: 16, color: '#14000000', offsetY: 4 })
+    .shadow(Flags.NEW_POLISH ? Effects.cardShadow : (this.inputFocused ? { radius: 28, color: '#335B8CFF', offsetY: 6 } :
+      { radius: 16, color: '#14000000', offsetY: 4 }))
     .animation({ duration: 220, curve: Curve.EaseOut })
+  }
+
+  /** Polish: Create's send is a 48vp circular gradient button (spinner while building). Same create(). */
+  @Builder
+  polishSend() {
+    Button({ type: ButtonType.Circle }) {
+      if (this.busy) {
+        LoadingProgress()
+          .width(24)
+          .height(24)
+          .color(Palette.surface)
+      } else {
+        SymbolGlyph($r('sys.symbol.arrow_up'))
+          .fontSize(22)
+          .fontWeight(FontWeight.Bold)
+          .fontColor([Palette.surface])
+      }
+    }
+    .width(48)
+    .height(48)
+    .backgroundColor(this.busy || this.request.trim().length > 0 ? Palette.blue : Palette.sendDisabled)
+    .linearGradient(this.busy || this.request.trim().length > 0 ?
+      { angle: 135, colors: [[Palette.blue, 0], [Palette.blueDeep, 1]] } :
+      { angle: 135, colors: [[Color.Transparent, 0], [Color.Transparent, 1]] })
+    .shadow(this.request.trim().length > 0 ? Effects.buttonShadow : { radius: 0, color: Color.Transparent })
+    .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: Effects.pressedScale })
+    .enabled(!this.busy && this.request.trim().length > 0)
+    .accessibilityText(this.busy ? 'Creating' : 'Create')
+    .onClick(() => {
+      this.create();
+    })
   }
 
   /** A light band sweeping across Create while it builds (not with reduce motion). */
