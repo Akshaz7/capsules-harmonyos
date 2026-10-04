@@ -23,6 +23,10 @@ export struct CapsuleFrame {
   /** True on wide windows (theme/Breakpoint): body + side panel, or a centred 560vp body. */
   @Param wide: boolean = false;
   @Param hasSidePanel: boolean = false;
+  /** Polish (NEW_POLISH): full page, edge to edge, back chevron; the app's tab bar stays below it. */
+  @Param fullPage: boolean = false;
+  /** Room left at the bottom for the floating tab bar when full page. */
+  @Param bottomInset: number = 0;
   @Event onClose: () => void = () => {
   };
   @Event onChangeIt: () => void = () => {
@@ -38,6 +42,9 @@ export struct CapsuleFrame {
   @Builder
   titleBar() {
     Row({ space: 12 }) {
+      if (this.fullPage) {
+        IconButton({ icon: $r('sys.symbol.chevron_left'), label: 'Back', soft: true, onTap: () => this.onClose() })
+      }
       IconTile({ icon: this.icon, tileSize: 42, iconSize: 22 })
       Column({ space: 4 }) {
         Text(this.name)
@@ -50,10 +57,12 @@ export struct CapsuleFrame {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
-      IconButton({ icon: $r('sys.symbol.xmark'), label: 'Close', soft: true, onTap: () => this.onClose() })
+      if (!this.fullPage) {
+        IconButton({ icon: $r('sys.symbol.xmark'), label: 'Close', soft: true, onTap: () => this.onClose() })
+      }
     }
     .width('100%')
-    .padding({ top: 12, bottom: 12, left: 14, right: 10 })
+    .padding({ top: 12, bottom: 12, left: this.fullPage ? 8 : 14, right: 10 })
     .border({ width: { bottom: 1 }, color: Palette.line2 })
   }
 
@@ -141,11 +150,12 @@ export struct CapsuleFrame {
       this.footer()
     }
     .layoutWeight(1)
-    .margin({ top: Space.frameTop, left: Space.frameSide, right: Space.frameSide, bottom: Space.frameBottom })
-    .borderRadius(Radius.frame)
-    .backgroundColor(Palette.frameBg)
-    .border({ width: 1, color: Palette.frameBorder })
-    .shadow(Effects.frameShadow)
+    .margin(this.fullPage ? { top: 0, left: 0, right: 0, bottom: this.bottomInset } :
+      { top: Space.frameTop, left: Space.frameSide, right: Space.frameSide, bottom: Space.frameBottom })
+    .borderRadius(this.fullPage ? 0 : Radius.frame)
+    .backgroundColor(this.fullPage ? Color.Transparent : Palette.frameBg)
+    .border(this.fullPage ? { width: 0 } : { width: 1, color: Palette.frameBorder })
+    .shadow(this.fullPage ? { radius: 0, color: Color.Transparent } : Effects.frameShadow)
     .clip(true)
   }
 }

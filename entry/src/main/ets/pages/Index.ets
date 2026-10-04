@@ -110,6 +110,8 @@ interface UndoPoint {
 
 const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
+/** Polish: room under a full-page capsule for the floating tab bar (64 + 12 margin + 8 gap). */
+const POLISH_TAB_INSET = 84;
 const CHOOSE_PAGE = 'chooseCapsule';
 const MARKET_PAGE = 'marketplace';
 const TAB_CREATE = 0;
@@ -2867,6 +2869,24 @@ struct Index {
     .scrollBar(BarState.Off)
   }
 
+  /** Polish: the tab bar under an open capsule. Tapping a tab closes the capsule and shows that tab. */
+  @Builder
+  polishTabBar() {
+    TabBar({
+      items: TAB_ITEMS,
+      selected: this.tab,
+      taps: this.tabTaps,
+      onSelect: (i: number) => {
+        // Tabs mounts again with `index: this.tab`, so set the tab first, then close.
+        this.tabTaps = this.tabTaps.map((n: number, k: number) => k === i ? n + 1 : n);
+        this.tab = i;
+        this.close();
+      }
+    })
+      .margin({ left: 16, right: 16, bottom: 12 })
+      .constraintSize({ maxWidth: this.wide ? 640 : undefined })
+  }
+
   private selectTab(index: number): void {
     this.tabTaps = this.tabTaps.map((n: number, i: number) => i === index ? n + 1 : n);
     this.tab = index;
@@ -3093,6 +3113,8 @@ struct Index {
         originKind: originKindOf(entry.origin),
         wide: this.wide,
         hasSidePanel: this.frameHasSide(),
+        fullPage: Flags.NEW_POLISH,
+        bottomInset: Flags.NEW_POLISH ? POLISH_TAB_INSET : 0,
         onClose: () => this.close(),
         onChangeIt: () => {
           this.changeOpenId = this.changeOpenId === entry.capsule.id ? '' : entry.capsule.id;
@@ -3255,7 +3277,15 @@ struct Index {
             .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
         }
         if (this.openEntry()) {
-          if (Flags.NEW_FRAME) {
+          if (Flags.NEW_FRAME && Flags.NEW_POLISH) {
+            // Polish: the capsule is a full page and the tab bar stays usable below it.
+            Stack({ alignContent: Alignment.Bottom }) {
+              this.frameDetail(this.openEntry() as CapsuleEntry)
+              this.polishTabBar()
+            }
+            .width('100%')
+            .height('100%')
+          } else if (Flags.NEW_FRAME) {
             this.frameDetail(this.openEntry() as CapsuleEntry)
           } else {
             this.detail(this.openEntry() as CapsuleEntry)
