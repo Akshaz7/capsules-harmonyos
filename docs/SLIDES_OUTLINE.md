@@ -14,7 +14,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 ## 2. Solution
 
-**Title:** Harmoniser: tiny apps, made by asking
+**Title:** Harmoniser: tiny apps you don't need to download
 
 - Describe it in one sentence, and get a working native mini-app (a *capsule*) in seconds.
 - A capsule is JSON, not code. A strict schema plus our own expression interpreter means nothing from a model ever executes.

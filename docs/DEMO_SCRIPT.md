@@ -20,7 +20,7 @@ Use English only: Harmoniser rejects other languages by design. Leave out anythi
 
 | # | Time | Device | Do / type | Say (voice-over or caption) |
 | --- | --- | --- | --- | --- |
-| 1 | 0:00 | Emulator | The **Create** tab, with the "Try: …" placeholder typing out examples | "Harmoniser: tiny apps, made by asking. Each one is a *capsule*: JSON, not code." |
+| 1 | 0:00 | Emulator | The **Create** tab, with the "Try: …" placeholder typing out examples | "Harmoniser: tiny apps you don't need to download. Each one is a *capsule*: JSON, not code." |
 | 2 | 0:06 | Emulator | Type `pasta 9 min, sauce 15 min, bread 6 min`, then **Create**. On the consent sheet, keep **Reminders** allowed and tap **Run capsule**. | "Common requests are built instantly by on-device rules. You decide what each capsule may use." |
 | 3 | 0:16 | Emulator | Open the card (**Made by rules**), tap start, then press Home: the blank widget now shows the timers counting down | "It's a native ArkUI app, with real calendar events and a home-screen widget that stays in sync." |
 | 4 | 0:26 | Emulator | Back in the app, type `km to miles converter`, then **Create**. The **Use Mistral AI (EU)?** notice appears; tap **OK**. (Trim the wait.) Then **Run capsule**, and type `10`. | "Logic goes to a cloud model, but EU-only by default and only after you agree. Only the request text is sent. Our own interpreter runs the result; nothing from the model executes." |

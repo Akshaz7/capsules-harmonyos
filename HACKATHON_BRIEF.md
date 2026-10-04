@@ -2,7 +2,7 @@
 
 **Huawei Challenge: Imagine What's Next · HackYeah 2026**
 
-**Pitch:** *Tiny apps, made by asking.* Describe a tiny app in one sentence, and Harmoniser builds it as a safe, native HarmonyOS mini-app that can only use what you allow.
+**Pitch:** *Tiny apps you don't need to download.* Describe a tiny app in one sentence, and Harmoniser builds it as a safe, native HarmonyOS mini-app that can only use what you allow.
 
 ## Problem
 

@@ -1,6 +1,6 @@
 # Harmoniser
 
-*Tiny apps, made by asking.*
+*Tiny apps you don't need to download.*
 
 **Describe a tiny app in one sentence and get it running natively on HarmonyOS. The app is plain JSON, checked against a strict schema, and can only use the device features you allow.**
 
