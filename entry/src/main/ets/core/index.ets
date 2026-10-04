@@ -36,6 +36,7 @@ export { validateCapsule, validateCapsuleObject, parseAction, permissionForActio
 export { parseRequest } from './RuleParser';
 export { AI_NOT_CONFIGURED, NO_RULE_MATCH, CLOUD_OFF, ON_DEVICE_ONLY, GenerateMode, GenerateOptions, needsLogic
 } from './CapsuleGenerator';
+export { BuildStage, BuildStageName, StageListener } from './BuildStage';
 export { isEuProvider, cloudOrigin, ProviderName } from './ModelProvider';
 export { isNotEnglish, UNSUPPORTED_LANGUAGE, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
 export {

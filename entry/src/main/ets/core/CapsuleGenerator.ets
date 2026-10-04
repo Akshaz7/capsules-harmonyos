@@ -21,6 +21,7 @@ import { CapsuleOrigin, GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
 import { parseRequest } from './RuleParser';
 import { CapsuleModel } from './CapsuleModel';
+import { emitStage, StageListener } from './BuildStage';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
 import { TemplateLibrary, TemplateMatch } from './templates/TemplateLibrary';
 import { MarketOptions, matchTemplateAsync } from './templates/MarketMatch';
@@ -62,6 +63,8 @@ export interface GenerateOptions {
    * Still respects mode, allowNonEu and allowCloud: if the cloud may not be used, it fails with the reason.
    */
   cloudOnly?: boolean;
+  /** Reports each stage (cache, rules, template, ..., done/failed) for the build animation. Never throws. */
+  onStage?: StageListener;
 }
 
 /**
@@ -131,6 +134,26 @@ function failure(why: string[]): GenerateResult {
 export async function generateCapsuleWith(request: string, cloud: CapsuleModel[],
   modelUnavailableReason?: string, onDevice?: CapsuleSource | null, options?: GenerateOptions,
   local?: LocalSources): Promise<GenerateResult> {
+  let r: GenerateResult;
+  try {
+    r = await generateRouted(request, cloud, modelUnavailableReason, onDevice, options, local);
+  } catch (e) {
+    emitStage(options?.onStage, 'failed');
+    throw e as Error;
+  }
+  emitStage(options?.onStage, r.ok ? 'done' : 'failed');
+  return r;
+}
+
+async function askCloud(model: CapsuleModel, request: string, onStage?: StageListener): Promise<GenerateResult> {
+  emitStage(onStage, 'cloud', model.providerName);
+  return model.generate(request, undefined, onStage);
+}
+
+async function generateRouted(request: string, cloud: CapsuleModel[],
+  modelUnavailableReason?: string, onDevice?: CapsuleSource | null, options?: GenerateOptions,
+  local?: LocalSources): Promise<GenerateResult> {
+  const onStage = options?.onStage;
   if (request.trim().length === 0) {
     return { ok: false, error: 'The request is empty.', details: [] };
   }
@@ -155,16 +178,21 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
   }
 
   if (options?.cloudOnly === true) {
-    return chosen !== null ? chosen.generate(request) : { ok: false, error: cloudWhy, details: [] };
+    return chosen !== null ? askCloud(chosen, request, onStage) : { ok: false, error: cloudWhy, details: [] };
   }
 
+  if (local?.cache !== undefined) {
+    emitStage(onStage, 'cache');
+  }
   const cached = local?.cache !== undefined ? local.cache.get(request) : null;
   if (cached !== null) {
     return { ok: true, capsule: cached.capsule, origin: cached.origin as CapsuleOrigin, details: [] };
   }
 
+  emitStage(onStage, 'rules');
   const fromRules = parseRequest(request);
   if (fromRules !== null) {
+    emitStage(onStage, 'validating');
     const v = validateCapsule(JSON.stringify(fromRules));
     if (v.ok) {
       return { ok: true, capsule: v.capsule, origin: 'rules', details: [] };
@@ -175,6 +203,12 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
   // A built-in template or a marketplace capsule that explains the whole request, without a model.
   // On-device only: the marketplace is a network call, so bundled templates are searched alone.
   const market: MarketOptions | undefined = mode === 'on-device-only' ? undefined : local?.market;
+  if (local?.library !== undefined) {
+    emitStage(onStage, 'template');
+    if (market !== undefined) {
+      emitStage(onStage, 'marketplace'); // searched together with the templates
+    }
+  }
   let template: TemplateMatch | null = local?.library !== undefined ?
     await matchTemplateAsync(local.library, request, market) : null;
   if (template !== null) {
@@ -199,7 +233,7 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
 
   let cloudResult: GenerateResult | null = null;
   if (chosen !== null && logic) {
-    cloudResult = await chosen.generate(request);
+    cloudResult = await askCloud(chosen, request, onStage);
     if (cloudResult.ok || cloudResult.failure !== undefined) {
       return cloudResult; // a refusal (nonsense, unsupported) must not become a weaker on-device capsule
     }
@@ -207,8 +241,12 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
 
   let onDeviceError = '';
   if (onDevice !== undefined && onDevice !== null) {
+    emitStage(onStage, 'on-device');
     const local = await onDevice.generate(request);
     // Re-check here so the "always validated" promise holds whatever source is plugged in.
+    if (local.ok) {
+      emitStage(onStage, 'validating');
+    }
     const checked = local.ok && local.capsule !== undefined ? validateCapsule(JSON.stringify(local.capsule)) : null;
     if (checked !== null && checked.ok) {
       return { ok: true, capsule: checked.capsule, origin: 'on-device', details: [] };
@@ -220,7 +258,7 @@ export async function generateCapsuleWith(request: string, cloud: CapsuleModel[]
     return cloudResult; // the cloud already tried and failed; on-device could not help either
   }
   if (chosen !== null) {
-    return chosen.generate(request);
+    return askCloud(chosen, request, onStage);
   }
   return failure([onDeviceError, cloudWhy]);
 }

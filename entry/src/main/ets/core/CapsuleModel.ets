@@ -2,6 +2,7 @@
  * Asks a model for a capsule. Sends the request plus the schema, and ALWAYS runs the
  * validator on the reply. If the first reply is invalid, retries once with the errors.
  */
+import { emitStage, StageListener } from './BuildStage';
 import { Capsule, GenerateResult } from './CapsuleTypes';
 import { validateCapsule } from './CapsuleValidator';
 import { ChatMessage, cloudOrigin, isEuProvider, ModelProvider, ProviderName } from './ModelProvider';
@@ -301,7 +302,7 @@ export class CapsuleModel {
    * Sends only the request text (with fixed prompts, and the model's own plan and capsule) to the
    * provider: no capsules from the device, state, device data or settings.
    */
-  async generate(request: string, maxLength?: number): Promise<GenerateResult> {
+  async generate(request: string, maxLength?: number, onStage?: StageListener): Promise<GenerateResult> {
     const req = request.trim();
     const limit = maxLength ?? MAX_REQUEST_LENGTH;
     if (req.length === 0) {
@@ -332,6 +333,9 @@ export class CapsuleModel {
     const messages: ChatMessage[] = [{ role: 'user', content: first }];
     let lastErrors: string[] = [];
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        emitStage(onStage, 'retrying');
+      }
       let reply: string;
       try {
         reply = await this.provider.complete(SYSTEM_PROMPT, messages);
@@ -343,6 +347,7 @@ export class CapsuleModel {
       if (refusal !== null) {
         return notAnApp(refusal);
       }
+      emitStage(onStage, 'validating');
       const result = validateCapsule(extractJson(reply));
       if (result.ok) {
         messages.push({ role: 'assistant', content: reply });
