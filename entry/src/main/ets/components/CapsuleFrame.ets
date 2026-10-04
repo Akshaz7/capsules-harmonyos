@@ -32,6 +32,8 @@ export struct CapsuleFrame {
   @BuilderParam body: () => void = nothing;
   @BuilderParam sidePanel: () => void = nothing;
   @BuilderParam addToHome: () => void = nothing;
+  /** T3-31: "Change it…" opens its card at the top of the body, so the body scrolls there. */
+  private scroller: Scroller = new Scroller();
 
   @Builder
   titleBar() {
@@ -76,7 +78,11 @@ export struct CapsuleFrame {
         .backgroundColor(Palette.card)
         .border({ width: 1, color: Palette.inputBorder })
         .accessibilityText('Change it')
-        .onClick(() => this.onChangeIt())
+        .onClick(() => {
+          this.onChangeIt();
+          // The card opens at the top of the body: bring it into view even when scrolled to Share/Remove.
+          this.scroller.scrollEdge(Edge.Top);
+        })
         IconButton({ icon: $r('sys.symbol.share'), label: 'Share', onTap: () => this.onShare() })
       }
       .width('100%')
@@ -92,7 +98,7 @@ export struct CapsuleFrame {
       this.titleBar()
       if (this.wide && this.hasSidePanel) {
         Row({ space: Space.block }) {
-          Scroll() {
+          Scroll(this.scroller) {
             Column({ space: Space.block }) {
               this.body()
             }
@@ -113,7 +119,7 @@ export struct CapsuleFrame {
         .layoutWeight(1)
         .width('100%')
       } else {
-        Scroll() {
+        Scroll(this.scroller) {
           Column({ space: Space.block }) {
             this.body()
           }

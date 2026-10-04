@@ -8,6 +8,8 @@ export const CHANGE_FAILED = "Couldn't make that change.";
  * "Change it…" on a capsule page (T3-16): type a change, see what it would do, then Apply or Cancel.
  * Nothing changes until Apply. "Undo last change" brings back the version before the last Apply.
  */
+const CHANGE_INPUT_ID: string = 'change-it-input';
+
 @ComponentV2
 export struct ChangeCard {
   @Param busy: boolean = false;
@@ -29,6 +31,32 @@ export struct ChangeCard {
   @Event onLimits: () => void = () => {
   };
   @Local text: string = '';
+  /** T3-31: focus the field when the user opened the card from "Change it…" (not when it shows a result). */
+  @Param autoFocus: boolean = false;
+
+  aboutToAppear(): void {
+    if (this.autoFocus) {
+      this.focusField();
+    }
+  }
+
+  @Monitor('autoFocus')
+  onAutoFocus(): void {
+    if (this.autoFocus) {
+      this.focusField();
+    }
+  }
+
+  private focusField(): void {
+    // After the card is on screen (and the body has scrolled to it).
+    setTimeout(() => {
+      try {
+        this.getUIContext().getFocusController().requestFocus(CHANGE_INPUT_ID);
+      } catch (e) {
+        // not focusable yet (busy) or already gone: the user can tap the field
+      }
+    }, 250);
+  }
 
   private submit(): void {
     const t = this.text.trim();
@@ -101,6 +129,7 @@ export struct ChangeCard {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
         TextInput({ text: this.text, placeholder: 'Change it…' })
+          .id(CHANGE_INPUT_ID)
           .layoutWeight(1)
           .enterKeyType(EnterKeyType.Done)
           .enabled(!this.busy)

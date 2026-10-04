@@ -1814,6 +1814,7 @@ struct Index {
       issue: this.changeId === entry.capsule.id ? this.changeIssue : '',
       issueText: this.changeId === entry.capsule.id ? this.changeIssueText : '',
       canUndo: this.undoIds.includes(entry.capsule.id),
+      autoFocus: this.changeOpenId === entry.capsule.id,
       onSubmit: (text: string) => this.proposeChange(entry, text),
       onApply: () => this.confirmChange(),
       onCancel: () => this.resetChange(entry.capsule.id),
