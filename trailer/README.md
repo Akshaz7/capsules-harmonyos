@@ -72,6 +72,18 @@ take scripts in `scripts/takes/` open the right screen and do the taps with
 `hdc`/`uitest`. The screen must be awake and unlocked, and the emulator window
 must not be covered by a locked login screen, or the capture is black.
 
+When the Mac screen cannot be used (locked, lid closed, emulator covered), take
+the same shots straight from the device instead:
+
+```sh
+scripts/capture-states.sh judge scripts/takes/judge.sh
+```
+
+That pulls real frames over hdc between the taps (`hold <seconds>` in a take
+script) — about 7 fps, so motion is stop-motion rather than smooth. The
+`capture-emulator.sh` window recorder and this fallback share the same take
+scripts: with the window recorder `hold` is just a pause.
+
 Stills (for any screen that does not need motion) come from the device itself:
 
 ```sh
