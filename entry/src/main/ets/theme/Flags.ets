@@ -6,7 +6,7 @@ export class Flags {
   static readonly NEW_THEME: boolean = true;
   static readonly NEW_SHELL: boolean = true;
   static readonly NEW_FRAME: boolean = true;
-  static readonly NEW_PATTERNS: boolean = false; // off until each pattern passes its emulator check (Ash)
+  static readonly NEW_PATTERNS: boolean = true; // only FINISHED_PATTERNS (emulator-passed, T6-11) use it; the rest stay classic
   static readonly NEW_CREATE: boolean = false;
   static readonly NEW_PROGRESS: boolean = true;
   static readonly NEW_CONSENT: boolean = true;
