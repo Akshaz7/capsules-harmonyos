@@ -165,13 +165,14 @@ export struct SharingBar {
   build() {
     if (this.compact) {
       Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.square_and_arrow_down'))
+        // Redesign: the scan-QR glyph (the tap still offers "From file" or "Scan QR code").
+        SymbolGlyph(Flags.NEW_SHELL ? $r('sys.symbol.viewfinder_square') : $r('sys.symbol.square_and_arrow_down'))
           .fontSize(22)
-          .fontColor([$r('sys.color.icon_primary')])
+          .fontColor([Flags.NEW_SHELL ? Palette.text : $r('sys.color.icon_primary')])
       }
-      .width(40)
-      .height(40)
-      .backgroundColor($r('sys.color.comp_background_tertiary'))
+      .width(Flags.NEW_SHELL ? 44 : 40)
+      .height(Flags.NEW_SHELL ? 44 : 40)
+      .backgroundColor(Flags.NEW_SHELL ? Palette.white72 : $r('sys.color.comp_background_tertiary'))
       .enabled(!this.busy)
       .accessibilityText('Import a capsule')
       .onClick(() => {

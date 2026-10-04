@@ -287,6 +287,8 @@ struct Index {
   private tabsController: TabsController = new TabsController();
   /** Redesign: true on wide windows (600vp and up); also stored in AppStorage by theme/Breakpoint. */
   @Local wide: boolean = false;
+  /** Height of the Create tab, to place the heading about 40% down the screen. */
+  @Local createHeight: number = 0;
   /** Redesign frame: the "Change it…" card shows after the footer pill is tapped (or while it has news). */
   @Local changeOpenId: string = '';
   /** UI-1: the placeholder as typed so far (types and erases the examples). */
@@ -2292,6 +2294,10 @@ struct Index {
               .margin({ right: 16 })
           }
           .width('100%')
+          // Brand, then the big question about 40% down, then the prompt bar (host bar is about 56vp).
+          Column()
+            .width('100%')
+            .height(Math.max(8, this.createHeight * 0.4 - 56 - 28))
           Column({ space: 4 }) {
             Text('What do you need?')
               .fontSize(24)
@@ -2313,8 +2319,10 @@ struct Index {
               })
             }
             this.createNotices()
-            RecentRow({ tiles: this.recentTiles(), onOpen: (id: string) => this.open(id) })
-            if (this.request.trim().length === 0) {
+            if (Flags.CREATE_RECENT) {
+              RecentRow({ tiles: this.recentTiles(), onOpen: (id: string) => this.open(id) })
+            }
+            if (Flags.CREATE_SUGGESTIONS && this.request.trim().length === 0) {
               SuggestionChips({ suggestions: this.suggestions(), onPick: (text: string) => {
                 this.request = text;
               } })
@@ -2359,6 +2367,9 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+    .onAreaChange((o: Area, n: Area) => {
+      this.createHeight = n.height as number;
+    })
   }
 
   private recentTiles(): RecentTile[] {
@@ -2989,6 +3000,8 @@ struct Index {
             .height(360)
             .linearGradient({ direction: GradientDirection.Bottom, colors: [[Palette.gradientTop, 0], [Palette.bg, 1]] })
             .hitTestBehavior(HitTestMode.None)
+            // Background layer only: runs under the status bar; content stays in the safe area.
+            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
         }
         if (this.openEntry()) {
           if (Flags.NEW_FRAME) {
@@ -3024,7 +3037,7 @@ struct Index {
       })
     }
     .hideTitleBar(true)
-    .backgroundColor($r('sys.color.background_secondary'))
+    .backgroundColor(Flags.NEW_THEME ? Palette.bg : $r('sys.color.background_secondary'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .mode(NavigationMode.Stack)
     .navDestination(this.pageMap)
