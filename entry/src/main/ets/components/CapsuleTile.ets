@@ -15,7 +15,7 @@ export struct CapsuleTile {
   @Param value: string = '';
   @Param originText: string = '';
   @Param originKind: OriginKind = 'phone';
-  /** True when the capsule fits a home-screen widget ("Add to home screen"), else "In app". */
+  /** True when the capsule fits a home-screen widget ("Add to home screen"); else no hint (T4-19). */
   @Param widget: boolean = false;
   @Event onOpen: () => void = () => {
   };
@@ -41,16 +41,16 @@ export struct CapsuleTile {
       }
       Blank()
       OriginChip({ text: this.originText, kind: this.originKind })
-      Row({ space: 4 }) {
-        if (this.widget) {
+      if (this.widget) {
+        Row({ space: 4 }) {
           SymbolGlyph($r('sys.symbol.square_grid_2x2'))
             .fontSize(13)
             .fontColor([Palette.chipText])
+          Text('Add to home screen')
+            .fontSize(13)
+            .fontWeight(500)
+            .fontColor(Palette.chipText)
         }
-        Text(this.widget ? 'Add to home screen' : 'In app')
-          .fontSize(13)
-          .fontWeight(500)
-          .fontColor(this.widget ? Palette.chipText : Palette.text2)
       }
     }
     .alignItems(HorizontalAlign.Start)

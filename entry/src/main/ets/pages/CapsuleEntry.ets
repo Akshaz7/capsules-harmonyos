@@ -101,7 +101,11 @@ export function capsuleIcon(capsule: Capsule): Resource {
   return $r('sys.symbol.doc_text');
 }
 
-/** Short, friendly version of the router's decision. */
+/** Short, friendly version of the router's decision; '' when there is nothing to say (T4-19: almost every
+ * capsule fits a widget now, so "Opens in the app" is gone). */
 export function routeHeadline(route: CapsuleRoute): string {
-  return route.widget ? 'Simple enough for a widget' : 'Opens in the app';
+  if (!route.widget) {
+    return '';
+  }
+  return route.condensed === true ? 'Widget shows the main values' : 'Simple enough for a widget';
 }

@@ -2315,10 +2315,6 @@ struct Index {
             .fontSize($r('sys.float.Caption_M'))
             .fontColor($r('sys.color.brand'))
         }
-      } else {
-        Text('In app')
-          .fontSize($r('sys.float.Caption_M'))
-          .fontColor($r('sys.color.font_tertiary'))
       }
     }
     .alignItems(HorizontalAlign.Start)
@@ -2889,7 +2885,7 @@ struct Index {
       .borderRadius(20)
       .backgroundColor($r('sys.color.comp_background_primary'))
       .border({ width: 1, color: $r('sys.color.brand'), style: BorderStyle.Dashed })
-    } else {
+    } else if (routeHeadline(entry.route).length > 0) {
       Text(routeHeadline(entry.route))
         .fontSize($r('sys.float.Caption_M'))
         .fontColor($r('sys.color.font_tertiary'))
