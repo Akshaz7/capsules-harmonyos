@@ -141,20 +141,28 @@ export function savePending(ctx: common.Context, pending: PendingCapsule): void 
   }
 }
 
-/** Reads and clears the pending capsule (it is used once). */
-export function takePending(ctx: common.Context): PendingCapsule | null {
+/**
+ * Reads the pending capsule WITHOUT clearing it: the system's add-widget page creates preview forms (2x2,
+ * 2x4) before the real widget, and every one of them must show the capsule. It is cleared by clearPending
+ * once a widget shows it, or expires (PENDING_TTL_MS).
+ */
+export function peekPending(ctx: common.Context): PendingCapsule | null {
+  try {
+    const raw = fresh(ctx, WIDGETS).getSync(PENDING_KEY, '') as string;
+    return raw.length > 0 ? JSON.parse(raw) as PendingCapsule : null;
+  } catch (e) {
+    hilog.error(DOMAIN, TAG, 'peekPending failed: %{public}s', errorText(e));
+    return null;
+  }
+}
+
+export function clearPending(ctx: common.Context): void {
   try {
     const prefs = fresh(ctx, WIDGETS);
-    const raw = prefs.getSync(PENDING_KEY, '') as string;
-    if (raw.length === 0) {
-      return null;
-    }
     prefs.deleteSync(PENDING_KEY);
     prefs.flushSync();
-    return JSON.parse(raw) as PendingCapsule;
   } catch (e) {
-    hilog.error(DOMAIN, TAG, 'takePending failed: %{public}s', errorText(e));
-    return null;
+    hilog.error(DOMAIN, TAG, 'clearPending failed: %{public}s', errorText(e));
   }
 }
 
