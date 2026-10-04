@@ -116,6 +116,8 @@ export class Space {
   static readonly touch: number = 44;
   /** The page gradient's height. */
   static readonly gradient: number = 360;
+  /** T3-35: bottom padding on scrolling pages: floating tab bar (64 high + 12 margin) + 16. */
+  static readonly tabClear: number = 92;
 }
 
 export class Effects {

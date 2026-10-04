@@ -83,7 +83,7 @@ import { DevicePanel } from './DevicePanel';
 import { ChangeCard } from './ChangeCard';
 import { HomeHero } from './HomeHero';
 import { Flags } from '../theme/Flags';
-import { Palette, Radius } from '../theme/Tokens';
+import { Palette, Radius, Space } from '../theme/Tokens';
 import { storeWidthClass } from '../theme/Breakpoint';
 import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../components';
 import { PromptBar } from '../components/PromptBar';
@@ -111,7 +111,7 @@ interface UndoPoint {
 const LOG_PAGE = 'log';
 const SETTINGS_PAGE = 'settings';
 /** Polish: room under a full-page capsule for the floating tab bar (64 + 12 margin + 8 gap). */
-const POLISH_TAB_INSET = 84;
+const POLISH_TAB_INSET = Space.tabClear; // T3-35: tab bar + 16
 const CHOOSE_PAGE = 'chooseCapsule';
 const MARKET_PAGE = 'marketplace';
 const TAB_CREATE = 0;
@@ -2532,7 +2532,7 @@ struct Index {
           this.recentSection()
         }
       }
-      .padding({ left: 16, right: 16, top: 8, bottom: 120 }) // room for the floating tab bar
+      .padding({ left: 16, right: 16, top: 8, bottom: Flags.NEW_POLISH ? Space.tabClear : 120 }) // room for the floating tab bar
       .width('100%')
       .constraintSize({ maxWidth: Flags.NEW_WIDE && this.wide ? 640 : undefined })
     }
@@ -2801,7 +2801,7 @@ struct Index {
           .layoutDirection(GridDirection.Row)
         }
       }
-      .padding({ left: 16, right: 16, top: 12, bottom: 120 })
+      .padding({ left: 16, right: 16, top: 12, bottom: Flags.NEW_POLISH ? Space.tabClear : 120 })
       .width('100%')
     }
     .width('100%')
@@ -2863,7 +2863,7 @@ struct Index {
           .layoutDirection(GridDirection.Row)
         }
       }
-      .padding({ left: 16, right: 16, top: 16, bottom: 120 })
+      .padding({ left: 16, right: 16, top: 16, bottom: Flags.NEW_POLISH ? Space.tabClear : 120 })
       .width('100%')
       .constraintSize({ maxWidth: this.wide ? 960 : undefined })
     }

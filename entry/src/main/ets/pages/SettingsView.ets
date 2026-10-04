@@ -2,7 +2,7 @@ import { AiMode, AppSettings } from './AppSettings';
 import { limitsText } from './CreateText';
 import { IconTile } from '../components';
 import { Flags } from '../theme/Flags';
-import { Palette } from '../theme/Tokens';
+import { Palette, Space } from '../theme/Tokens';
 
 // Redesign (NEW_SETTINGS): canvas tokens when on, the old system styling when off. Same rows, same handlers.
 const NEW_LOOK: boolean = Flags.NEW_SETTINGS;
@@ -227,7 +227,7 @@ export struct SettingsView {
             Column() {
               this.content()
             }
-            .padding({ bottom: 120 })
+            .padding({ bottom: Flags.NEW_POLISH ? Space.tabClear : 120 })
           }
           .layoutWeight(1)
           .width('100%')
