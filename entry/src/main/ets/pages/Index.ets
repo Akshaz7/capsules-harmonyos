@@ -1859,6 +1859,7 @@ struct Index {
           ConsentView({
             capsule: this.pending,
             origin: this.pendingOrigin,
+            originKind: originKindOf(this.pendingOriginRaw),
             builtFrom: this.pendingBuiltFrom,
             canBuildFresh: this.pendingBuiltFrom.length > 0 && this.settings.aiMode === 'smart' && this.cloudUsable(),
             onBuildFresh: () => this.buildFresh(),
@@ -2928,7 +2929,9 @@ struct Index {
       .bindSheet(this.showSheet || this.cityPickerId.length > 0, this.sheetBody(), {
         height: this.cityPickerId.length > 0 ? 520 : SheetSize.FIT_CONTENT,
         dragBar: true,
-        backgroundColor: $r('sys.color.background_secondary'),
+        // Still the one sheet binding on this node (never add a second); only its look changes.
+        backgroundColor: Flags.NEW_CONSENT ? Palette.surface : $r('sys.color.background_secondary'),
+        radius: Flags.NEW_CONSENT ? { topLeft: 28, topRight: 28 } : undefined,
         onDisappear: () => {
           this.cityPickerId = '';
           if (this.pending) {
