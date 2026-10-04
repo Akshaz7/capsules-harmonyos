@@ -1,7 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, spring, useCurrentFrame} from 'remotion';
 import {Bg, FONT, PHONE_H, PHONE_W, Phone, SCREEN_INSET} from '../components/common';
-import {AppIcon, HomeGrid, ICON, ICONS, Wallpaper, iconIndex, iconPos} from '../components/Home';
+import {AppIcon, Dock, HomeGrid, ICON, ICONS, PageDots, StatusBar, Wallpaper, iconIndex, iconPos} from '../components/Home';
 import {BEAT, FPS, S1, SCENES} from '../timeline';
 import {Easing, lerp, slide} from '../lib/motion';
 
@@ -21,62 +21,24 @@ const GROUPS = [
   {at: S1.packingAt, until: S1.onceAt, names: [S1.packingIcon], spots: [[460, 520]], side: 1},
 ];
 
-// Big type strings, each flipping in at its cue.
-const TYPE = [
-  {at: S1.timersAt, text: S1.bigType.timers},
-  {at: S1.tipsAt, text: S1.bigType.tips},
-  {at: S1.packingAt, text: S1.bigType.packing},
-  {at: S1.onceAt, text: S1.bigType.once},
+// One clean caption line, top-left, that swaps at each cue.
+const CAPTIONS = [
+  {at: S1.timersAt, text: S1.captions.timers},
+  {at: S1.tipsAt, text: S1.captions.tips},
+  {at: S1.packingAt, text: S1.captions.packing},
+  {at: S1.onceAt, text: S1.captions.once},
 ];
-const CELLS = Math.max(...TYPE.map((t) => t.text.length));
-const pad = (s: string) => {
-  const left = Math.floor((CELLS - s.length) / 2);
-  return ' '.repeat(left) + s + ' '.repeat(CELLS - s.length - left);
-};
 
-/** Split-flap board behind the phone: each cell flips from the previous string to the next. */
-const SplitFlap: React.FC<{frame: number}> = ({frame}) => {
-  const size = 160;
-  const idx = TYPE.reduce((a, t, i) => (frame >= F(t.at) ? i : a), -1);
+const Caption: React.FC<{frame: number}> = ({frame}) => {
+  const idx = CAPTIONS.reduce((a, t, i) => (frame >= F(t.at) ? i : a), -1);
   if (idx < 0) return null;
-  const cur = pad(TYPE[idx].text);
-  const prev = idx > 0 ? pad(TYPE[idx - 1].text) : ' '.repeat(CELLS);
-  const at = F(TYPE[idx].at);
+  const c = CAPTIONS[idx];
+  const p = slide(frame, F(c.at), 10);
   return (
-    <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', perspective: 1200}}>
-      <div style={{display: 'flex', gap: 6}}>
-        {cur.split('').map((ch, i) => {
-          const start = at + i * 0.8;
-          const p = lerp(frame, [start, start + 6], [0, 1], Easing.inOut(Easing.quad));
-          // First half: old character folds away (0 → 90°). Second half: new one folds in (−90° → 0).
-          const angle = p < 0.5 ? p * 180 : -90 + (p - 0.5) * 180;
-          const c = p < 0.5 ? prev[i] : ch;
-          return (
-            <div
-              key={i}
-              style={{
-                width: size * 0.62,
-                height: size * 1.2,
-                borderRadius: 14,
-                background: c === ' ' ? 'rgba(234,238,248,0.5)' : '#EEF2FB',
-                boxShadow: 'inset 0 -2px 0 rgba(27,34,54,0.04)',
-                backgroundImage: 'linear-gradient(180deg, transparent 49.5%, rgba(255,255,255,0.9) 49.5%, rgba(255,255,255,0.9) 50.5%, transparent 50.5%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontFamily: FONT,
-                fontWeight: 800,
-                fontSize: size,
-                color: '#B4C2EA',
-                transform: `rotateX(${angle}deg)`,
-              }}
-            >
-              {c === ' ' ? ' ' : c}
-            </div>
-          );
-        })}
-      </div>
-    </AbsoluteFill>
+    <div style={{position: 'absolute', left: 120, top: 96, opacity: p}}>
+      <div style={{width: 64, height: 6, borderRadius: 3, background: '#2F5BFF', marginBottom: 18, transform: `scaleX(${p})`, transformOrigin: 'left'}} />
+      <div style={{fontFamily: FONT, fontWeight: 800, fontSize: 68, letterSpacing: -2, color: '#1B2236'}}>{c.text}</div>
+    </div>
   );
 };
 
@@ -114,12 +76,15 @@ export const Scene1Problem: React.FC = () => {
 
   return (
     <Bg white>
-      <SplitFlap frame={frame} />
+      <Caption frame={frame} />
       <AbsoluteFill style={{transform: `scale(${cam * thump})`, transformOrigin: '960px 531px'}}>
         <div style={{position: 'absolute', left: PHONE_X, top: PHONE_Y}}>
           <Phone>
             <Wallpaper />
             <HomeGrid state={gridState} drain={drain} />
+            <StatusBar />
+            <PageDots />
+            <Dock />
           </Phone>
         </div>
         {/* Lifted icons float out of the phone in 3D */}

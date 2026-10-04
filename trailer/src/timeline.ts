@@ -8,18 +8,19 @@ export const DURATION = 1950;
 export const BEAT = 15;
 
 export const SCENES = {
-  problem: {from: 0, to: 240},
-  pain: {from: 240, to: 390},
-  turn: {from: 390, to: 540},
-  people: {from: 540, to: 1410},
-  home: {from: 1410, to: 1560},
-  native: {from: 1560, to: 1740},
-  end: {from: 1740, to: 1950},
+  problem: {from: 0, to: 210},
+  pain: {from: 210, to: 345},
+  turn: {from: 345, to: 495},
+  people: {from: 495, to: 1005},
+  options: {from: 1005, to: 1425},
+  home: {from: 1425, to: 1545},
+  native: {from: 1545, to: 1725},
+  end: {from: 1725, to: 1950},
 } as const;
 export type SceneKey = keyof typeof SCENES;
 
 // Music is muted here (absolute frames).
-export const SILENT_BEAT = {from: 375, to: 390};
+export const SILENT_BEAT = {from: 330, to: 345};
 // Music ducks to this level under voice, with fades of this many frames.
 export const DUCK_LEVEL = 0.25;
 export const DUCK_FADE = 6;
@@ -41,36 +42,39 @@ export type VoLine = {
 };
 
 export const VO: VoLine[] = [
-  {id: 's1-phone', scene: 'problem', at: 6, end: 44, text: 'This is your phone.'},
-  {id: 's1-timers', scene: 'problem', at: 44, end: 86, text: 'Three timer apps.'},
-  {id: 's1-tips', scene: 'problem', at: 86, end: 132, text: 'Two tip calculators.'},
-  {id: 's1-packing', scene: 'problem', at: 132, end: 192, text: 'A packing app from one trip.'},
-  {id: 's1-once', scene: 'problem', at: 192, end: 240, text: 'All opened once.'},
+  {id: 's1-phone', scene: 'problem', at: 4, end: 46, text: 'This is your phone.'},
+  {id: 's1-timers', scene: 'problem', at: 50, end: 86, text: 'Three timers.'},
+  {id: 's1-tips', scene: 'problem', at: 90, end: 126, text: 'Two tip apps.'},
+  {id: 's1-packing', scene: 'problem', at: 130, end: 166, text: 'One packing app.'},
+  {id: 's1-once', scene: 'problem', at: 170, end: 206, text: 'Opened once.'},
 
-  {id: 's2-download', scene: 'pain', at: 242, end: 310, text: 'Every little job means another download.'},
-  {id: 's2-account', scene: 'pain', at: 310, end: 346, text: 'Another account.'},
-  {id: 's2-ad', scene: 'pain', at: 346, end: 385, text: 'Another ad.'},
+  {id: 's2-download', scene: 'pain', at: 213, end: 269, text: 'Every job needs its own app.'},
+  {id: 's2-account', scene: 'pain', at: 273, end: 307, text: 'Another account.'},
+  {id: 's2-ad', scene: 'pain', at: 310, end: 344, text: 'Another ad.'},
 
-  {id: 's3-meet', scene: 'turn', at: 390, end: 452, text: 'Meet Harmoniser, for HarmonyOS.', tts: 'Meet Harmoniser, for Harmony O S.'},
-  {id: 's3-ask', scene: 'turn', at: 452, end: 540, text: "Don't search for an app. Ask for one."},
+  {id: 's3-meet', scene: 'turn', at: 348, end: 424, text: 'Meet Harmoniser, for HarmonyOS.', tts: 'Meet Harmoniser, for Harmony O S.'},
+  {id: 's3-ask', scene: 'turn', at: 424, end: 490, text: "Don't search for an app. Ask."},
 
-  {id: 'p-emma', scene: 'people', at: 546, end: 660, text: "Emma's got a geography test tomorrow."},
-  {id: 'p-judge', scene: 'people', at: 666, end: 870, text: "A judge tried to break it with this. It planned the day around Kraków's forecast.", tts: "A judge tried to break it with this. It planned the day around Krah-koof's forecast."},
-  {id: 'p-tyler', scene: 'people', at: 876, end: 990, text: "Tyler's running a 10K. He only thinks in miles.", tts: "Tyler's running a ten K. He only thinks in miles."},
-  {id: 'p-friends', scene: 'people', at: 996, end: 1110, text: 'Four friends. One bill. Zero arguments.'},
-  {id: 'p-olivia', scene: 'people', at: 1114, end: 1200, text: 'Olivia works in fifty-minute sprints.'},
-  {id: 'p-rose', scene: 'people', at: 1204, end: 1320, text: "Grandma Rose promised eight glasses. She's getting there."},
-  {id: 'p-mike', scene: 'people', at: 1324, end: 1410, text: "Mike says he won. Now there's proof."},
+  {id: 'p-emma', scene: 'people', at: 499, end: 559, text: 'Emma has a geography test.'},
+  {id: 'p-judge', scene: 'people', at: 579, end: 715, text: "A judge tried to break it. It built the day around Kraków's forecast.", tts: "A judge tried to break it. It built the day around Krah-koof's forecast."},
+  {id: 'p-tyler', scene: 'people', at: 749, end: 813, text: 'Tyler runs a 10K. In miles.', tts: 'Tyler runs a ten K. In miles.'},
+  {id: 'p-rose', scene: 'people', at: 839, end: 899, text: 'Grandma Rose: six of eight.'},
+  {id: 'p-mike', scene: 'people', at: 929, end: 989, text: "Mike won. Here's the proof."},
 
-  {id: 's5-pin', scene: 'home', at: 1418, end: 1560, text: 'Seven apps. Pin the ones you actually use.'},
+  {id: 'o-phone', scene: 'options', at: 1009, end: 1075, text: 'Built on the phone. No account.'},
+  {id: 'o-ai', scene: 'options', at: 1114, end: 1184, text: 'Bigger jobs use EU cloud AI.'},
+  {id: 'o-market', scene: 'options', at: 1219, end: 1285, text: 'Start from the marketplace.'},
+  {id: 'o-share', scene: 'options', at: 1324, end: 1390, text: 'Share any capsule with a link.'},
 
-  {id: 's6-native', scene: 'native', at: 1562, end: 1622, text: 'Built natively for HarmonyOS.', tts: 'Built natively for Harmony O S.'},
-  {id: 's6-tap', scene: 'native', at: 1622, end: 1666, text: 'Tap them right there.'},
-  {id: 's6-calendar', scene: 'native', at: 1666, end: 1740, text: 'Timers land in your calendar.'},
+  {id: 's5-pin', scene: 'home', at: 1429, end: 1499, text: 'Pin the ones you actually use.'},
 
-  {id: 's7-name', scene: 'end', at: 1748, end: 1782, text: 'Harmoniser.'},
-  {id: 's7-tagline', scene: 'end', at: 1782, end: 1858, text: "Tiny apps you don't need to download."},
-  {id: 's7-built', scene: 'end', at: 1858, end: 1950, text: 'Built for HarmonyOS.', tts: 'Built for Harmony O S.'},
+  {id: 's6-native', scene: 'native', at: 1548, end: 1616, text: 'Built natively for HarmonyOS.', tts: 'Built natively for Harmony O S.'},
+  {id: 's6-tap', scene: 'native', at: 1620, end: 1672, text: 'Tap them right there.'},
+  {id: 's6-calendar', scene: 'native', at: 1676, end: 1726, text: 'Timers land in your calendar.'},
+
+  {id: 's7-name', scene: 'end', at: 1728, end: 1762, text: 'Harmoniser.'},
+  {id: 's7-tagline', scene: 'end', at: 1766, end: 1846, text: "Tiny apps you don't need to download."},
+  {id: 's7-built', scene: 'end', at: 1850, end: 1912, text: 'Built for HarmonyOS.', tts: 'Built for Harmony O S.'},
 ];
 
 export const vo = (id: string): VoLine => {
@@ -80,9 +84,10 @@ export const vo = (id: string): VoLine => {
 };
 
 export const VOICE = {
-  defaultVoiceId: 'nPczCjzI2devNBz1zQrb',
-  model: 'eleven_multilingual_v2',
-  settings: {stability: 0.45, similarity_boost: 0.8, style: 0.3, use_speaker_boost: true},
+  // Liam, "Energetic, Social Media Creator": light and snappy, serious but keen.
+  defaultVoiceId: 'TX3LPaxmHKxFdv7VOQHJ',
+  model: 'eleven_turbo_v2_5',
+  settings: {stability: 0.4, similarity_boost: 0.75, style: 0.45, use_speaker_boost: true, speed: 1.05},
   maxSpeed: 1.1,
 };
 
@@ -130,13 +135,13 @@ export const S1 = {
   timerIcons: ['Timer', 'Timer+', 'Focus Timer'],
   tipIcons: ['Tip', 'Tip Pro'],
   packingIcon: 'Packing',
-  bigType: {timers: '3 timer apps', tips: '2 tip calculators', packing: '1 packing app', once: 'Opened once.'},
+  captions: {timers: 'Three timers.', tips: 'Two tip apps.', packing: 'One packing app.', once: 'Opened once.'},
   tag: 'Opened once.',
 };
 
 // ---------- Scene 2 ----------
 export const S2 = {
-  storeTapAt: 248,
+  storeTapAt: 215,
   getLabel: 'Get',
   accountAt: vo('s2-account').at,
   accountTitle: 'Create account',
@@ -148,10 +153,10 @@ export const S2 = {
 
 // ---------- Scene 3 ----------
 export const S3 = {
-  cursorAt: 390,
+  cursorAt: 345,
   pullFrames: 7, // scene 2 is sucked into the cursor
-  logoAt: 401, // cursor stretches into the logo
-  wordmarkAt: 412,
+  logoAt: 356, // cursor stretches into the logo
+  wordmarkAt: 367,
   // the sub line and the two lines below land on their spoken words (src/lib/cues.ts)
   wordmark: 'Harmoniser',
   sub: 'for HarmonyOS',
@@ -163,7 +168,8 @@ export const S3 = {
 export type BoardKey = 'quiz' | 'converter' | 'split' | 'pomodoro' | 'water' | 'tennis';
 export type FootageKey =
   | 'judge' | 'emma' | 'tyler' | 'friends' | 'olivia' | 'rose' | 'mike'
-  | 'widget-pin' | 'widget-tap' | 'calendar';
+  | 'widget-pin' | 'widget-tap' | 'calendar'
+  | 'options-phone' | 'options-ai' | 'options-market' | 'options-share';
 export type Moment = 'quiz' | 'krakow' | 'track' | 'toast' | 'dive' | 'water' | 'tennis';
 
 export type Persona = {
@@ -182,23 +188,39 @@ export type Persona = {
 };
 
 export const PERSONAS: Persona[] = [
-  {id: 'emma', name: 'EMMA', role: 'student', prompt: 'quiz me on capital cities', from: 540, durationInFrames: 120, footage: 'emma', board: 'quiz', moment: 'quiz', transitionIn: 'cut', voId: 'p-emma'},
-  {id: 'judge', name: 'A JUDGE', role: 'trying to break it', prompt: 'create a to-do list using the weather in Kraków', from: 660, durationInFrames: 210, footage: 'judge', moment: 'krakow', transitionIn: 'whip', voId: 'p-judge'},
-  {id: 'tyler', name: 'TYLER', role: 'runner', prompt: 'km to miles converter', from: 870, durationInFrames: 120, footage: 'tyler', board: 'converter', moment: 'track', transitionIn: 'whip', voId: 'p-tyler'},
-  {id: 'friends', name: '', initials: ['A', 'B', 'C', 'D'], prompt: 'split 120 between 4', from: 990, durationInFrames: 120, footage: 'friends', board: 'split', moment: 'toast', transitionIn: 'whip', voId: 'p-friends'},
-  {id: 'olivia', name: 'OLIVIA', role: 'designer', prompt: 'pomodoro 50/10', from: 1110, durationInFrames: 90, footage: 'olivia', board: 'pomodoro', moment: 'dive', transitionIn: 'cut', voId: 'p-olivia'},
-  {id: 'rose', name: 'GRANDMA ROSE', prompt: 'water 8 glasses', from: 1200, durationInFrames: 120, footage: 'rose', board: 'water', moment: 'water', transitionIn: 'cut', voId: 'p-rose'},
-  {id: 'mike', name: 'MIKE', role: 'tennis player', prompt: 'tennis score, me vs Sam', from: 1320, durationInFrames: 90, footage: 'mike', board: 'tennis', moment: 'tennis', transitionIn: 'cut', voId: 'p-mike'},
+  {id: 'emma', name: 'EMMA', role: 'student', prompt: 'quiz me on capital cities', from: 495, durationInFrames: 80, footage: 'emma', board: 'quiz', moment: 'quiz', transitionIn: 'cut', voId: 'p-emma'},
+  {id: 'judge', name: 'A JUDGE', role: 'trying to break it', prompt: 'make me a task list and the weather for Kraków', from: 575, durationInFrames: 170, footage: 'judge', moment: 'krakow', transitionIn: 'whip', voId: 'p-judge'},
+  {id: 'tyler', name: 'TYLER', role: 'runner', prompt: 'km to miles converter', from: 745, durationInFrames: 90, footage: 'tyler', board: 'converter', moment: 'track', transitionIn: 'whip', voId: 'p-tyler'},
+  {id: 'rose', name: 'GRANDMA ROSE', prompt: 'water 8 glasses', from: 835, durationInFrames: 90, footage: 'rose', board: 'water', moment: 'water', transitionIn: 'cut', voId: 'p-rose'},
+  {id: 'mike', name: 'MIKE', role: 'tennis player', prompt: 'tennis score, me vs Sam', from: 925, durationInFrames: 80, footage: 'mike', board: 'tennis', moment: 'tennis', transitionIn: 'cut', voId: 'p-mike'},
+];
+
+// ---------- Options (real app footage) ----------
+export type OptionsBeat = {
+  id: string;
+  from: number;
+  durationInFrames: number;
+  footage: FootageKey;
+  voId: string;
+  caption: string;
+  sub: string;
+};
+
+export const OPTIONS: OptionsBeat[] = [
+  {id: 'phone', from: 1005, durationInFrames: 105, footage: 'options-phone', voId: 'o-phone', caption: 'Built on the phone', sub: 'No account. No internet.'},
+  {id: 'ai', from: 1110, durationInFrames: 105, footage: 'options-ai', voId: 'o-ai', caption: 'Cloud AI, EU-first', sub: 'Only when you allow it.'},
+  {id: 'market', from: 1215, durationInFrames: 105, footage: 'options-market', voId: 'o-market', caption: 'The marketplace', sub: 'Install with consent.'},
+  {id: 'share', from: 1320, durationInFrames: 105, footage: 'options-share', voId: 'o-share', caption: 'Share a capsule', sub: 'Link or QR code.'},
 ];
 
 // Beat layout inside a PersonaBeat, as fractions/frames of the beat.
 export const BEAT_LAYOUT = {
   typeStart: 4,
-  typingShort: 24, // prompts up to SHORT_PROMPT chars
-  typingLong: 36,
+  typingShort: 14, // prompts up to SHORT_PROMPT chars
+  typingLong: 22,
   shortPrompt: 24,
-  sendHold: 4, // frames after typing before send
-  flyFrames: 12, // tiles fly into the phone
+  sendHold: 2, // frames after typing before send
+  flyFrames: 8, // tiles fly into the phone
   // tap happens this many frames after the board appears
   tapDelay: 14,
 };
@@ -216,9 +238,9 @@ export const BOARD_STRINGS = {
 
 // ---------- Scene 5 ----------
 export const S5 = {
-  dropStart: 1425, // old icons drop off one row per beat from here
-  widgetLand: [1466, 1472, 1488, 1494], // each widget folds down and snaps in (thunk)
-  floodAt: 1500,
+  dropStart: 1437, // old icons drop off one row per beat from here
+  widgetLand: [1469, 1475, 1491, 1497], // each widget folds down and snaps in (thunk)
+  floodAt: 1509,
   widgets: [
     {kind: 'checklist', title: 'Checklist', caption: '0 / 3 done'},
     {kind: 'timer', title: 'Pomodoro', caption: '50:00'},
@@ -239,17 +261,17 @@ export const S6 = {
 
 // ---------- Scene 7 ----------
 export const S7 = {
-  shrinkTo: 1752,
-  logoAt: 1752,
+  shrinkTo: 1728,
+  logoAt: 1728,
   taglineAt: vo('s7-tagline').at,
   taglineDark: 'Tiny apps',
   taglineBlue: "you don't need to download",
   builtAt: vo('s7-built').at,
   built: 'Built for HarmonyOS',
-  tryStart: 1838,
-  trySlot: 37, // each 'Try:' line types for 36 frames, one char at a time
+  tryStart: 1852,
+  trySlot: 32, // each 'Try:' line types out one char at a time
   tries: ['Try: tennis scoreboard me vs Sam', 'Try: km to miles converter', 'Try: split dinner 120 between 4'],
-  urlsAt: 1880,
+  urlsAt: 1898,
   urls: ['github.com/Akshaz7/capsules-harmonyos', 'harmoniser-web.vercel.app'],
   disclaimer: 'Some screens are design previews.',
 };

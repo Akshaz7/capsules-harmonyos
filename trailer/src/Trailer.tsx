@@ -9,12 +9,14 @@ import {Scene4People} from './scenes/Scene4People';
 import {Scene5Home} from './scenes/Scene5Home';
 import {Scene6Native} from './scenes/Scene6Native';
 import {Scene7End} from './scenes/Scene7End';
+import {SceneOptions} from './scenes/SceneOptions';
 
 const SCENE_COMPONENTS: [keyof typeof SCENES, React.FC][] = [
   ['problem', Scene1Problem],
   ['pain', Scene2Pain],
   ['turn', Scene3Turn],
   ['people', Scene4People],
+  ['options', SceneOptions],
   ['home', Scene5Home],
   ['native', Scene6Native],
   ['end', Scene7End],

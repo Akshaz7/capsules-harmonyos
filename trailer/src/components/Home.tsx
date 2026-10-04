@@ -116,3 +116,96 @@ export const Wallpaper: React.FC<{tint?: number}> = ({tint = 1}) => (
     }}
   />
 );
+
+/** In-screen status bar (time, signal, battery). Drawn, not a real OS. */
+export const StatusBar: React.FC<{time?: string}> = ({time = '9:41'}) => (
+  <div
+    style={{
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 46,
+      padding: '0 28px',
+      boxSizing: 'border-box',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      fontFamily: FONT,
+      fontSize: 15,
+      fontWeight: 700,
+      color: '#1B2236',
+    }}
+  >
+    <span>{time}</span>
+    <div style={{display: 'flex', alignItems: 'center', gap: 7}}>
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="none">
+        {[0, 1, 2, 3].map((i) => (
+          <rect key={i} x={i * 4.4} y={9 - i * 3} width="3" height={3 + i * 3} rx="1" fill="#1B2236" />
+        ))}
+      </svg>
+      <svg width="26" height="13" viewBox="0 0 26 13" fill="none">
+        <rect x="0.5" y="0.5" width="21" height="12" rx="3.5" stroke="#1B2236" strokeOpacity="0.5" />
+        <rect x="2.5" y="2.5" width="15" height="8" rx="2" fill="#1B2236" />
+        <path d="M23 4.5v4a2 2 0 0 0 0-4z" fill="#1B2236" fillOpacity="0.5" />
+      </svg>
+    </div>
+  </div>
+);
+
+const DOCK = [
+  {glyph: 'chat', color: '#3B82F6'},
+  {glyph: 'map-pin', color: '#10B981'},
+  {glyph: 'camera', color: '#EC4899'},
+  {glyph: 'music-note', color: '#8B5CF6'},
+];
+
+/** Frosted dock with four generic icons, like a real phone home screen. */
+export const Dock: React.FC = () => (
+  <div
+    style={{
+      position: 'absolute',
+      left: 26,
+      right: 26,
+      bottom: 28,
+      height: 98,
+      borderRadius: 34,
+      background: 'rgba(255,255,255,0.38)',
+      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.5), 0 10px 26px rgba(27,34,54,0.10)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      padding: '0 22px',
+      boxSizing: 'border-box',
+    }}
+  >
+    {DOCK.map((d) => (
+      <div
+        key={d.glyph}
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: 17,
+          background: d.color,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 4px 10px rgba(27,34,54,0.18)',
+        }}
+      >
+        <div style={{transform: 'scale(0.86)', display: 'flex'}}>
+          <Glyph type={d.glyph} />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+/** Page dots above the dock. */
+export const PageDots: React.FC<{active?: number; count?: number}> = ({active = 0, count = 3}) => (
+  <div style={{position: 'absolute', left: 0, right: 0, bottom: 140, display: 'flex', justifyContent: 'center', gap: 8}}>
+    {Array.from({length: count}).map((_, i) => (
+      <div key={i} style={{width: 8, height: 8, borderRadius: 4, background: i === active ? '#1B2236' : 'rgba(27,34,54,0.25)'}} />
+    ))}
+  </div>
+);

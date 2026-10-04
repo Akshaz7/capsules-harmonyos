@@ -24,9 +24,10 @@ npm run preview   # half-scale render → out/preview.mp4 (fast timing check)
 | A voice line or when it plays | `VO` in `src/timeline.ts`. The `text` field is what's shown on screen. `tts` is the respelled version sent to the voice (for example "Krah-koof" for Kraków). |
 | Scene lengths | `SCENES` in `src/timeline.ts` |
 | A persona (name, prompt, length, board) | `PERSONAS` in `src/timeline.ts` |
+| The options beats (phone AI, cloud AI, marketplace, sharing) | `OPTIONS` in `src/timeline.ts` and `src/scenes/SceneOptions.tsx` |
 | Strings inside the app screens | `BOARD_STRINGS` in `src/timeline.ts` |
 | Colours | `COLORS` in `src/timeline.ts` |
-| How a scene looks or moves | `src/scenes/Scene1Problem.tsx` … `Scene7End.tsx` |
+| How a scene looks or moves | `src/scenes/Scene1Problem.tsx` … `SceneOptions.tsx` … `Scene7End.tsx` |
 | The persona beat (typing bar, flying words, moments) | `src/components/PersonaBeat.tsx` |
 | The app screens shown in the phone | `src/boards/*.tsx`. These are ported from the design boards in `boards/*.dc.html`. |
 | Logo | `Logo` in `src/components/common.tsx`. It's the official mark; a copy is in `assets/harmoniser-mark.svg`. |
@@ -45,13 +46,47 @@ Put screen recordings in `public/footage/` with these exact names. The next `npm
 |---|---|---|
 | `judge.mp4` | Judge beat (Kraków to-do list) | Grey "Real recording needed" card |
 | `widget-pin.mp4`, `widget-tap.mp4`, `calendar.mp4` | Scene 6 (native) | Grey "Real recording needed" card |
-| `emma.mp4`, `tyler.mp4`, `friends.mp4`, `olivia.mp4`, `rose.mp4`, `mike.mp4` | Persona beats (optional) | The design board for that persona |
+| `options-phone.mp4`, `options-ai.mp4`, `options-market.mp4`, `options-share.mp4` | Options section (on the phone / cloud AI / marketplace / sharing) | Grey "Real recording needed" card |
+| `emma.mp4`, `tyler.mp4`, `rose.mp4`, `mike.mp4` | Persona beats (optional) | The design board for that persona |
 
 Recordings are muted, cropped and scaled to fill the phone screen.
 
+### Capturing real footage on the emulator
+
+The footage comes from the DevEco emulator running the `redesign-70f67d4` build
+(`com.hackyeah.capsules`), captured through the emulator window on this Mac:
+
+```sh
+# 1. install the build (unsigned builds install straight onto the emulator)
+hdc uninstall com.hackyeah.capsules
+hdc install -r redesign-70f67d4.hap
+
+# 2. record one take; the drive script runs the taps while recording
+scripts/capture-emulator.sh judge 14 scripts/takes/judge.sh
+```
+
+`capture-emulator.sh` brings the emulator window to the front, records it with
+`screencapture -v`, crops the phone display out of the window (no bezel, no
+toolbar), conforms it to 30 fps and writes `public/footage/<name>.mp4`. The
+take scripts in `scripts/takes/` open the right screen and do the taps with
+`hdc`/`uitest`. The screen must be awake and unlocked, and the emulator window
+must not be covered by a locked login screen, or the capture is black.
+
+Stills (for any screen that does not need motion) come from the device itself:
+
+```sh
+hdc shell snapshot_display -f /data/local/tmp/shot.jpeg && hdc file recv /data/local/tmp/shot.jpeg shot.jpeg
+```
+
+App state for the takes: install fresh, create the capsules off camera
+(`pomodoro 50/10`, `make me a task list and the weather for Kraków`), allow the
+calendar and notification system prompts, and push a `config.local.json` with
+`marketplace.baseUrl` and a Mistral key so the AI status line and the
+marketplace are the real thing.
+
 ## Audio
 
-- **Voice-over:** ElevenLabs, voice Brian. The clips are committed in `public/audio/vo/`, so you only need a key if you change a line.
+- **Voice-over:** ElevenLabs, voice Liam (energetic, snappy; `VOICE` in `src/timeline.ts` sets the voice, model, speed and style). The clips are committed in `public/audio/vo/`, so you only need a key if you change a line.
 - **Sound effects:** ElevenLabs. They're committed in `public/audio/sfx/`.
 - **Music:** `public/audio/music.mp3`. It's a stand-in track from `scripts/synth-music.mjs` (`node scripts/synth-music.mjs` rebuilds it), because the ElevenLabs Music API needs a paid plan. To use any other track, drop an mp3 at that path. It should be 65 s long, and the drop should land at 13.0 s.
 
@@ -85,6 +120,7 @@ trailer/
   src/lib/                motion presets, beat timing, word cues
   src/generated/          written by scripts (audio and footage manifests, ArkTS excerpt)
   scripts/                gen-audio, synth-music, footage-manifest
+  scripts/takes/          one hdc/uitest drive script per screen recording
   public/audio/           voice, sound effects, music
   public/footage/         put recordings here
   boards/                 original HTML design boards
