@@ -13,7 +13,10 @@ export interface RecentTile {
   originKind: OriginKind;
 }
 
-/** "Recent" 15/700 and a horizontal row of 148x120 tiles; tap opens the capsule. Nothing when empty. */
+/** Fixed so every Recent tile matches (T3-27): icon, a 2-line name, and a chip of up to 2 lines. */
+export const RECENT_TILE_HEIGHT: number = 156;
+
+/** "Recent" 15/700 and a horizontal row of 148-wide tiles, all one height; tap opens the capsule. */
 @ComponentV2
 export struct RecentRow {
   @Param tiles: RecentTile[] = [];
@@ -38,13 +41,16 @@ export struct RecentRow {
                   .fontWeight(700)
                   .fontColor(Palette.text)
                   .maxLines(2)
+                  .lineHeight(20)
+                  .constraintSize({ minHeight: 40 }) // line 2 reserved: every tile the same height
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                 Blank()
                 OriginChip({ text: t.originText, kind: t.originKind })
               }
               .alignItems(HorizontalAlign.Start)
               .width(148)
-              .constraintSize({ minHeight: 120 })
+              .height(RECENT_TILE_HEIGHT)
+              .clip(true)
               .padding(12)
               .borderRadius(20)
               .backgroundColor(Palette.surface)
