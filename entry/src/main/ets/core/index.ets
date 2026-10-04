@@ -50,8 +50,8 @@ export {
 export { OnDeviceStatus } from './providers/CactusProvider';
 export { initTemplates, matchTemplate, matchTemplateAsync, getTemplateLibrary, getRequestCache, TEMPLATE_BADGE,
   TEMPLATE_ORIGIN } from './templates';
-export { VoiceInput, VOICE_LANGUAGE, VOICE_NOTHING_HEARD, VOICE_PERMISSION, VOICE_UNAVAILABLE
-} from './providers/SpeechInput';
+export { cleanTranscript, MIC_OFF, VoiceInput, VOICE_LANGUAGE, VOICE_NOTHING_HEARD, VOICE_PERMISSION,
+  VOICE_UNAVAILABLE, voiceErrorMessage } from './providers/SpeechInput';
 export { IMAGE_NOT_READABLE, IMAGE_NOT_UNDERSTOOD, IMAGE_TOO_LARGE, IMAGE_UNSUPPORTED, MAX_IMAGE_BYTES
 } from './providers/CloudVision';
 export { CapsuleRoute, routeCapsule, MAX_WIDGET_COMPONENTS, MAX_WIDGET_CHECKLIST_ITEMS } from './CapsuleRouter';

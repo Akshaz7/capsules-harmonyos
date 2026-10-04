@@ -13,6 +13,10 @@
       "value": "Harmoniser"
     },
     {
+      "name": "mic_reason",
+      "value": "Hear your request when you tap the mic"
+    },
+    {
       "name": "calendar_reason",
       "value": "Capsule timers are saved as calendar reminders so they ring even when the app is closed."
     },
