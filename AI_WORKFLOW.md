@@ -79,7 +79,7 @@ Generated code was accepted only after it passed the gates below. Product-visibl
 ### Testing and debugging
 
 - **Type-check and build:** `devecocli check arkts` on changed files, because hvigor only compiles files that something imports. Then `devecocli build --modules entry`.
-- **Unit tests:** `hvigorw … test` (Hypium), 249 tests at the time of writing. They cover the validator, rule parser, routing policy, cloud providers with fake transports, the v1 interpreter, widgets, sharing and shared text. Deliberately broken assertions were used once to confirm that failures are reported.
+- **Unit tests:** `hvigorw … test` (Hypium), 278 tests at the time of writing. They cover the validator, rule parser, routing policy, cloud providers with fake transports, the v1 interpreter, widgets, sharing and shared text. Deliberately broken assertions were used once to confirm that failures are reported.
 - **Emulator:** install with `hdc`, launch with `aa start`, read `hilog`, take screenshots with `devecocli ui screenshot`. Several sessions share one emulator, so automated runs use `aa start --ps` parameters and result files instead of UI taps.
 - **Model evaluation:** `scripts/eval-providers.mjs` makes real provider calls with the app's own prompt, validator and interpreter. It has tuning, held-out, refusal and hard-logic sets. There is also an on-device eval on the emulator.
 - **Security checks:** byte scans of built `.hap` files for API keys, and a git-history scan for secrets before publishing.
@@ -99,8 +99,8 @@ Generated code was accepted only after it passed the gates below. Product-visibl
 
 ## Known limitations
 
-- The rule parser turns "medication 8am and 8pm" into a dose checklist. Schema v1.1 time triggers fire only while the app is open, and motion triggers don't fire (no motion sensor code). (Computed values and live bill splits arrived with schema v1.)
-- Vibration and automatic motion counting are not built, although the schema has `vibration` and `motion` permissions.
+- The rule parser turns "medication 8am and 8pm" into a dose checklist. Schema v1.1 time triggers fire only while the app is open. Motion triggers and motion counters use the accelerometer (PR #12) but have no phone check yet. (Computed values and live bill splits arrived with schema v1.)
+- Capsules that vibrate are not built, although the schema has a `vibration` permission. Motion counts shakes while a capsule is open, not steps or reps. The `notify:<text>` action does nothing at runtime yet, so template reminders fire without a visible notification.
 - `CapsuleModel.ets` holds a copy of `SCHEMA.md` for the prompt. It must be updated by hand if the schema changes.
 - Local unit tests can't call system APIs, so the network transport and rawfile loading in `core/index.ets` are type-checked but not unit-tested.
 - On-device AI got 9 of 15 eval requests correct (first eval: 5 of 10, with the other 5 rejected cleanly). Slot grounding stops it returning a valid but wrong capsule, but multi-item requests (3 timers, a 3-item checklist) often fail. Rules run first, so the model only sees the requests rules miss.

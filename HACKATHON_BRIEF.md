@@ -14,7 +14,7 @@ Each app Harmoniser makes is a **capsule**: JSON, not code, checked against a st
 - **Smart routing:** a request cache, on-device rules and 108 built-in templates first (no internet), then a small on-device LLM (LFM2-VL-450M on our HarmonyOS port of the Cactus engine), then a cloud model for logic. The cloud is EU-only by default (Mistral); Claude only if the user opts in. Each provider gets its own consent, and only the request text is sent.
 - **Safety:** every capsule is re-validated; our own expression interpreter runs v1 logic (no `eval`); a gatekeeper consent sheet lets the user allow or deny each permission, and blocked actions are logged.
 - **Marketplace:** browse and install capsules other people published, still validated and behind the same consent sheet.
-- **Platform:** Core Vision Kit text recognition (photos read offline), Calendar Kit timers, Notification Kit, Form Kit home-screen widgets, Share Kit / Scan Kit sharing (file and QR), and a system share target.
+- **Platform:** Core Vision Kit text recognition (photos read offline), the accelerometer (shake counting), battery and live weather readings, Calendar Kit timers, Notification Kit, Form Kit home-screen widgets, Share Kit / Scan Kit sharing (file and QR), and a system share target.
 
 ## Themes
 
@@ -34,7 +34,7 @@ We started from the HackYeah Hackathon Template: an empty ArkTS project, `AGENTS
 - the gatekeeper, widgets, sharing and triggers
 - the template library
 - the ESP32 wrist companion
-- 249 unit tests and the provider and photo evals
+- 278 unit tests and the provider and photo evals
 
 The commit history shows the progression. AI coding agents were used throughout, and [`AI_WORKFLOW.md`](AI_WORKFLOW.md) logs how.
 
@@ -43,13 +43,13 @@ The commit history shows the progression. AI coding agents were used throughout,
 | Real (seen working) | Partial or not yet |
 | --- | --- |
 | Rules, on-device LLM, EU cloud with consent, refusals, English-only gate | On-device model: 9/15 correct in our eval; phone speed not measured |
-| v1 capsules (tennis scoreboard, converter, bill split) | Daily triggers fire only while the app is open; motion triggers don't fire |
+| v1 capsules (tennis scoreboard, converter, bill split) | Daily triggers fire only while the app is open; template reminders don't show a notification yet |
 | Gatekeeper, log, widgets (incl. picker), timer pause/stop | Calendar alerts with the app closed: not seen working |
 | Share on a phone, import from file, share target (text/links) | QR import and shared images: not device-checked or not built |
 | Marketplace: browse, install with consent, run (live API, 108 templates listed) | Marketplace publishing: not tested |
-| | Capsules that vibrate, motion counting: not built; voice input: core only |
+| Battery and weather readings (emulator) | Shake counting: built, not yet checked on a phone; capsules that vibrate: not built; voice input: core only |
 | Editing a capsule ("Change it…", with undo) | Photo → capsule: on-phone OCR path checked on a real phone (10/10 valid, 6/10 correct, offline); Snap button in the app not yet checked |
-| | Wrist companion works on its own hardware; not connected to the app |
+| | Wrist companion: works against the live relay; the app's side isn't tested against it yet |
 
 Nothing is simulated in the app. Eval figures and limits are in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
 

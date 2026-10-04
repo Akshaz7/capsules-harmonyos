@@ -1,6 +1,6 @@
 # Pitch deck outline (6 slides)
 
-Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim vibration, motion counting, alerts firing with the app closed, marketplace publishing, or the Snap button working in the app (the photo path was checked headless on a phone; the button itself hasn't been).
+Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md`. Don't add claims the code doesn't back. In particular, don't claim capsules that vibrate, step counting (motion counts shakes, and has no phone check yet), reminders from templates (their `notify` step does nothing yet), alerts firing with the app closed, marketplace publishing, or the Snap button working in the app (the photo path was checked headless on a phone; the button itself hasn't been).
 
 ## 1. Problem
 
@@ -45,7 +45,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 - **Every source is re-validated:** the validator type-checks every expression, rejects unknown fields, actions and permissions, and enforces limits.
 - **Smart routing:** a cache hit, rule match or template match (108 templates, filled on the phone) returns at once; simple requests go on-device; logic requests go to the cloud; requests for capabilities capsules don't have are refused.
 - **Two-step cloud generation:** plan, then capsule, then validate, then self-check. A revision is kept only if it is still valid.
-- **249 unit tests**, plus a provider eval with held-out and refusal sets.
+- **278 unit tests**, plus a provider eval with held-out and refusal sets.
 
 ## 5. Platform capabilities used
 
@@ -56,6 +56,8 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 | **Cactus ported to HarmonyOS** (Node-API, arm64-v8a) | On-device LLM (LFM2-VL-450M): 92–114 tok/s decode, about 0.3 s to first token, about 380 MB (emulator figures) |
 | **Form Kit** | Home-screen widgets (2x2 and 2x4), synced both ways with the app |
 | **Core Vision Kit** (`textRecognition`) | Photo → capsule: reads the text on the phone, offline (10/10 valid, 6/10 correct on a real phone) |
+| **Sensor Service Kit** | Shake counting with the accelerometer while a capsule is open (built; phone check pending) |
+| **Basic Services Kit + Network Kit** | Battery reading; live weather from Open-Meteo (checked on the emulator) |
 | **Calendar Kit** | Capsule timers become system calendar events |
 | **Notification Kit** | Timer-finished notifications |
 | **Share Kit / Scan Kit / Document picker** | Share capsules as files or QR codes |
