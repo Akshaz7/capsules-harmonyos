@@ -1,8 +1,8 @@
 import { MARKET_CATEGORIES, MarketItem, MarketPage, MarketplaceClient } from '../adapters/MarketplaceClient';
 import { Capsule } from '../core';
-import { Chip, IconTile, OriginChip, PrimaryButton } from '../components';
+import { Chip, CompactPillButton, IconTile, OriginChip, PrimaryButton } from '../components';
 import { Flags } from '../theme/Flags';
-import { Palette, Radius } from '../theme/Tokens';
+import { Effects, Palette, Radius } from '../theme/Tokens';
 import { capsuleIcon } from './CapsuleEntry';
 
 /** The capsule's own icon when its JSON is at hand; a bag otherwise. */
@@ -27,6 +27,8 @@ export struct MarketplaceView {
   @Param onDeviceOnly: boolean = false;
   /** Wide windows (NEW_WIDE): two columns of tiles. */
   @Param wide: boolean = false;
+  /** Polish: ids of marketplace items already installed (their pill shows a check). Empty: none marked. */
+  @Param installedIds: string[] = [];
   @Event onOpenSettings: () => void = () => {
   };
   @Event onInstall: (item: MarketItem) => void = () => {
@@ -248,6 +250,86 @@ export struct MarketplaceView {
     .backgroundColor(Palette.surface)
   }
 
+  /** Polish (NEW_POLISH, spec 4.4): a square-ish grid card: icon tile, name, by-line, Install pill bottom-right. */
+  @Builder
+  polishCard(item: MarketItem) {
+    Column() {
+      IconTile({ icon: itemIcon(item), tileSize: 40, iconSize: 22 })
+      Text(item.name)
+        .fontSize(15)
+        .fontWeight(700)
+        .fontColor(Palette.text)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+        .margin({ top: 12 })
+      Text(item.id.startsWith('example:') ? 'Comes with the app' :
+        (item.installs > 0 ? `Community · ${item.installs} installs` : 'Community'))
+        .fontSize(12)
+        .fontWeight(500)
+        .fontColor(Palette.text2)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+        .margin({ top: 4 })
+      Blank()
+      Row() {
+        if (item.widget) {
+          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+            .fontSize(14)
+            .fontColor([Palette.text3])
+            .accessibilityText('Widget')
+        }
+        Blank()
+        CompactPillButton({
+          label: this.installedIds.indexOf(item.id) >= 0 ? 'Installed' : 'Install',
+          done: this.installedIds.indexOf(item.id) >= 0,
+          enabledState: this.installedIds.indexOf(item.id) < 0,
+          onTap: () => this.onInstall(item)
+        })
+      }
+      .width('100%')
+      .margin({ top: 12 })
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .aspectRatio(0.9)
+    .padding(14)
+    .borderRadius(Radius.tileCard)
+    .linearGradient({ angle: 180, colors: [[Palette.cardTintTop, 0], [Palette.cardTintBottom, 1]] })
+    .border({ width: 1, color: Palette.hairline })
+    .shadow(Effects.cardShadow)
+  }
+
+  /** Polish: the same items and paging as the list, as a repeating 2-column grid (3 on wide windows). */
+  @Builder
+  polishGrid() {
+    Grid() {
+      ForEach(this.items, (item: MarketItem) => {
+        GridItem() {
+          this.polishCard(item)
+        }
+      }, (item: MarketItem) => item.id)
+      if (this.cursor.length > 0) {
+        GridItem() {
+          Button('More', { buttonStyle: ButtonStyleMode.TEXTUAL })
+            .height(44)
+            .onClick(() => this.load(true))
+        }
+        .columnStart(0)
+        .columnEnd(Flags.NEW_WIDE && this.wide ? 2 : 1)
+      }
+    }
+    .columnsTemplate(Flags.NEW_WIDE && this.wide ? '1fr 1fr 1fr' : '1fr 1fr')
+    .columnsGap(12)
+    .rowsGap(12)
+    .layoutWeight(1)
+    .width('100%')
+    .scrollBar(BarState.Off)
+    .clip(false)
+    .padding({ bottom: this.embedded ? 120 : 16 }) // as a tab: the last row clears the floating bar
+  }
+
   @Builder
   placeholderTile() {
     Column({ space: 10 }) {
@@ -323,6 +405,8 @@ export struct MarketplaceView {
           .width('100%')
           .textAlign(TextAlign.Center)
           .padding(24)
+      } else if (Flags.NEW_POLISH) {
+        this.polishGrid()
       } else {
         List({ space: 10 }) {
           ForEach(this.items, (item: MarketItem) => {
