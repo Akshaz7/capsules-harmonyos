@@ -2,7 +2,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import { routeCapsule } from '../main/ets/core/CapsuleRouter';
 import { parseRequest } from '../main/ets/core/RuleParser';
-import { Capsule, CapsuleComponent, DeviceComponent, StateVar } from '../main/ets/core/CapsuleTypes';
+import { Capsule, CapsuleComponent, ChecklistComponent, DeviceComponent, StateVar } from '../main/ets/core/CapsuleTypes';
 import {
   CITIES, City, cityById, cityIdFromText, cityName, parseOpenMeteo, WeatherReading, weatherLabel, weatherSymbolKey,
   weatherValue
@@ -150,6 +150,42 @@ export default function weatherTest() {
       expect(parseRequest('task list and weather') !== null).assertTrue();
       const paris = built('paris weather');
       expect((paris.ui[0] as DeviceComponent).city).assertEqual('paris');
+    });
+
+    it('keeps the bundled city through lower-case, upper-case and diacritic phrasings', 0, () => {
+      const phrases: string[] = [
+        'task list and weather for london',
+        'TASK LIST and Weather for krakow',
+        'task list and weather for kraków',
+        'weather in Krakow and a task list'
+      ];
+      const cities: string[] = ['london', 'krakow', 'krakow', 'krakow'];
+      phrases.forEach((req: string, i: number) => {
+        const c = built(req);
+        const wx = c.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent;
+        expect(`${req} -> ${wx === undefined ? 'no weather' : wx.city}`).assertEqual(`${req} -> ${cities[i]}`);
+        expect(c.ui.some((x: CapsuleComponent) => x.type === 'list')).assertTrue();
+      });
+      expect(built('task list and weather for london').name).assertContain('London');
+      expect(built('task list and weather for kraków').name).assertContain('Kraków');
+    });
+
+    it('documents "a checklist: milk, eggs and the weather in Warsaw": checklist, not the compound rule', 0, () => {
+      const c = built('a checklist: milk, eggs and the weather in Warsaw');
+      expect(c.id.startsWith('checklist')).assertTrue();
+      expect(c.ui.some((x: CapsuleComponent) => x.type === 'device')).assertFalse();
+      const list = c.ui.find((x: CapsuleComponent) => x.type === 'checklist') as ChecklistComponent;
+      expect(list === undefined).assertFalse();
+      expect(list.items.join(',')).assertEqual('Milk,Eggs,The weather in warsaw');
+    });
+
+    it('does not let the compound rule swallow weather-only or bare list requests', 0, () => {
+      const weatherOnly = built('weather in London');
+      expect(weatherOnly.id).assertEqual('weather');
+      const wx = weatherOnly.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent;
+      expect(wx.city).assertEqual('london');
+      expect(weatherOnly.ui.some((x: CapsuleComponent) => x.type === 'list')).assertFalse();
+      expect(parseRequest('task list') === null).assertTrue();
     });
   });
 }
