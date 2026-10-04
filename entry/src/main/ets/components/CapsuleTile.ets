@@ -9,9 +9,6 @@ import { Chip, IconTile, OriginChip, OriginKind, originIconOf } from './Surfaces
  * tile matches: line 2 of the name is always reserved, and the chip and hint sit at the bottom.
  */
 export const CAPSULE_TILE_HEIGHT: number = 208; // fits a 2-line name, the value, a 2-line chip and the hint
-/** Polish: padding 24 + icon 36 + name 2x19 + value 2x17 + chip 24 + gaps 18 = 174. */
-const POLISH_TILE_MIN_HEIGHT: number = 176;
-
 @ComponentV2
 export struct CapsuleTile {
   @Require @Param name: string;
@@ -41,8 +38,8 @@ export struct CapsuleTile {
 
   /**
    * Polish (4.3): sized to its content. Icon, then the name (2 lines), the live value on its own line
-   * (tabular, wraps, not truncated), then a one-line origin chip and a small widget badge. One minimum
-   * height so tiles in a row match; a tile only grows past it for an unusually long value. Pressed 0.97.
+   * (tabular, wraps, not truncated), then a one-line origin chip and a small widget badge. No fixed or
+   * minimum height: the Grid makes each row as tall as its taller tile. Pressed 0.97.
    */
   @Builder
   polished() {
@@ -88,7 +85,6 @@ export struct CapsuleTile {
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .constraintSize({ minHeight: POLISH_TILE_MIN_HEIGHT })
     .padding(12)
     .borderRadius(Radius.tileCard)
     .backgroundColor(Palette.surface)
