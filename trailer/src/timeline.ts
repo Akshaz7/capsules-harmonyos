@@ -122,7 +122,7 @@ export const COLORS = {
 // ---------- Scene 1 ----------
 export const S1 = {
   rainBeats: 4, // icons rain for 4 beats from frame 0
-  pullBackAt: 45,
+  pullBackAt: 20,
   timersAt: vo('s1-timers').at,
   tipsAt: vo('s1-tips').at,
   packingAt: vo('s1-packing').at,
@@ -216,8 +216,8 @@ export const BOARD_STRINGS = {
 
 // ---------- Scene 5 ----------
 export const S5 = {
-  dropStart: 1425, // first row drops; one row per beat
-  widgetsAt: 1470,
+  dropStart: 1425, // old icons drop off one row per beat from here
+  widgetLand: [1466, 1472, 1488, 1494], // each widget folds down and snaps in (thunk)
   floodAt: 1500,
   widgets: [
     {kind: 'checklist', title: 'Checklist', caption: '0 / 3 done'},

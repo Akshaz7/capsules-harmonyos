@@ -101,18 +101,25 @@ export const TapDot: React.FC<{x: number; y: number; at: number; frame?: number}
   );
 };
 
-/** Harmoniser speech-bubble logo (from the board header). */
+/**
+ * Official Harmoniser mark (harmoniser-icon-assets-C/harmoniser-mark.svg, the shipped app icon).
+ * `tilesIn` scales the three parts in: white tile, orange ring, speech bubble.
+ */
 export const Logo: React.FC<{size: number; tilesIn?: [number, number, number]}> = ({size, tilesIn = [1, 1, 1]}) => (
-  <svg width={size} height={size} viewBox="0 0 32 32">
-    <path d="M8 3h16a6 6 0 0 1 6 6v10a6 6 0 0 1-6 6H13l-6 5v-5.3A6 6 0 0 1 2 19V9a6 6 0 0 1 6-6z" fill={COLORS.blue} />
-    <g style={{transformOrigin: '11px 12.5px', transform: `scale(${tilesIn[0]})`}}>
-      <rect x="7" y="8.5" width="8" height="8" rx="2.2" fill="#FFFFFF" />
-    </g>
-    <g style={{transformOrigin: '21.25px 10.1px', transform: `scale(${tilesIn[1]})`}}>
-      <rect x="17.5" y="8.5" width="7.5" height="3.2" rx="1.6" fill="#FFFFFF" />
-    </g>
-    <g style={{transformOrigin: '19.8px 14.9px', transform: `scale(${tilesIn[2]})`}}>
-      <rect x="17.5" y="13.3" width="4.6" height="3.2" rx="1.6" fill={COLORS.orange} />
+  <svg width={size} height={size} viewBox="0 0 1024 1024">
+    <rect width="1024" height="1024" rx="260" fill={COLORS.blue} />
+    <g transform="scale(4.654545454545454)">
+      <g style={{transformOrigin: '136px 84px', transform: `scale(${tilesIn[0]})`}}>
+        <rect x="96" y="44" width="80" height="80" rx="22" fill="#FFFFFF" />
+        <circle cx="136" cy="84" r="20" fill="none" stroke="#D9DEF0" strokeWidth="8" />
+      </g>
+      <g style={{transformOrigin: '136px 84px', transform: `scale(${tilesIn[1]})`}}>
+        <path d="M136 64 A 20 20 0 1 1 116 84" fill="none" stroke={COLORS.orange} strokeWidth="8" strokeLinecap="round" />
+      </g>
+      <g style={{transformOrigin: '82px 134px', transform: `scale(${tilesIn[2]})`}}>
+        <path d="M44 120 Q44 104 60 104 L104 104 Q120 104 120 120 L120 148 Q120 164 104 164 L70 164 L52 178 L56 164 Q44 162 44 148 Z" fill="#FFFFFF" fillOpacity="0.92" />
+        <path d="M60 134 C 67 124, 74 124, 82 134 S 97 144, 104 134" fill="none" stroke={COLORS.blue} strokeWidth="7" strokeLinecap="round" />
+      </g>
     </g>
   </svg>
 );

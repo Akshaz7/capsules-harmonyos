@@ -1,197 +1,125 @@
 import React from 'react';
-import {useCurrentFrame, interpolate, Easing} from 'remotion';
-import {SCENES, S5, COLORS, BEAT} from '../timeline';
-import {Bg, Phone, Center, FONT, SCREEN_W, SCREEN_H} from '../components/common';
-import {HomeScreen} from '../components/HomeScreen';
+import {AbsoluteFill, spring, useCurrentFrame} from 'remotion';
+import {Bg, Center, FONT, Phone, SCREEN_W} from '../components/common';
+import {HomeGrid, Wallpaper, iconPos} from '../components/Home';
+import {BEAT, COLORS, FPS, S5, SCENES} from '../timeline';
+import {Easing, lerp} from '../lib/motion';
 
-export const Scene5Home: React.FC = () => {
-  const frame = useCurrentFrame();
-  const F = (abs: number) => abs - SCENES.home.from;
-  const localFrame = frame; // Sequence-local already
+const F = (abs: number) => abs - SCENES.home.from;
 
-  // Icons drop off one row per beat starting at S5.dropStart
-  const dropStart = S5.dropStart - SCENES.home.from;
-  const rowsToShow = 6 - Math.floor((localFrame - dropStart) / BEAT);
-  const visibleIcons = new Set<string>(
-    Array.from({length: Math.max(0, rowsToShow * 4)}).map((_, i) => {
-      const col = i % 4;
-      const row = Math.floor(i / 4);
-      return [
-        'Timer', 'Timer+', 'Focus Timer', 'Tip', // row 0
-        'Tip Pro', 'Packing', 'Notes', 'Music', // row 1
-        'Mail', 'Maps', 'Weather', 'Store', // row 2
-        'Radio', 'Cards', 'Steps', 'Bills', // row 3
-        'Lists', 'Units', 'Files', 'Clock', // row 4
-        'Calc', 'Chat', 'Gallery', 'Extras', // row 5
-      ][row * 4 + col];
-    })
-  );
+// 2x2-cell widgets laid out in two rows, centred on the screen.
+const GAP = 14;
+const W = (SCREEN_W - GAP * 3) / 2;
+const H = 196;
+const LABEL_H = 26;
+const TOP = 170;
+const slot = (i: number) => ({x: GAP + (i % 2) * (W + GAP), y: TOP + Math.floor(i / 2) * (H + LABEL_H + GAP)});
 
-  // Row drop offsets (falling and fading)
-  const rowDropOffsets: number[] = Array.from({length: 6}).map((_, row) => {
-    const rowDropStart = dropStart + row * BEAT;
-    if (localFrame < rowDropStart) return 0;
-    const dropT = Math.min(1, (localFrame - rowDropStart) / 12);
-    const fallDist = dropT * (SCREEN_H + 100);
-    return fallDist;
-  });
-
-  // Grayscale drain reverses (color floods back) at S5.floodAt
-  const floodStart = S5.floodAt - SCENES.home.from;
-  const floodT = interpolate(localFrame, [floodStart, floodStart + 20], [0.7, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-    easing: Easing.out(Easing.cubic),
-  });
-
-  // Widgets fold down (rotateX from -90 to 0) starting at S5.widgetsAt
-  const widgetsStart = S5.widgetsAt - SCENES.home.from;
-  const widgets = S5.widgets.map((w, idx) => {
-    const appearAt = widgetsStart + idx * 8;
-    const appearT = Math.min(1, Math.max(0, (localFrame - appearAt) / 8));
-    return {...w, appearT};
-  });
-
-  // Glow swell
-  const glowIntensity = interpolate(floodT, [0, 1], [0.4, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
-
+const WidgetGlyph: React.FC<{kind: string}> = ({kind}) => {
+  const p = {fill: 'none', stroke: COLORS.blue, strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const};
   return (
-    <Bg>
-      <Center>
-        <div style={{position: 'relative'}}>
-          {/* Glow effect */}
-          {glowIntensity > 0 && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '-20%',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: 600,
-                height: 400,
-                background: `radial-gradient(circle, ${COLORS.glow}${Math.floor(glowIntensity * 255).toString(16).padStart(2, '0')} 0%, transparent 70%)`,
-                filter: 'blur(60px)',
-                pointerEvents: 'none',
-                zIndex: -1,
-              }}
-            />
-          )}
-
-          <Phone screenBg={COLORS.bg}>
-            {/* Home screen with dropping icons */}
-            <HomeScreen drained={floodT} tagged={true} rowDropOffsets={rowDropOffsets} visible={visibleIcons} />
-
-            {/* Widgets grid (simplified 2x2) */}
-            <div
-              style={{
-                position: 'absolute',
-                inset: 12,
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: 12,
-                pointerEvents: 'none',
-              }}
-            >
-              {widgets.map((widget, idx) => (
-                <Widget key={idx} widget={widget} />
-              ))}
-            </div>
-          </Phone>
-        </div>
-      </Center>
-    </Bg>
+    <svg width={22} height={22} viewBox="0 0 24 24">
+      {kind === 'checklist' && <path {...p} d="M5 12l4 4 10-10" />}
+      {kind === 'timer' && (
+        <>
+          <circle {...p} cx="12" cy="13" r="8" />
+          <path {...p} d="M12 13V9M9 2h6" />
+        </>
+      )}
+      {kind === 'goal' && <path {...p} d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z" />}
+      {kind === 'score' && (
+        <>
+          <circle {...p} cx="12" cy="12" r="9" />
+          <path {...p} d="M5 6c3 3 3 9 0 12M19 6c-3 3-3 9 0 12" />
+        </>
+      )}
+    </svg>
   );
 };
 
-interface WidgetData {
-  kind: string;
-  title: string;
-  caption: string;
-  appearT: number;
-}
-
-const Widget: React.FC<{widget: WidgetData}> = ({widget}) => {
-  const {kind, title, caption, appearT} = widget;
-
-  // Fold animation: rotateX from -90 to 0
-  const rotX = (1 - appearT) * -90;
-
-  // Choose icon color based on widget type
-  let iconColor = COLORS.blue;
-  if (kind === 'timer') iconColor = '#FF7A45';
-  if (kind === 'goal') iconColor = '#10B981';
-  if (kind === 'score') iconColor = '#8B5CF6';
-
+/** HarmonyOS-style widget: light grey rounded card, icon circle, title and caption; "Harmoniser" label below. */
+const Widget: React.FC<{i: number; frame: number; at: number; flood: number}> = ({i, frame, at, flood}) => {
+  const w = S5.widgets[i];
+  const s = slot(i);
+  const fold = spring({frame: frame - at, fps: FPS, config: {damping: 13, mass: 0.7}, durationInFrames: 14});
+  if (frame < at) return null;
+  const big = w.kind === 'timer' || w.kind === 'goal';
   return (
-    <div
-      style={{
-        perspective: '1200px',
-        transformStyle: 'preserve-3d',
-      }}
-    >
+    <div style={{position: 'absolute', left: s.x, top: s.y, width: W, perspective: 700}}>
       <div
         style={{
-          background: '#F4F5F8',
-          borderRadius: 28,
+          height: H,
+          borderRadius: 26,
+          background: '#F3F4F7',
+          boxShadow: '0 10px 24px rgba(27,34,54,0.12), 0 1px 2px rgba(27,34,54,0.06)',
           padding: 16,
+          boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',
-          gap: 12,
-          aspectRatio: '1 / 1',
-          justifyContent: 'space-between',
-          boxShadow: appearT > 0 ? `0 ${appearT * 12}px ${appearT * 24}px rgba(0,0,0,0.08)` : 'none',
-          transform: `rotateX(${rotX}deg) scale(${0.9 + appearT * 0.1})`,
-          transformStyle: 'preserve-3d',
-          opacity: Math.max(0.3, appearT),
-          transition: 'all 0.1s ease-out',
+          transformOrigin: '50% 0%',
+          transform: `rotateX(${-90 * (1 - fold)}deg)`,
+          opacity: Math.min(1, fold * 3),
+          filter: `grayscale(${1 - flood})`,
           fontFamily: FONT,
-          minHeight: 120,
+          position: 'relative',
         }}
       >
-        {/* Icon */}
-        <div
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            background: iconColor,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#FFFFFF',
-            fontSize: 24,
-            fontWeight: 600,
-          }}
-        >
-          {kind === 'checklist' && '✓'}
-          {kind === 'timer' && '◶'}
-          {kind === 'goal' && '+'}
-          {kind === 'score' && '★'}
+        <div style={{width: 42, height: 42, borderRadius: 21, background: COLORS.chipBg, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+          <WidgetGlyph kind={w.kind} />
         </div>
-
-        {/* Title and Caption */}
-        <div style={{flex: 1, display: 'flex', flexDirection: 'column', gap: 4}}>
-          <div style={{fontSize: 13, fontWeight: 600, color: COLORS.text}}>
-            {title}
+        <div style={{marginTop: 'auto', fontSize: 17, fontWeight: 700, color: COLORS.text}}>{w.title}</div>
+        <div style={{marginTop: 2, fontSize: big ? 32 : 18, fontWeight: big ? 800 : 600, color: big ? COLORS.text : COLORS.secondary, letterSpacing: big ? -0.5 : 0}}>{w.caption}</div>
+        {w.kind === 'goal' && (
+          <div style={{position: 'absolute', right: 14, bottom: 16, width: 40, height: 40, borderRadius: 20, background: COLORS.blue, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <svg width={18} height={18} viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
+            </svg>
           </div>
-          <div style={{fontSize: 12, fontWeight: 500, color: COLORS.secondary}}>
-            {caption}
-          </div>
-        </div>
-
-        {/* Label */}
-        <div
-          style={{
-            fontSize: 10,
-            fontWeight: 500,
-            color: COLORS.secondary,
-            textAlign: 'right',
-          }}
-        >
-          {S5.widgetLabel}
-        </div>
+        )}
+      </div>
+      <div style={{height: LABEL_H, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: COLORS.text, opacity: fold}}>
+        {S5.widgetLabel}
       </div>
     </div>
   );
 };
 
+export const Scene5Home: React.FC = () => {
+  const frame = useCurrentFrame();
+  const pull = lerp(frame, [0, 16], [1.35, 1], Easing.out(Easing.cubic));
+  const flood = lerp(frame, [F(S5.floodAt), F(S5.floodAt) + 12], [0, 1], Easing.out(Easing.quad));
+
+  // Old icons drop off one row per beat.
+  const gridState = (i: number) => {
+    const {row, col} = iconPos(i);
+    const at = F(S5.dropStart) + row * BEAT;
+    const t = frame - at - col;
+    if (t < 0) return {tag: 1};
+    if (t > 22) return {hidden: true};
+    const fall = Easing.in(Easing.quad)(Math.min(1, t / 20));
+    return {dy: fall * 900, rot: (col - 1.5) * 14 * fall, opacity: 1 - fall * 0.6, tag: 1};
+  };
+
+  return (
+    <Bg>
+      {/* Colour floods back: a blue glow swells behind the phone */}
+      <AbsoluteFill
+        style={{
+          background: `radial-gradient(40% 55% at 50% 50%, rgba(47,91,255,${0.22 * flood}), rgba(47,91,255,0) 70%)`,
+          transform: `scale(${0.8 + 0.4 * flood})`,
+        }}
+      />
+      <Center style={{transform: `scale(${pull})`}}>
+        <Phone>
+          <div style={{position: 'absolute', inset: 0, filter: `grayscale(${0.75 * (1 - flood)})`}}>
+            <Wallpaper />
+          </div>
+          <HomeGrid state={gridState} drain={0.7} />
+          {S5.widgetLand.map((at, i) => (
+            <Widget key={i} i={i} frame={frame} at={F(at) - 10} flood={flood} />
+          ))}
+        </Phone>
+      </Center>
+    </Bg>
+  );
+};

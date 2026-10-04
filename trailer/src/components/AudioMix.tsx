@@ -42,7 +42,7 @@ const sfxCues = (): Cue[] => {
     cues.push({key: 'ticks', at: c.typeAt, dur: c.typeDur, vol: 0.6});
   }
   // Thunk as each widget lands.
-  S5.widgets.forEach((_, i) => cues.push({key: 'thunk', at: S5.widgetsAt + 8 + i * 8}));
+  S5.widgetLand.forEach((at) => cues.push({key: 'thunk', at}));
   // End card: pop on the logo, ticks under each "Try:" line.
   cues.push({key: 'pop', at: S7.logoAt});
   S7.tries.forEach((_, i) => cues.push({key: 'ticks', at: S7.tryStart + i * S7.trySlot, dur: 34, vol: 0.5}));

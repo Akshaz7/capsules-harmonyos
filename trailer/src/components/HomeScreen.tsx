@@ -11,7 +11,7 @@ const ICON_SIZE = 80;
 const LABEL_HEIGHT = 24;
 const ITEM_HEIGHT = ICON_SIZE + LABEL_HEIGHT + 4;
 
-const ICON_DEFS = [
+export const ICON_DEFS = [
   {name: 'Timer', glyph: 'clock', color: '#FF7A45'},
   {name: 'Timer+', glyph: 'plus', color: '#2F5BFF'},
   {name: 'Focus Timer', glyph: 'clock', color: '#8B5CF6'},
@@ -38,7 +38,7 @@ const ICON_DEFS = [
   {name: 'Extras', glyph: 'plus', color: '#8B5CF6'},
 ];
 
-const Glyph: React.FC<{type: string}> = ({type}) => {
+export const Glyph: React.FC<{type: string}> = ({type}) => {
   const w = 40;
   const h = 40;
   const strokeW = 2;
