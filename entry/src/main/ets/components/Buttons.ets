@@ -1,7 +1,7 @@
 /**
  * Redesign buttons (section 4). Labels never truncate: they wrap instead. Every button is at least 44vp tall.
  */
-import { Palette, Radius, Space } from '../theme/Tokens';
+import { Effects, Palette, Radius, Space } from '../theme/Tokens';
 
 /** Blue fill, white 17/700. */
 @ComponentV2
@@ -166,5 +166,57 @@ export struct IconButton {
       width: Math.max(this.diameter, Space.touch), height: Math.max(this.diameter, Space.touch) })
     .accessibilityText(this.label)
     .onClick(() => this.onTap())
+  }
+}
+
+/**
+ * Polish: a compact pill (32 tall, gradient fill, 13/700) for small actions such as Install. With `done` it
+ * shows a flat tint pill with a check, disabled. The tap area stays 44vp tall.
+ */
+@ComponentV2
+export struct CompactPillButton {
+  @Require @Param label: string;
+  @Param icon: Resource | undefined = undefined;
+  @Param done: boolean = false;
+  @Param enabledState: boolean = true;
+  @Event onTap: () => void = () => {
+  };
+  @Local pressed: boolean = false;
+
+  build() {
+    Row({ space: 4 }) {
+      if (this.done) {
+        SymbolGlyph($r('sys.symbol.checkmark'))
+          .fontSize(14)
+          .fontColor([Palette.blue])
+      } else if (this.icon !== undefined) {
+        SymbolGlyph(this.icon)
+          .fontSize(14)
+          .fontColor([Palette.surface])
+      }
+      Text(this.label)
+        .fontSize(13)
+        .fontWeight(700)
+        .fontColor(this.done ? Palette.blue : Palette.surface)
+    }
+    .height(32)
+    .padding({ left: 14, right: 14 })
+    .borderRadius(Radius.pill)
+    .backgroundColor(this.done ? Palette.tint : (this.enabledState ? Palette.blue : Palette.disabled))
+    .linearGradient(this.done || !this.enabledState ? { angle: 135, colors: [[Color.Transparent, 0], [Color.Transparent, 1]] } :
+      { angle: 135, colors: [[Palette.blue, 0], [Palette.blueDeep, 1]] })
+    .scale({ x: this.pressed ? Effects.pressedScale : 1, y: this.pressed ? Effects.pressedScale : 1 })
+    .animation({ duration: Effects.pressMs, curve: Curve.EaseOut })
+    .responseRegion({ x: 0, y: -6, width: '100%', height: 44 }) // 44vp tap area
+    .enabled(this.enabledState && !this.done)
+    .onTouch((e: TouchEvent) => {
+      if (e.type === TouchType.Down) {
+        this.pressed = true;
+      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+        this.pressed = false;
+      }
+    })
+    .onClick(() => this.onTap())
+    .accessibilityText(this.label)
   }
 }

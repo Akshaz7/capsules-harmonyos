@@ -46,6 +46,18 @@ export class Palette {
   /** White at 72% (host bar scan button) and 90% (tab bar). */
   static readonly white72: string = '#B8FFFFFF';
   static readonly white90: string = '#E6FFFFFF';
+  // Polish (NEW_POLISH): a secondary accent and layered-surface tones. Additive only.
+  /** Secondary accent: gradient end stops, featured tile, selected tab dot, Share/QR icons only. */
+  static readonly indigo: string = '#6C4DFF';
+  static readonly indigoTint: string = '#EFEBFF';
+  /** Gradient end for the primary button. */
+  static readonly blueDeep: string = '#1B3BD1';
+  /** Blue at 20%: coloured shadows. */
+  static readonly blueGlow: string = '#332F5BFF';
+  /** Blue at 8%: card border. */
+  static readonly hairline: string = '#142F5BFF';
+  static readonly cardTintTop: string = '#F7F9FF';
+  static readonly cardTintBottom: string = '#FFFFFF';
 }
 
 /** One text role: size in fp and font weight. */
@@ -87,6 +99,10 @@ export class Radius {
   static readonly pill: number = 22;
   static readonly checkbox: number = 8; // 26vp box; 7 for a 24vp box
   static readonly sheet: number = 28;
+  static readonly tileCard: number = 22;
+  static readonly pillLarge: number = 24;
+  static readonly tile: number = 14;
+  static readonly primaryButton: number = 20;
 }
 
 export class Space {
@@ -106,4 +122,8 @@ export class Effects {
   static readonly frameShadow: ShadowOptions = { radius: 40, offsetY: 18, color: Palette.shadow };
   static readonly softShadow: ShadowOptions = { radius: 24, offsetY: 8, color: Palette.shadow };
   static readonly frosted: BlurStyle = BlurStyle.Thin;
+  static readonly cardShadow: ShadowOptions = { radius: 18, offsetX: 0, offsetY: 6, color: Palette.blueGlow };
+  static readonly buttonShadow: ShadowOptions = { radius: 14, offsetX: 0, offsetY: 6, color: Palette.blueGlow };
+  static readonly pressedScale: number = 0.97;
+  static readonly pressMs: number = 120;
 }

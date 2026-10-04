@@ -27,4 +27,6 @@ export class Flags {
   /** Create screen extras: the Recent row and the suggestion chips (off: brand, question, prompt bar only). */
   static readonly CREATE_RECENT: boolean = false;
   static readonly CREATE_SUGGESTIONS: boolean = false;
+  /** Lewis's visual polish pass (polish/visual): every new visual sits behind this. */
+  static readonly NEW_POLISH: boolean = true;
 }
