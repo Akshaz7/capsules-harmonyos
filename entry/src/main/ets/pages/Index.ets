@@ -86,6 +86,8 @@ import { storeWidthClass } from '../theme/Breakpoint';
 import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../components';
 import { PromptBar } from '../components/PromptBar';
 import { BuildCard, BuildStep } from '../components/BuildCard';
+import { CapsuleTile } from '../components/CapsuleTile';
+import { EmptyState } from '../components';
 import { RecentRow, RecentTile, SuggestionChips } from '../components/CreateParts';
 import { shareCapsule } from '../sharing';
 import { MiniPreview } from './MiniPreview';
@@ -2483,6 +2485,69 @@ struct Index {
     .scrollBar(BarState.Off)
   }
 
+  /** Redesign (NEW_CAPSULES): page title, the existing import, and a grid of live tiles. */
+  @Builder
+  capsulesTabNew() {
+    Scroll() {
+      Column({ space: 14 }) {
+        Row({ space: 8 }) {
+          Text('Capsules')
+            .fontSize(28)
+            .fontWeight(800)
+            .fontColor(Palette.text)
+          if (this.entries.length > 0) {
+            Text(`${this.entries.length}`)
+              .fontSize(15)
+              .fontWeight(600)
+              .fontColor(Palette.text2)
+          }
+          Blank()
+          // Import from another phone. Nothing is saved until the sheet's Run.
+          SharingBar({
+            showShare: false,
+            compact: true,
+            onPairCode: (code: string) => this.claimDevice(code),
+            onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+          })
+        }
+        .width('100%')
+        if (this.entries.length === 0) {
+          EmptyState({ title: 'Capsules you create appear here.', action: 'Create one',
+            onAction: () => this.selectTab(TAB_CREATE) })
+        } else {
+          Grid() {
+            ForEach(this.entries, (entry: CapsuleEntry) => {
+              GridItem() {
+                CapsuleTile({
+                  name: entry.capsule.name,
+                  icon: capsuleIcon(entry.capsule),
+                  value: entry.runtime.summary(),
+                  originText: originBadge(entry.origin),
+                  originKind: originKindOf(entry.origin),
+                  widget: entry.route.widget,
+                  onOpen: () => this.open(entry.capsule.id)
+                })
+              }
+            }, (entry: CapsuleEntry) => `${entry.capsule.id}-${entry.runtime.serial}`)
+          }
+          .columnsTemplate(this.wide ? '1fr 1fr 1fr' : '1fr 1fr')
+          .columnsGap(10)
+          .rowsGap(10)
+          .width('100%')
+          .layoutDirection(GridDirection.Row)
+        }
+      }
+      .padding({ left: 16, right: 16, top: 16, bottom: 120 })
+      .width('100%')
+      .constraintSize({ maxWidth: this.wide ? 960 : undefined })
+    }
+    .width('100%')
+    .height('100%')
+    .align(Alignment.Top)
+    .edgeEffect(EdgeEffect.Spring)
+    .scrollBar(BarState.Off)
+  }
+
   private selectTab(index: number): void {
     this.tabTaps = this.tabTaps.map((n: number, i: number) => i === index ? n + 1 : n);
     this.tab = index;
@@ -2542,7 +2607,11 @@ struct Index {
           }
         }
         TabContent() {
-          this.capsulesTab()
+          if (Flags.NEW_CAPSULES) {
+            this.capsulesTabNew()
+          } else {
+            this.capsulesTab()
+          }
         }
         TabContent() {
           MarketplaceView({
