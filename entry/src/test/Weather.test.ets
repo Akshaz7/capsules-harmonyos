@@ -179,6 +179,23 @@ export default function weatherTest() {
       expect(list.items.join(',')).assertEqual('Milk,Eggs,The weather in warsaw');
     });
 
+    it('builds the compound capsule when the request starts with make/create/build', 0, () => {
+      const phrases: string[] = [
+        'make a task list and the weather for Kraków',
+        'create me a task list and the weather for Krakow',
+        'build a task list and the weather for Krakow'
+      ];
+      phrases.forEach((req: string) => {
+        const c = built(req);
+        const wx = c.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent;
+        expect(`${req} -> ${wx === undefined ? 'no weather' : wx.city}`).assertEqual(`${req} -> krakow`);
+        expect(`${req} -> ${c.ui.some((x: CapsuleComponent) => x.type === 'list')}`).assertEqual(`${req} -> true`);
+      });
+      // Only the leading verb goes; a request that is just the verb is left alone.
+      expect(parseRequest('make') === null).assertTrue();
+      expect((built('make me a pomodoro').name)).assertEqual((built('pomodoro').name));
+    });
+
     it('does not let the compound rule swallow weather-only or bare list requests', 0, () => {
       const weatherOnly = built('weather in London');
       expect(weatherOnly.id).assertEqual('weather');

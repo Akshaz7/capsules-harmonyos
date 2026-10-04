@@ -68,6 +68,14 @@ function normalize(request: string): string {
   return request.toLowerCase().replace(/\s+/g, ' ').trim().replace(/[.!?]+$/, '').trim();
 }
 
+/** "make me a …", "create a …", "build an …": the request without the leading verb, so rules see what to build. */
+const LEADING_VERB = /^(?:make|create|build)\s+(?:me\s+)?(?:(?:a|an)\s+)?/;
+
+function stripLeadingVerb(req: string): string {
+  const rest = req.replace(LEADING_VERB, '').trim();
+  return rest.length > 0 ? rest : req;
+}
+
 export function slug(text: string): string {
   const s = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   return s.length > 0 ? s : 'item';
@@ -503,7 +511,7 @@ function parseChecklist(req: string): Capsule | null {
 
 /** Returns a capsule for a recognised request, or null. Output is meant to pass the validator. */
 export function parseRequest(request: string): Capsule | null {
-  const req = normalize(request);
+  const req = stripLeadingVerb(normalize(request));
   if (req.length === 0 || SKIP_RULES.some((p: RegExp) => p.test(req))) {
     return null;
   }
