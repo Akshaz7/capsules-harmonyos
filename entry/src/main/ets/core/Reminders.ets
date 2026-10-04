@@ -100,3 +100,24 @@ export function notifiesInApp(trigger: Trigger | undefined, action: string, cale
   }
   return !(calendarReminders && trigger !== undefined && trigger.on === 'time');
 }
+
+/** A notification for notify:<text>: the capsule's name as the title, the text as the body. */
+export interface NotificationContent {
+  title: string;
+  text: string;
+}
+
+const MAX_TITLE: number = 60;
+const MAX_BODY: number = 200;
+
+export function notificationContent(capsuleName: string, text: string): NotificationContent {
+  const title = capsuleName.trim().length > 0 ? capsuleName.trim() : 'Harmoniser';
+  const body = text.trim().length > 0 ? text.trim() : 'Reminder';
+  return {
+    title: title.length > MAX_TITLE ? `${title.substring(0, MAX_TITLE - 1)}…` : title,
+    text: body.length > MAX_BODY ? `${body.substring(0, MAX_BODY - 1)}…` : body
+  };
+}
+
+/** Launch parameters that open one capsule (a notification or widget tap): see pages/WidgetLaunch. */
+export const OPEN_CAPSULE_ACTION: string = 'openCapsule';

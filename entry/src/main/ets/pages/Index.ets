@@ -49,7 +49,7 @@ import {
   TimerState
 } from '../renderer/CapsuleRuntime';
 import { Notifier } from '../renderer/CapsuleRuntime';
-import { dailyReminders } from '../core/Reminders';
+import { dailyReminders, notificationContent } from '../core/Reminders';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
 import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon } from './CapsuleEntry';
@@ -235,7 +235,8 @@ class NotifyText implements Notifier {
   }
 
   notify(capsuleId: string, text: string): void {
-    this.adapter.publish(text, this.capsuleName);
+    const n = notificationContent(this.capsuleName, text);
+    this.adapter.publish(n.title, n.text, capsuleId); // tapping it opens the capsule
   }
 }
 
@@ -417,6 +418,8 @@ struct Index {
     if (this.launch.formId.length > 0) {
       // Cold start from a blank widget: open the picker once the Navigation is up.
       setTimeout(() => this.openCapsulePicker(), 0);
+    } else if (this.launch.capsuleId.length > 0) {
+      setTimeout(() => this.openLaunchedCapsule(), 0); // cold start from a reminder or widget tap
     }
     if (this.share.seq > 0) {
       setTimeout(() => this.onShared(), 0); // cold start from the share sheet
@@ -1038,6 +1041,23 @@ struct Index {
   onWidgetLaunch(): void {
     if (this.launch.formId.length > 0) {
       this.openCapsulePicker();
+    }
+  }
+
+  @Monitor('launch.capsuleId')
+  onCapsuleLaunch(): void {
+    if (this.launch.capsuleId.length > 0 && this.entries.length > 0) {
+      this.openLaunchedCapsule();
+    }
+  }
+
+  /** A reminder notification or a widget's "tap to open": show that capsule (if it is still saved). */
+  private openLaunchedCapsule(): void {
+    const id = this.launch.capsuleId;
+    this.launch.capsuleId = '';
+    if (this.entries.some((e: CapsuleEntry) => e.capsule.id === id)) {
+      this.nav.clear();
+      this.open(id);
     }
   }
 

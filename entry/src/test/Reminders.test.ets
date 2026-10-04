@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@ohos/hypium';
 import {
-  dailyReminders, DailyReminder, nextOccurrence, notifiesInApp, planReminderSync, reminderPrefix
+  dailyReminders, DailyReminder, nextOccurrence, notificationContent, notifiesInApp, planReminderSync, reminderPrefix
 } from '../main/ets/core/Reminders';
 import { CapsuleRuntime, Notifier } from '../main/ets/renderer/CapsuleRuntime';
 import { TriggerGuard } from '../main/ets/core/Triggers';
@@ -76,6 +76,15 @@ export default function remindersTest() {
       expect(keys(dup.add)).assertEqual('19:30 Evening check');
       const gone = planReminderSync(wanted.map((r: DailyReminder) => r.key), []);
       expect(`${gone.add.length} ${gone.removeAt.join()}`).assertEqual('0 0,1'); // capsule lost its triggers
+    });
+
+    it('builds the notification: capsule name as title, the text as body', 0, () => {
+      const n = notificationContent('Medication', 'Time for Medication');
+      expect(`${n.title} | ${n.text}`).assertEqual('Medication | Time for Medication');
+      const blank = notificationContent('  ', ' ');
+      expect(`${blank.title} | ${blank.text}`).assertEqual('Harmoniser | Reminder');
+      const long = notificationContent('x'.repeat(80), 'y'.repeat(300));
+      expect(`${long.title.length} ${long.text.length}`).assertEqual('60 200');
     });
 
     it('finds the next local occurrence: later today, else tomorrow', 0, () => {
