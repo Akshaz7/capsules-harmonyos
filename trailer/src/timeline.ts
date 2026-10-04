@@ -56,15 +56,15 @@ export const VO: VoLine[] = [
   {id: 's3-ask', scene: 'turn', at: 424, end: 490, text: "Don't search for an app. Ask."},
 
   {id: 'p-emma', scene: 'people', at: 499, end: 559, text: 'Emma has a geography test.'},
-  {id: 'p-judge', scene: 'people', at: 579, end: 715, text: "A judge tried to break it. It built the day around Kraków's forecast.", tts: "A judge tried to break it. It built the day around Krah-koof's forecast."},
+  {id: 'p-judge', scene: 'people', at: 579, end: 715, text: "A judge tried to break it. Tasks and Kraków's weather, in one.", tts: "A judge tried to break it. Tasks and Krah-koof's weather, in one."},
   {id: 'p-tyler', scene: 'people', at: 749, end: 813, text: 'Tyler runs a 10K. In miles.', tts: 'Tyler runs a ten K. In miles.'},
   {id: 'p-rose', scene: 'people', at: 839, end: 899, text: 'Grandma Rose: six of eight.'},
   {id: 'p-mike', scene: 'people', at: 929, end: 989, text: "Mike won. Here's the proof."},
 
   {id: 'o-phone', scene: 'options', at: 1009, end: 1075, text: 'Built on the phone. No account.'},
-  {id: 'o-ai', scene: 'options', at: 1114, end: 1184, text: 'Bigger jobs use EU cloud AI.'},
+  {id: 'o-ai', scene: 'options', at: 1112, end: 1208, text: 'Bigger jobs use cloud AI. You choose.'},
   {id: 'o-market', scene: 'options', at: 1219, end: 1285, text: 'Start from the marketplace.'},
-  {id: 'o-share', scene: 'options', at: 1324, end: 1390, text: 'Share any capsule with a link.'},
+  {id: 'o-share', scene: 'options', at: 1324, end: 1400, text: 'Share a capsule as a file or QR.'},
 
   {id: 's5-pin', scene: 'home', at: 1429, end: 1499, text: 'Pin the ones you actually use.'},
 
@@ -208,9 +208,9 @@ export type OptionsBeat = {
 
 export const OPTIONS: OptionsBeat[] = [
   {id: 'phone', from: 1005, durationInFrames: 105, footage: 'options-phone', voId: 'o-phone', caption: 'Built on the phone', sub: 'No account. No internet.'},
-  {id: 'ai', from: 1110, durationInFrames: 105, footage: 'options-ai', voId: 'o-ai', caption: 'Cloud AI, EU-first', sub: 'Only when you allow it.'},
+  {id: 'ai', from: 1110, durationInFrames: 105, footage: 'options-ai', voId: 'o-ai', caption: 'Cloud AI, your choice', sub: 'EU-only is one switch.'},
   {id: 'market', from: 1215, durationInFrames: 105, footage: 'options-market', voId: 'o-market', caption: 'The marketplace', sub: 'Install with consent.'},
-  {id: 'share', from: 1320, durationInFrames: 105, footage: 'options-share', voId: 'o-share', caption: 'Share a capsule', sub: 'Link or QR code.'},
+  {id: 'share', from: 1320, durationInFrames: 105, footage: 'options-share', voId: 'o-share', caption: 'Share a capsule', sub: 'File or QR code.'},
 ];
 
 // Beat layout inside a PersonaBeat, as fractions/frames of the beat.
@@ -272,6 +272,6 @@ export const S7 = {
   trySlot: 32, // each 'Try:' line types out one char at a time
   tries: ['Try: tennis scoreboard me vs Sam', 'Try: km to miles converter', 'Try: split dinner 120 between 4'],
   urlsAt: 1898,
-  urls: ['github.com/Akshaz7/capsules-harmonyos', 'harmoniser-web.vercel.app'],
+  urls: ['github.com/Akshaz7/capsules-harmonyos', 'harmoniser.keanuc.net'],
   disclaimer: 'Some screens are design previews.',
 };

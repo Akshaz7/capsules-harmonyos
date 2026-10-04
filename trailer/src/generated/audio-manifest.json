@@ -288,8 +288,8 @@
     "p-judge": {
       "file": "audio/vo/p-judge.mp3",
       "trimStartFrames": 0,
-      "durationFrames": 126,
-      "playbackRate": 1.079,
+      "durationFrames": 123,
+      "playbackRate": 1,
       "slotFrames": 136,
       "budgetFrames": 126,
       "overrun": false,
@@ -308,7 +308,7 @@
         },
         {
           "word": "to",
-          "frame": 20
+          "frame": 19
         },
         {
           "word": "break",
@@ -319,32 +319,28 @@
           "frame": 30
         },
         {
-          "word": "It",
-          "frame": 44
+          "word": "Tasks",
+          "frame": 43
         },
         {
-          "word": "built",
-          "frame": 50
-        },
-        {
-          "word": "the",
-          "frame": 57
-        },
-        {
-          "word": "day",
-          "frame": 60
-        },
-        {
-          "word": "around",
-          "frame": 65
+          "word": "and",
+          "frame": 56
         },
         {
           "word": "Krah-koof's",
-          "frame": 74
+          "frame": 61
         },
         {
-          "word": "forecast.",
-          "frame": 96
+          "word": "weather,",
+          "frame": 80
+        },
+        {
+          "word": "in",
+          "frame": 93
+        },
+        {
+          "word": "one.",
+          "frame": 100
         }
       ]
     },
@@ -487,10 +483,10 @@
     "o-ai": {
       "file": "audio/vo/o-ai.mp3",
       "trimStartFrames": 0,
-      "durationFrames": 67,
+      "durationFrames": 93,
       "playbackRate": 1.1,
-      "slotFrames": 70,
-      "budgetFrames": 60,
+      "slotFrames": 96,
+      "budgetFrames": 86,
       "overrun": true,
       "words": [
         {
@@ -503,19 +499,23 @@
         },
         {
           "word": "use",
-          "frame": 20
-        },
-        {
-          "word": "EU",
-          "frame": 26
+          "frame": 21
         },
         {
           "word": "cloud",
-          "frame": 35
+          "frame": 27
         },
         {
           "word": "AI.",
-          "frame": 44
+          "frame": 38
+        },
+        {
+          "word": "You",
+          "frame": 62
+        },
+        {
+          "word": "choose.",
+          "frame": 69
         }
       ]
     },
@@ -549,10 +549,10 @@
     "o-share": {
       "file": "audio/vo/o-share.mp3",
       "trimStartFrames": 0,
-      "durationFrames": 59,
+      "durationFrames": 74,
       "playbackRate": 1.1,
-      "slotFrames": 66,
-      "budgetFrames": 56,
+      "slotFrames": 76,
+      "budgetFrames": 66,
       "overrun": true,
       "words": [
         {
@@ -560,24 +560,32 @@
           "frame": 0
         },
         {
-          "word": "any",
-          "frame": 12
+          "word": "a",
+          "frame": 10
         },
         {
           "word": "capsule",
-          "frame": 19
+          "frame": 12
         },
         {
-          "word": "with",
-          "frame": 31
+          "word": "as",
+          "frame": 25
         },
         {
           "word": "a",
-          "frame": 36
+          "frame": 30
         },
         {
-          "word": "link.",
-          "frame": 38
+          "word": "file",
+          "frame": 33
+        },
+        {
+          "word": "or",
+          "frame": 44
+        },
+        {
+          "word": "QR.",
+          "frame": 49
         }
       ]
     },
@@ -797,7 +805,7 @@
   },
   "music": {
     "ok": false,
-    "error": "HTTP 402: {\"detail\":{\"type\":\"payment_required\",\"code\":\"paid_plan_required\",\"message\":\"Music API is not available for free users. Please upgrade to a paid plan to use the API.\",\"status\":\"limited_access\",\"request_id\":\"b314fbf4cd2dff2a882d40a27c1396d0\"}}"
+    "error": "HTTP 402: {\"detail\":{\"type\":\"payment_required\",\"code\":\"paid_plan_required\",\"message\":\"Music API is not available for free users. Please upgrade to a paid plan to use the API.\",\"status\":\"limited_access\",\"request_id\":\"1fc46fb85fa884814141461323d13f3c\"}}"
   },
   "sfx": {
     "whoosh": {

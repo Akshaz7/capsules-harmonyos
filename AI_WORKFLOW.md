@@ -126,3 +126,11 @@ Generated code was accepted only after it passed the gates below. Product-visibl
 ## AI feature disclosure
 
 AI is part of the product: Harmoniser turns plain-language requests into capsules. It uses a rule parser, then LFM2-VL-450M on-device through our Cactus port, then Mistral `ministral-14b-latest` (EU) or, if the user opts in, Claude `claude-sonnet-5-5`. The full disclosure covers models, inference flow, data handling and privacy, failure and fallback behaviour, evaluation and limitations. It is in [`docs/AI_INTEGRATION.md`](docs/AI_INTEGRATION.md).
+
+### Trailer (marketing video)
+
+The launch trailer in `trailer/` uses AI tools too, and the team declares them here: the voice-over is ElevenLabs
+text-to-speech ("Liam", `eleven_turbo_v2_5`), the four sound effects are ElevenLabs sound generation, and the
+video is composed in Remotion with the Manrope font. Only the trailer's own script lines are sent to ElevenLabs;
+no app data, user data or capsule content is involved. The music is not third-party — it is our own synth script
+(`trailer/scripts/synth-music.mjs`). Details and licences: [`docs/THIRD_PARTY.md`](docs/THIRD_PARTY.md).
