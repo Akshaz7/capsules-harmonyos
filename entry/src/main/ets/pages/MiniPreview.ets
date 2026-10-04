@@ -1,5 +1,7 @@
 import { CapsuleRuntime, ChecklistState, formatClock, TimerState } from '../renderer/CapsuleRuntime';
 import { capsuleIcon } from './CapsuleEntry';
+import { Flags } from '../theme/Flags';
+import { Palette } from '../theme/Tokens';
 
 /**
  * A live mini widget for the home "Recent" grid: a timer ring, a big count, or a checklist ring, read from
@@ -51,14 +53,16 @@ export struct MiniPreview {
       } else {
         SymbolGlyph(capsuleIcon(this.runtime.capsule))
           .fontSize(40)
-          .fontColor([$r('sys.color.icon_emphasize')])
+          .fontColor([Flags.NEW_CREATE_CLASSIC ? Palette.blue : $r('sys.color.icon_emphasize')])
       }
     }
     .width('100%')
     .aspectRatio(1)
     .justifyContent(FlexAlign.Center)
-    .borderRadius(24)
-    .backgroundColor($r('sys.color.comp_background_primary'))
+    // NEW_CREATE_CLASSIC: a white card, radius 22, 1vp line border.
+    .borderRadius(Flags.NEW_CREATE_CLASSIC ? 22 : 24)
+    .backgroundColor(Flags.NEW_CREATE_CLASSIC ? Palette.surface : $r('sys.color.comp_background_primary'))
+    .border(Flags.NEW_CREATE_CLASSIC ? { width: 1, color: Palette.line2 } : { width: 0 })
   }
 
   private timerDone(t: TimerState): number {

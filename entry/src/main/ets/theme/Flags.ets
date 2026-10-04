@@ -18,6 +18,8 @@ export class Flags {
   static readonly NEW_SHARE: boolean = true;
   static readonly NEW_WIDE: boolean = true;
   static readonly NEW_ERRORS: boolean = true;
+  /** The old Create layout (NEW_CREATE false) in the new theme. Off until the user has checked it. */
+  static readonly NEW_CREATE_CLASSIC: boolean = false;
   /** Create screen extras: the Recent row and the suggestion chips (off: brand, question, prompt bar only). */
   static readonly CREATE_RECENT: boolean = false;
   static readonly CREATE_SUGGESTIONS: boolean = false;

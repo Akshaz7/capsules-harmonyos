@@ -1906,7 +1906,9 @@ struct Index {
           this.inputFocused = false;
         })
         .width('100%')
-        .fontSize($r('sys.float.Body_L'))
+        .fontSize(Flags.NEW_CREATE_CLASSIC ? 17 : $r('sys.float.Body_L'))
+        .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text : undefined)
+        .placeholderColor(Flags.NEW_CREATE_CLASSIC ? Palette.disabled : undefined)
         .backgroundColor(Color.Transparent)
         .borderRadius(0)
         .padding(0)
@@ -1917,11 +1919,12 @@ struct Index {
         Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
           SymbolGlyph($r('sys.symbol.camera'))
             .fontSize(20)
-            .fontColor([$r('sys.color.icon_primary')])
+            .fontColor([Flags.NEW_CREATE_CLASSIC ? Palette.text : $r('sys.color.icon_primary')])
             .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.cameraBounce)
         }
-        .width(40)
-        .height(40)
+        .width(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
+        .height(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
+        .backgroundColor(Flags.NEW_CREATE_CLASSIC ? Palette.softButton : undefined)
         .enabled(!this.busy)
         .accessibilityText('Snap')
         .accessibilityDescription(SNAP_HINT)
@@ -1947,12 +1950,13 @@ struct Index {
           .height(40)
           .overlay(this.shimmer(), { align: Alignment.Start })
         }
-        .height(40)
+        .height(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
         .clip(true)
-        .backgroundColor($r('sys.color.brand'))
+        .backgroundColor(Flags.NEW_CREATE_CLASSIC ? (this.busy || this.request.trim().length > 0 ? Palette.blue : Palette.sendDisabled) :
+          $r('sys.color.brand'))
         .clickEffect(reduceMotion() ? null : { level: ClickEffectLevel.MIDDLE, scale: 0.92 })
         .enabled(!this.busy && this.request.trim().length > 0)
-        .opacity(this.busy || this.request.trim().length > 0 ? 1 : 0.4)
+        .opacity(Flags.NEW_CREATE_CLASSIC || this.busy || this.request.trim().length > 0 ? 1 : 0.4)
         .onClick(() => {
           this.create();
         })
@@ -1961,11 +1965,14 @@ struct Index {
     }
     .width('100%')
     .padding(16)
-    .borderRadius(24)
+    .borderRadius(Flags.NEW_CREATE_CLASSIC ? 22 : 24)
     // Frosted material over the hero gradient, with a soft shadow; a brand glow while typing.
-    .backgroundBlurStyle(BlurStyle.COMPONENT_THIN)
-    .border({ width: this.inputFocused ? 1.5 : 0.5,
-      color: this.inputFocused ? $r('sys.color.brand') : $r('sys.color.comp_divider') })
+    // NEW_CREATE_CLASSIC: a white card, 1vp line border (blue while typing), the same soft shadow.
+    .backgroundBlurStyle(Flags.NEW_CREATE_CLASSIC ? BlurStyle.NONE : BlurStyle.COMPONENT_THIN)
+    .backgroundColor(Flags.NEW_CREATE_CLASSIC ? Palette.surface : undefined)
+    .border({ width: Flags.NEW_CREATE_CLASSIC ? (this.inputFocused ? 1.5 : 1) : (this.inputFocused ? 1.5 : 0.5),
+      color: this.inputFocused ? (Flags.NEW_CREATE_CLASSIC ? Palette.blue : $r('sys.color.brand')) :
+        (Flags.NEW_CREATE_CLASSIC ? Palette.line2 : $r('sys.color.comp_divider')) })
     .shadow(this.inputFocused ? { radius: 28, color: '#335B8CFF', offsetY: 6 } :
       { radius: 16, color: '#14000000', offsetY: 4 })
     .animation({ duration: 220, curve: Curve.EaseOut })
@@ -2018,8 +2025,9 @@ struct Index {
   @Builder
   statusRow() {
     Text(this.statusLine())
-      .fontSize($r('sys.float.Caption_M'))
-      .fontColor($r('sys.color.font_tertiary'))
+      .fontSize(Flags.NEW_CREATE_CLASSIC ? 13 : $r('sys.float.Caption_M'))
+      .fontWeight(Flags.NEW_CREATE_CLASSIC ? 500 : undefined)
+      .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text2 : $r('sys.color.font_tertiary'))
       .maxLines(1)
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .width('100%')
@@ -2234,22 +2242,39 @@ struct Index {
   home() {
     Scroll() {
       Column({ space: 16 }) {
-        Row({ space: 8 }) {
-          Image($r('app.media.harmoniser_mark'))
-            .width(28)
-            .height(28)
-          Text('Harmoniser')
-            .fontSize(20)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('sys.color.font_primary'))
+        if (Flags.NEW_CREATE_CLASSIC) {
+          // New logo and wordmark, and the scan-QR button (the existing import: file or QR).
+          Row() {
+            HostBar({ showScan: false })
+              .layoutWeight(1)
+              .margin({ left: -20 }) // HostBar pads 20; the page already pads 16
+            SharingBar({
+              showShare: false,
+              compact: true,
+              onPairCode: (code: string) => this.claimDevice(code),
+              onImported: (prepared: PreparedImport) => this.handleImported(prepared)
+            })
+          }
+          .width('100%')
+        } else {
+          Row({ space: 8 }) {
+            Image($r('app.media.harmoniser_mark'))
+              .width(28)
+              .height(28)
+            Text('Harmoniser')
+              .fontSize(20)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('sys.color.font_primary'))
+          }
+          .width('100%')
+          .height(44)
         }
-        .width('100%')
-        .height(44)
         Column({ space: 4 }) {
           HomeHero()
           Text("Tiny apps you don't need to download.")
-            .fontSize($r('sys.float.Body_L'))
-            .fontColor($r('sys.color.font_secondary'))
+            .fontSize(Flags.NEW_CREATE_CLASSIC ? 15 : $r('sys.float.Body_L'))
+            .fontWeight(Flags.NEW_CREATE_CLASSIC ? 500 : undefined)
+            .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text2 : $r('sys.color.font_secondary'))
             .width('100%')
         }
         this.inputCard()
@@ -2267,7 +2292,8 @@ struct Index {
     .scrollBar(BarState.Off)
     // One soft, static pale-blue wash at the top that fades into the system background.
     .linearGradient({ direction: GradientDirection.Bottom,
-      colors: [[$r('app.color.hero_top'), 0], [$r('sys.color.background_secondary'), 0.35]] })
+      colors: Flags.NEW_CREATE_CLASSIC ? [[Color.Transparent, 0], [Color.Transparent, 1]] :
+        [[$r('app.color.hero_top'), 0], [$r('sys.color.background_secondary'), 0.35]] })
     .transition(TransitionEffect.OPACITY)
   }
 
@@ -2418,14 +2444,14 @@ struct Index {
     Column({ space: 12 }) {
       Row() {
         Text('Recent')
-          .fontSize($r('sys.float.Subtitle_L'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('sys.color.font_primary'))
+          .fontSize(Flags.NEW_CREATE_CLASSIC ? 17 : $r('sys.float.Subtitle_L'))
+          .fontWeight(Flags.NEW_CREATE_CLASSIC ? 700 : FontWeight.Bold)
+          .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text : $r('sys.color.font_primary'))
           .layoutWeight(1)
         if (this.entries.length > 0) {
           Text('See all')
-            .fontSize($r('sys.float.Body_M'))
-            .fontColor($r('sys.color.brand'))
+            .fontSize(Flags.NEW_CREATE_CLASSIC ? 15 : $r('sys.float.Body_M'))
+            .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.blue : $r('sys.color.brand'))
             .fontWeight(FontWeight.Medium)
             .onClick(() => this.selectTab(TAB_CAPSULES))
         }
@@ -2433,8 +2459,8 @@ struct Index {
       .width('100%')
       if (this.entries.length === 0) {
         Text('Your capsules will appear here')
-          .fontSize($r('sys.float.Body_M'))
-          .fontColor($r('sys.color.font_tertiary'))
+          .fontSize(Flags.NEW_CREATE_CLASSIC ? 15 : $r('sys.float.Body_M'))
+          .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text2 : $r('sys.color.font_tertiary'))
           .width('100%')
       } else {
         Grid() {
@@ -2443,9 +2469,9 @@ struct Index {
               Column({ space: 8 }) {
                 MiniPreview({ runtime: entry.runtime })
                 Text(entry.capsule.name)
-                  .fontSize($r('sys.float.Body_M'))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('sys.color.font_primary'))
+                  .fontSize(Flags.NEW_CREATE_CLASSIC ? 15 : $r('sys.float.Body_M'))
+                  .fontWeight(Flags.NEW_CREATE_CLASSIC ? 600 : FontWeight.Medium)
+                  .fontColor(Flags.NEW_CREATE_CLASSIC ? Palette.text : $r('sys.color.font_primary'))
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                   .width('100%')
