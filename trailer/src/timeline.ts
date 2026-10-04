@@ -208,7 +208,7 @@ export type OptionsBeat = {
 
 export const OPTIONS: OptionsBeat[] = [
   {id: 'phone', from: 1005, durationInFrames: 105, footage: 'options-phone', voId: 'o-phone', caption: 'Built on the phone', sub: 'No account. No internet.'},
-  {id: 'ai', from: 1110, durationInFrames: 105, footage: 'options-ai', voId: 'o-ai', caption: 'Cloud AI, your choice', sub: 'EU-only is one switch.'},
+  {id: 'ai', from: 1110, durationInFrames: 105, footage: 'options-ai', voId: 'o-ai', caption: 'Cloud AI, your choice', sub: 'Only when you allow it.'},
   {id: 'market', from: 1215, durationInFrames: 105, footage: 'options-market', voId: 'o-market', caption: 'The marketplace', sub: 'Install with consent.'},
   {id: 'share', from: 1320, durationInFrames: 105, footage: 'options-share', voId: 'o-share', caption: 'Share a capsule', sub: 'File or QR code.'},
 ];
