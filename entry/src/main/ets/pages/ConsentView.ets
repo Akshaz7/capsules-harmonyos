@@ -33,6 +33,8 @@ function permissionTitle(p: Permission): string {
       return 'Weather';
     case 'widget':
       return 'Home screen widget';
+    case 'devices':
+      return 'Other devices';
     default:
       return p;
   }
@@ -56,6 +58,8 @@ function permissionReason(p: Permission): string {
       return 'Send the chosen city\'s coordinates to Open-Meteo (open-meteo.com) to show its weather';
     case 'widget':
       return 'Show this capsule on your home screen';
+    case 'devices':
+      return 'Show this capsule on a device you paired. Only its label and its time or count leave your phone';
     default:
       return '';
   }
@@ -77,6 +81,8 @@ function permissionIcon(p: Permission): Resource {
       return $r('sys.symbol.battery_100percent');
     case 'weather':
       return $r('sys.symbol.cloud');
+    case 'devices':
+      return $r('sys.symbol.nearby_devices');
     default:
       return $r('sys.symbol.square_grid_2x2');
   }

@@ -532,28 +532,56 @@ struct Index {
     }
   }
 
-  /** Asks every time (until the "devices" permission lands, T4-13), logs the answer, then sends. */
+  /**
+   * T3-15 with T4-13: once this capsule has "devices" it sends straight away; until then it asks once and the
+   * gatekeeper keeps the answer (allowDevices / denyDevices, both logged). Every send is logged too.
+   */
   private showOnDevice(entry: CapsuleEntry, deviceId: string): void {
     const counter = entry.runtime.counters.length > 0 ? entry.runtime.counters[0].value : undefined;
     const payload = payloadFor(entry.capsule, counter);
     const device = this.devices.find((d: PairedDevice) => d.id === deviceId);
-    if (payload === null || device === undefined) {
+    if (payload === null || device === undefined || !this.gate) {
       return;
     }
+    const gate = this.gate;
     const name = deviceName(device);
     const number = payload.type === 'timer' ? `${payload.seconds} seconds` : `the count ${payload.count}`;
     const what = `${payload.type} "${payload.label}", ${number}`;
+    const send = (): void => {
+      gate.logDeviceSend(entry.capsule.id, true, `sent to ${name}: ${what}`);
+      this.sendToDevice(entry, deviceId);
+    };
+    if (gate.canSendToDevice(entry.capsule.id)) {
+      send();
+      return;
+    }
     this.getUIContext().showAlertDialog({
       title: `Show "${entry.capsule.name}" on ${name}?`,
-      message: `Only this leaves your phone: ${what}.${this.relaySimulated ? ' (Simulated: nothing is sent.)' : ''}`,
-      primaryButton: { value: "Don't send", action: () => {
-        this.gate?.logDeviceSend(entry.capsule.id, false, `refused: show on ${name}`);
+      message: `Only this leaves your phone: ${what}. Harmoniser remembers your answer for this capsule.` +
+        `${this.relaySimulated ? ' (Simulated: nothing is sent.)' : ''}`,
+      primaryButton: { value: "Don't allow", action: () => {
+        gate.denyDevices(entry.capsule.id, `show on ${name}`);
       } },
-      secondaryButton: { value: 'Send', action: () => {
-        this.gate?.logDeviceSend(entry.capsule.id, true, `sent to ${name}: ${what}`);
-        this.sendToDevice(entry, deviceId);
+      secondaryButton: { value: 'Allow and send', action: () => {
+        gate.allowDevices(entry.capsule.id, `show on ${name}`);
+        send();
       } }
     });
+  }
+
+  /** T3-15: a capsule's own sendToDevice button: the device last used, else the first paired one. */
+  private sendFromButton(capsuleId: string): void {
+    const entry = this.entries.find((e: CapsuleEntry) => e.capsule.id === capsuleId);
+    const device = this.devices.find((d: PairedDevice) => d.id === this.deviceId) ??
+      (this.devices.length > 0 ? this.devices[0] : undefined);
+    if (entry === undefined) {
+      return;
+    }
+    if (device === undefined) {
+      this.toast('Pair a device first: open "Show on another device" below the capsule.');
+      return;
+    }
+    this.showOnDevice(entry, device.id);
   }
 
   private async sendToDevice(entry: CapsuleEntry, deviceId: string): Promise<void> {
@@ -1130,6 +1158,8 @@ struct Index {
       if (this.gate.isAllowed(capsule, 'notifications') && this.notifications) {
         rt.notifier = new NotifyText(this.notifications, capsule.name); // asks to enable notifications once
       }
+      rt.onSendToDevice = () => this.sendFromButton(capsule.id); // T3-15: same path as "Show on another device"
+
       // Daily notify triggers ring from the calendar, also while the app is closed (T4-27).
       const reminders = this.gate.isAllowed(capsule, 'reminders') && this.gate.isAllowed(capsule, 'notifications') ?
         dailyReminders(capsule) : [];

@@ -150,6 +150,8 @@ export class CapsuleRuntime {
   guard?: ActionGuard;
   alert?: TimerAlert;
   notifier?: Notifier;
+  /** T3-15: a sendToDevice button (allowed by the guard, so "devices" is granted) uses the page's send path. */
+  onSendToDevice?: () => void;
   /** True when the capsule's daily notify triggers are calendar reminders: the app does not notify them too. */
   calendarReminders: boolean = false;
   /** Called after the user changes persisted state (timers started, counts, ticks, v1 values). */
@@ -419,6 +421,9 @@ export class CapsuleRuntime {
       }
       case 'notify':
         this.notifier?.notify(this.capsule.id, arg);
+        break;
+      case 'sendToDevice':
+        this.onSendToDevice?.();
         break;
       default:
         hilog.warn(DOMAIN, TAG, 'unknown action %{public}s', action);

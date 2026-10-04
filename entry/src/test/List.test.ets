@@ -23,6 +23,7 @@ import weatherTest from './Weather.test';
 import rowPairsTest from './RowPairs.test';
 import buildStagesTest from './BuildStages.test';
 import finishItemTest from './FinishItem.test';
+import sendToDeviceTest from './SendToDevice.test';
 import voiceTextTest from './VoiceText.test';
 import timeTriggersTest from './TimeTriggers.test';
 import remindersTest from './Reminders.test';
@@ -53,6 +54,7 @@ export default function testsuite() {
   rowPairsTest();
   buildStagesTest();
   finishItemTest();
+  sendToDeviceTest();
   voiceTextTest();
   timeTriggersTest();
   remindersTest();
