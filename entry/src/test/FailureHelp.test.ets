@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@ohos/hypium';
-import { Alternative, allAlternatives, cantBuild, CLOUD_EXPLAINER, failureHelp } from '../main/ets/core/FailureHelp';
+import { Alternative, allAlternatives, cantBuild, CLOUD_EXPLAINER, failureHelp, topicOf } from '../main/ets/core/FailureHelp';
 import { GenerateOptions, generateCapsuleWith, routesLive } from '../main/ets/core/CapsuleGenerator';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
 import { Capsule } from '../main/ets/core/CapsuleTypes';
@@ -15,15 +15,24 @@ export default function failureHelpTest() {
       expect(failureHelp('bitcoin price tracker').reason).assertEqual("Capsules can't fetch live prices yet.");
     });
 
-    it('offers one related alternative; nothing for an ordinary failed request', 0, () => {
-      const news = failureHelp('Build a news widget that gives me latest info in the mornings').alternative as Alternative;
-      expect(news.label).assertEqual('Task list with the weather for Kraków');
-      const plain = failureHelp('a quiz about dinosaurs with confetti');
-      expect(`${plain.reason}|${plain.alternative === null}`).assertEqual('|true');
+    it('offers 2-3 alternatives from the request, never generic ones', 0, () => {
+      const news = failureHelp('Build a news widget that gives me latest info in the mornings').alternatives;
+      expect(news.map((a: Alternative) => a.label).join(' | '))
+        .assertEqual('Task list with the weather for Kraków | Morning checklist | Daily reading timer 15 min');
+      expect(topicOf('a quiz about dinosaurs with confetti')).assertEqual('Dinosaurs confetti');
+      const own = failureHelp('a quiz about dinosaurs with confetti');
+      expect(`${own.reason}|${own.alternatives.map((a: Alternative) => a.label).join(' | ')}`)
+        .assertEqual('|Dinosaurs confetti counter | Dinosaurs confetti timer 10 min | Dinosaurs confetti checklist');
+      expect(failureHelp('!!!').alternatives.length).assertEqual(0);
     });
 
     it('every alternative builds on the phone (no cloud) and validates', 0, async (done: Function) => {
-      for (const a of allAlternatives()) {
+      const all: Alternative[] = allAlternatives();
+      ['a quiz about dinosaurs with confetti', 'track my houseplants', 'karaoke party planner',
+        'make me an app for my guitar practice'].forEach((r: string) => {
+        failureHelp(r).alternatives.forEach((a: Alternative) => all.push(a));
+      });
+      for (const a of all) {
         // The app tries a strong template match first (Index), then the generator without the cloud.
         const m = matchTemplate(a.request);
         const r = await generateCapsuleWith(a.request, [], '', null);

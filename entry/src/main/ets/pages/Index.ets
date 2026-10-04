@@ -50,7 +50,7 @@ import {
 } from '../renderer/CapsuleRuntime';
 import { Notifier } from '../renderer/CapsuleRuntime';
 import { dailyReminders, notificationContent } from '../core/Reminders';
-import { cantBuild, CLOUD_EXPLAINER, failureHelp, FailureHelp, TRY_CLOUD_LABEL } from '../core/FailureHelp';
+import { Alternative, cantBuild, CLOUD_EXPLAINER, failureHelp, FailureHelp, TRY_CLOUD_LABEL } from '../core/FailureHelp';
 import { SecondaryButton } from '../components/Buttons';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
@@ -151,13 +151,6 @@ const PLACEHOLDER_MS = 3000;
 const TYPE_MS = 55; // one character per tick while typing the placeholder
 const HOLD_TICKS = 30; // ~1.6 s with a whole example shown
 
-// Shown after a failed create. Each request is one the offline rules can build.
-const RETRY_SUGGESTIONS: ExampleChip[] = [
-  { label: 'Tennis points counter', icon: $r('sys.symbol.plus_circle'), request: 'count tennis points' },
-  { label: 'Eggs timer 10 min', icon: $r('sys.symbol.timer'), request: 'timer eggs 10' },
-  { label: 'Gym checklist', icon: $r('sys.symbol.checkmark_circle'),
-    request: 'checklist for gym: towel, water, shoes' }
-];
 /** Hidden demo requests that load core's schema v1 fixtures (for testing and the demo video). */
 function demoFixture(text: string): string | null {
   const t = text.toLowerCase();
@@ -2455,6 +2448,7 @@ struct Index {
     }
     .height(36)
     .padding({ left: 14, right: 14 })
+    .margin({ right: 8, bottom: 8 })
     .borderRadius(18)
     .backgroundColor(Flags.NEW_ERRORS ? Palette.surface : $r('sys.color.comp_background_tertiary'))
     .onClick(() => {
@@ -2495,33 +2489,16 @@ struct Index {
       if (this.canTryCloud()) {
         SecondaryButton({ label: TRY_CLOUD_LABEL, onTap: () => this.tryCloud() })
       }
-      if (this.failHelp().alternative !== null) {
+      // Ash: every suggestion comes from the request (no generic examples).
+      if (this.failHelp().alternatives.length > 0) {
         Text('Try instead')
           .fontSize($r('sys.float.Body_S'))
           .fontColor($r('sys.color.font_secondary'))
-        this.retryChip(this.failHelp().alternative?.label ?? '', $r('sys.symbol.checkmark_circle'),
-          this.failHelp().alternative?.request ?? '')
       }
       Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(RETRY_SUGGESTIONS, (chip: ExampleChip) => {
-          Row({ space: 6 }) {
-            SymbolGlyph(chip.icon)
-              .fontSize(16)
-              .fontColor([$r('sys.color.icon_emphasize')])
-            Text(chip.label)
-              .fontSize($r('sys.float.Body_M'))
-              .fontColor($r('sys.color.font_primary'))
-          }
-          .height(36)
-          .padding({ left: 14, right: 14 })
-          .margin({ right: 8, bottom: 8 })
-          .borderRadius(18)
-          .backgroundColor(Flags.NEW_ERRORS ? Palette.surface : $r('sys.color.comp_background_tertiary'))
-          .onClick(() => {
-            this.request = chip.request;
-            this.create();
-          })
-        }, (chip: ExampleChip) => chip.label)
+        ForEach(this.failHelp().alternatives, (a: Alternative) => {
+          this.retryChip(a.label, $r('sys.symbol.checkmark_circle'), a.request)
+        }, (a: Alternative) => a.request)
       }
       .width('100%')
       if (this.settings.aiMode === 'on-device') {
