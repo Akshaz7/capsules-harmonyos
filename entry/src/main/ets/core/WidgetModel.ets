@@ -363,12 +363,30 @@ export interface WidgetRow {
 export type WidgetLayout = 'counter' | 'goal' | 'timer' | 'checklist' | 'logic' | 'rows' | 'message';
 
 /** The capsule icon (a system symbol chosen by the card). */
-export type WidgetIcon = 'counter' | 'goal' | 'timer' | 'checklist' | 'logic' | 'text' | 'blank';
+export type WidgetIcon = 'counter' | 'goal' | 'timer' | 'checklist' | 'logic' | 'text' | 'blank' | 'water' | 'walk' |
+  'trophy' | 'cooking';
+
+const THEMED_ICONS: [RegExp, WidgetIcon][] = [
+  [/\b(water|drink\w*|hydrat\w*|glass(es)?)\b/i, 'water'],
+  [/\b(run\w*|steps?|walk\w*|jog\w*|hike|hiking)\b/i, 'walk'],
+  [/\b(score\w*|match|game|tennis|football|ping ?pong|points?|tournament)\b/i, 'trophy'],
+  [/\b(cook\w*|chicken|rice|pasta|bake|baking|oven|recipe|boil\w*|eggs?|kitchen)\b/i, 'cooking'],
+  [/\b(timers?|countdown|pomodoro|minutes?)\b/i, 'timer']
+];
+
+/** A themed icon from the capsule name ("Water logger" -> drop, "Tennis score" -> trophy), else `fallback`. */
+export function themedIcon(name: string, fallback: WidgetIcon): WidgetIcon {
+  if (fallback === 'blank') {
+    return fallback;
+  }
+  const hit = THEMED_ICONS.find((t: [RegExp, WidgetIcon]) => t[0].test(name));
+  return hit !== undefined ? hit[1] : fallback;
+}
 
 /** One v1 display line: plain text, or a score line "label left - right" drawn as two big numbers. */
 export interface WidgetDisplay {
   key: string;
-  kind: 'line' | 'score';
+  kind: 'line' | 'score' | 'number';
   text: string;
   label: string;
   left: string;
@@ -565,18 +583,57 @@ function arrangeV0(view: WidgetView): void {
   }
 }
 
-const GOAL_LINE: RegExp = /^\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*(.*)$/;
+/** "3 / 8 glasses", "Glasses: 3 / 8", "3 of 8 glasses": [label, value, goal, rest]. */
+const GOAL_LINE: RegExp = /^\s*(?:([^\d]{0,24}?)\s*:\s*)?(\d+(?:\.\d+)?)\s*(?:\/|\bof\b)\s*(\d+(?:\.\d+)?)\s*(.*)$/i;
+/** A line led by a number ("1 glass", "Glasses: 1"): [label, value, rest]. */
+const NUMBER_LINE: RegExp = /^\s*(?:([^\d]{0,24}?)\s*:\s*)?(\d+(?:\.\d+)?)\b\s*(.*)$/;
+const GOAL_VARS: RegExp = /^(daily_?)?(goal|target)$/i;
+
+export class GoalLine {
+  value: number = 0;
+  goal: number = 0;
+  caption: string = '';
+}
+
+/**
+ * The goal a v1 card shows as a ring: a first line "n / goal" or "n of goal", or a first line led by a number
+ * when the capsule has a numeric goal/target value. Null otherwise.
+ */
+export function goalOf(line: string, values: StateValues): GoalLine | null {
+  const g = new GoalLine();
+  const m = line.match(GOAL_LINE);
+  if (m !== null && parseFloat(m[3]) > 0) {
+    g.value = parseFloat(m[2]);
+    g.goal = parseFloat(m[3]);
+    g.caption = [m[1] ?? '', m[4].replace(/^[\s·•,\-–:|]+/, '').trim()].filter((t: string) => t.length > 0).join(' · ');
+    return g;
+  }
+  const key = Object.keys(values).find((k: string) => GOAL_VARS.test(k) && typeof values[k] === 'number');
+  const n = line.match(NUMBER_LINE);
+  if (key !== undefined && n !== null && (values[key] as number) > 0) {
+    g.value = parseFloat(n[2]);
+    g.goal = values[key] as number;
+    g.caption = [n[1] ?? '', n[3].trim()].filter((t: string) => t.length > 0).join(' · ');
+    return g;
+  }
+  return null;
+}
 const SCORE_LINE: RegExp = /^(.*?)\s*(\S{1,4})\s+[-–:]\s+(\S{1,4})$/;
 
 /** A display line; "Games 2 - 1" or "15 - 30" becomes a score line. */
 export function displayFor(key: string, text: string): WidgetDisplay {
   const d: WidgetDisplay = { key: key, kind: 'line', text: text, label: '', left: '', right: '' };
   const m = text.match(SCORE_LINE);
+  const n = text.match(NUMBER_LINE);
   if (m !== null && m[1].length <= 24) {
     d.kind = 'score';
     d.label = m[1].trim();
     d.left = m[2];
     d.right = m[3];
+  } else if (n !== null && n[3].length <= 40) {
+    d.kind = 'number'; // "1", "3 glasses today", "Glasses: 3": the card draws the number big, the rest under it
+    d.left = n[2];
+    d.label = [n[1] ?? '', n[3].trim()].filter((t: string) => t.length > 0).join(' · ');
   }
   return d;
 }
@@ -623,17 +680,13 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
     }
   });
   texts.forEach((t: string) => lines.push(t));
-  const goal = lines.length > 0 && view.rows.length === 0 ? lines[0].match(GOAL_LINE) : null;
-  if (goal !== null && parseFloat(goal[2]) > 0) {
+  const goal = lines.length > 0 && view.rows.length === 0 ? goalOf(lines[0], values) : null;
+  if (goal !== null) {
     view.layout = 'goal';
     view.icon = 'goal';
-    view.value = parseFloat(goal[1]);
-    view.goal = parseFloat(goal[2]);
-    const rest = goal[3].replace(/^[\s·•,\-–:|]+/, '').trim();
-    view.caption = lines.length > 1 ? lines[1] : rest;
-    if (lines.length > 1 && rest.length > 0) {
-      view.caption = `${rest} · ${lines[1]}`;
-    }
+    view.value = goal.value;
+    view.goal = goal.goal;
+    view.caption = [goal.caption].concat(lines.slice(1, 2)).filter((t: string) => t.length > 0).join(' · ');
   } else {
     view.layout = 'logic';
     view.icon = view.rows.some((r: WidgetRow) => r.kind === 'timer') ? 'timer' : 'logic';
@@ -690,7 +743,7 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
       (c as CounterComponent).source === 'motion') || (capsule.triggers ?? []).some((t: Trigger) => t.on === 'motion');
     const why = motion ? 'Counts motion only while the capsule is open. Tap to open.' : 'Tap to open';
     const v = baseView('empty', capsule.id, capsule.name, why, wide);
-    v.icon = capsule.schemaVersion === 1 ? 'logic' : 'blank';
+    v.icon = themedIcon(capsule.name, capsule.schemaVersion === 1 ? 'logic' : 'text');
     return v;
   }
   let view: WidgetView;
@@ -713,6 +766,7 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
     });
     arrangeV0(view);
   }
+  view.icon = themedIcon(capsule.name, view.icon); // water -> drop, tennis -> trophy
   view.summary = summaryLine(view, now);
   const hidden = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type !== 'button' &&
     !permitted(permissionForComponent(c), gate.granted)).length;

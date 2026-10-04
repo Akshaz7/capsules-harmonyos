@@ -3,10 +3,11 @@ import {
   applyWidgetMessage, buildWidgetView, CapsuleState, declaredAction, GateFacts, initialState, parseState,
   parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow,
   BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact,
-  accentFor, capsuleForNewWidget, isWideSize, sizeForDimension, sizeOfBinding, summaryLine, WidgetCheckItem, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
+  accentFor, capsuleForNewWidget, goalOf, themedIcon, isWideSize, sizeForDimension, sizeOfBinding, summaryLine, WidgetCheckItem, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
 } from '../main/ets/core/WidgetModel';
 import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
 import { StateValues } from '../main/ets/core/CapsuleProgram';
+import { GoalLine } from '../main/ets/core/WidgetModel';
 import { parseRequest } from '../main/ets/core/RuleParser';
 import { routeCapsule } from '../main/ets/core/CapsuleRouter';
 import { validateCapsule } from '../main/ets/core/CapsuleValidator';
@@ -62,6 +63,15 @@ function noneRemoved(id: string): boolean {
 
 function displaySummary(d: WidgetDisplay): string {
   return d.kind === 'score' ? `${d.label}[${d.left}|${d.right}]` : d.text;
+}
+
+function glassesGoal(goal: number): StateValues {
+  const v: StateValues = {};
+  v['glasses'] = 2;
+  if (goal > 0) {
+    v['goal'] = goal;
+  }
+  return v;
 }
 
 function goalValues(count: number): StateValues {
@@ -278,7 +288,7 @@ export default function widgetModelTest() {
     it('a v1 goal counter becomes a ring with its value, goal and what is left (T4-15)', 0, () => {
       const water = rules('water 8 glasses');
       const v = buildWidgetView(water, initialState(water), gate([], true, false), 0, false, goalValues(3));
-      expect(`${v.layout} ${v.icon} ${v.value}/${v.goal}`).assertEqual('goal goal 3/8');
+      expect(`${v.layout} ${v.icon} ${v.value}/${v.goal}`).assertEqual('goal water 3/8');
       expect(v.caption).assertEqual('5 to go');
       expect(v.buttons.map((b: WidgetButton) => `${b.index}:${b.label}:${b.enabled}`).join(' ')).assertEqual('0:+1 glass:true 1:Reset:true');
       const done = buildWidgetView(water, initialState(water), gate([], true, false), 0, false, goalValues(8));
@@ -288,12 +298,45 @@ export default function widgetModelTest() {
     it('tennis becomes score lines and point buttons (T4-15, wired by T4-14)', 0, () => {
       const tennis = capsuleOf(TENNIS_CAPSULE);
       const v = buildWidgetView(tennis, initialState(tennis), gate([], true, false), 0, true, tennisValues());
-      expect(`${v.layout} ${v.icon}`).assertEqual('logic logic');
+      expect(`${v.layout} ${v.icon}`).assertEqual('logic trophy');
       expect(v.displays.map(displaySummary).join(' | ')).assertEqual('Games[3|2] | [30|15] | P1 leads');
       expect(v.buttons.map((b: WidgetButton) => b.label).join(',')).assertEqual('Point P1,Point P2,Reset match');
       const fresh = buildWidgetView(tennis, initialState(tennis), gate([], true, false), 0, false, {});
       expect(fresh.displays.length).assertEqual(2); // "P1 leads" is hidden until a game is won
       expect(fresh.buttons[2].enabled).assertFalse(); // Reset match: enabledIf
+    });
+
+    it('picks themed icons and the ring for goal-like lines; a lone number is drawn big (T4-24)', 0, () => {
+      expect(themedIcon('Water logger', 'logic')).assertEqual('water');
+      expect(themedIcon('Drink 8 glasses', 'goal')).assertEqual('water');
+      expect(themedIcon('Morning run', 'counter')).assertEqual('walk');
+      expect(themedIcon('Tennis score', 'logic')).assertEqual('trophy');
+      expect(themedIcon('Chicken and rice', 'text')).assertEqual('cooking');
+      expect(themedIcon('Tea timer', 'timer')).assertEqual('timer');
+      expect(themedIcon('Bill split', 'logic')).assertEqual('logic');
+      expect(themedIcon('Water', 'blank')).assertEqual('blank');
+      const a = goalOf('Glasses: 3 / 8', {}) as GoalLine;
+      expect(`${a.value}/${a.goal} ${a.caption}`).assertEqual('3/8 Glasses');
+      const b = goalOf('3 of 8 glasses today', {}) as GoalLine;
+      expect(`${b.value}/${b.goal} ${b.caption}`).assertEqual('3/8 glasses today');
+      const c = goalOf('2 glasses', glassesGoal(8)) as GoalLine;
+      expect(`${c.value}/${c.goal} ${c.caption}`).assertEqual('2/8 glasses');
+      expect(goalOf('2 glasses', glassesGoal(0))).assertNull();
+      expect(goalOf('Round 2 of 5', {})).assertNull();
+      expect(goalOf('Games 2 - 1', {})).assertNull();
+      const logger = capsuleOf('{"schemaVersion":1,"id":"water-log","name":"Water logger","permissions":[],' +
+        '"state":{"glasses":{"type":"number","initial":1}},"ui":[{"type":"display","text":"{glasses}"},' +
+        '{"type":"text","text":"glasses of water today"},{"type":"button","label":"+1","do":[{"set":"glasses",' +
+        '"to":"glasses + 1"}]},{"type":"button","label":"-1","do":[{"set":"glasses","to":"glasses - 1"}]},' +
+        '{"type":"button","label":"Reset","do":[{"reset":"glasses"}]}]}');
+      const v = buildWidgetView(logger, initialState(logger), gate([], true, false), 0, true);
+      expect(`${v.layout} ${v.icon} ${v.displays[0].kind} ${v.displays[0].left}`).assertEqual('logic water number 1');
+      expect(v.displays[1].text).assertEqual('glasses of water today');
+      const goal = capsuleOf('{"schemaVersion":1,"id":"w","name":"Water","permissions":[],"state":{"glasses":' +
+        '{"type":"number","initial":2},"goal":{"type":"number","initial":8}},"ui":[{"type":"display","text":' +
+        '"{glasses} glasses"},{"type":"button","label":"+1","do":[{"set":"glasses","to":"glasses + 1"}]}]}');
+      const g = buildWidgetView(goal, initialState(goal), gate([], true, false), 0, false);
+      expect(`${g.layout} ${g.value}/${g.goal} ${g.caption}`).assertEqual('goal 2/8 glasses');
     });
 
     it('score lines only for short values on both sides', 0, () => {

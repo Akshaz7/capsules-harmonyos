@@ -80,6 +80,23 @@ function listMax(v: CardView): number {
   return sizeOf(v) === 'l' ? 8 : (v.wide ? 4 : 2);
 }
 
+/** The main value's font size: ~40fp on 2x2, ~56fp on 2x4, ~96fp on 4x4 (T4-24). */
+function heroSize(v: CardView): number {
+  const size = sizeOf(v);
+  return size === 'l' ? 96 : (size === 'w' ? 56 : 40);
+}
+
+/** A value inside a ring: smaller than heroSize so it fits the ring. */
+function ringValueSize(v: CardView): number {
+  const size = sizeOf(v);
+  return size === 'l' ? 56 : (size === 'w' ? 28 : 22);
+}
+
+/** Buttons in the bottom row: 2 on 2x2, 3 on 2x4 and 4x4. */
+function maxButtons(v: CardView): number {
+  return sizeOf(v) === 'm' ? 2 : 3;
+}
+
 const MAX_TEXT_TIMER_MS: number = 86399000;
 const PAD: number = 16;
 const BIG_BUTTON: number = 48;
@@ -176,6 +193,14 @@ struct HarmoniserCard {
       SymbolGlyph($r('sys.symbol.list_checkmask')).fontSize(size).fontColor([color])
     } else if (name === 'goal') {
       SymbolGlyph($r('sys.symbol.flag')).fontSize(size).fontColor([color])
+    } else if (name === 'water') {
+      SymbolGlyph($r('sys.symbol.drop')).fontSize(size).fontColor([color])
+    } else if (name === 'walk') {
+      SymbolGlyph($r('sys.symbol.figure_walk')).fontSize(size).fontColor([color])
+    } else if (name === 'trophy') {
+      SymbolGlyph($r('sys.symbol.medal')).fontSize(size).fontColor([color])
+    } else if (name === 'cooking') {
+      SymbolGlyph($r('sys.symbol.cooking')).fontSize(size).fontColor([color])
     } else if (name === 'logic') {
       SymbolGlyph($r('sys.symbol.flag_checkered')).fontSize(size).fontColor([color])
     } else if (name === 'text') {
@@ -248,104 +273,158 @@ struct HarmoniserCard {
 
   // ---- Layouts ----
 
+  /** The value (scaled to the card size) centred with its caption under it. */
   @Builder
-  counterLayout(v: CardView, r: CardRow) {
-    Column() {
-      this.header(v, '')
-      Row() {
-        Column({ space: 2 }) {
-          Text(`${r.value}`)
-            .fontSize(v.wide ? 56 : 48)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('sys.color.font_primary'))
-            .maxLines(1)
-            .minFontSize(28)
-            .maxFontSize(v.wide ? 56 : 48)
-          Text(v.caption.length > 0 ? v.caption : r.label)
-            .fontSize(12)
-            .fontColor($r('sys.color.font_secondary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
+  hero(v: CardView, value: string, caption: string) {
+    Column({ space: 2 }) {
+      Text(value)
+        .fontSize(heroSize(v))
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('sys.color.font_primary'))
+        .fontFeature('"tnum" on')
+        .maxLines(1)
+        .minFontSize(20)
+        .maxFontSize(heroSize(v))
+        .textAlign(TextAlign.Center)
+      if (caption.length > 0) {
+        Text(caption)
+          .fontSize(sizeOf(v) === 'l' ? 16 : 12)
+          .fontColor($r('sys.color.font_secondary'))
+          .maxLines(sizeOf(v) === 'l' ? 2 : 1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.Center)
+      }
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .justifyContent(FlexAlign.Center)
+  }
 
-        if (r.canIncrement) {
-          Stack() {
-            this.roundButton(v, 'plus', v.wide ? 56 : 52, true)
+  /** The capsule's buttons in one full-width row along the bottom: the first filled, the others tinted. */
+  @Builder
+  buttonRow(v: CardView) {
+    if (v.buttons.length > 0) {
+      Row({ space: 8 }) {
+        ForEach(v.buttons.slice(0, maxButtons(v)), (b: CardButton, i: number) => {
+          Row() {
+            this.pill(v, b, i === 0)
           }
-          .onClick(() => this.send('increment', r.id, -1))
-        }
+          .layoutWeight(1)
+        }, (b: CardButton) => `${b.index}:${b.enabled}`)
       }
       .width('100%')
-      .layoutWeight(1)
-      .alignItems(VerticalAlign.Bottom)
+    }
+  }
+
+  @Builder
+  counterLayout(v: CardView, r: CardRow) {
+    Column({ space: 6 }) {
+      this.header(v, '')
+      this.hero(v, `${r.value}`, v.caption.length > 0 ? v.caption : r.label)
+      if (r.canIncrement) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.plus')).fontSize(20).fontColor([$r('sys.color.font_on_primary')])
+        }
+        .width('100%')
+        .height(BIG_BUTTON)
+        .borderRadius(BIG_BUTTON / 2)
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor(v.accent)
+        .onClick(() => this.send('increment', r.id, -1))
+      }
       this.note(v)
     }
     .width('100%')
     .height('100%')
   }
 
+  /** A ring that fills the height it is given, with the value and "/ goal" inside. */
+  @Builder
+  goalRing(v: CardView) {
+    Stack() {
+      Progress({ value: Math.min(v.value, v.goal), total: v.goal, type: ProgressType.Ring })
+        .width('100%')
+        .height('100%')
+        .color(v.accent)
+        .backgroundColor(tint(v.accent))
+        .style({ strokeWidth: sizeOf(v) === 'l' ? 14 : 8 })
+      Column() {
+        Text(numberText(v.value))
+          .fontSize(ringValueSize(v))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .fontFeature('"tnum" on')
+          .maxLines(1)
+          .minFontSize(12)
+          .maxFontSize(ringValueSize(v))
+        Text(`/ ${numberText(v.goal)}`)
+          .fontSize(sizeOf(v) === 'l' ? 18 : 11)
+          .fontColor($r('sys.color.font_secondary'))
+      }
+      .width('70%')
+    }
+    .height('100%')
+    .aspectRatio(1)
+  }
+
   @Builder
   goalLayout(v: CardView) {
-    Column() {
+    Column({ space: 6 }) {
       this.header(v, v.value >= v.goal ? 'Done' : '')
-      Row({ space: 12 }) {
-        Stack() {
-          Progress({ value: Math.min(v.value, v.goal), total: v.goal, type: ProgressType.Ring })
-            .width(v.wide ? 92 : 80)
-            .height(v.wide ? 92 : 80)
-            .color(v.accent)
-            .backgroundColor(tint(v.accent))
-            .style({ strokeWidth: 8 })
-          Column() {
-            Text(numberText(v.value))
-              .fontSize(v.wide ? 30 : 26)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('sys.color.font_primary'))
-              .maxLines(1)
-              .minFontSize(14)
-              .maxFontSize(v.wide ? 30 : 26)
-            Text(`/ ${numberText(v.goal)}`).fontSize(11).fontColor($r('sys.color.font_secondary'))
-          }
-          .width(v.wide ? 72 : 60)
-        }
-
-        Column({ space: 8 }) {
-          if (v.wide) {
-            Text(v.caption)
-              .fontSize(14)
-              .fontColor($r('sys.color.font_secondary'))
-              .maxLines(2)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-          }
-          Row({ space: 8 }) {
-            if (v.buttons.length > 0) {
-              Stack() {
-                this.roundButton(v, 'plus', BIG_BUTTON, v.buttons[0].enabled)
-              }
-              .onClick(() => this.press(v, v.buttons[0]))
+      if (sizeOf(v) === 'm') {
+        // 2x2: the ring fills the height, the main button beside it; the caption under both.
+        Row({ space: 12 }) {
+          this.goalRing(v)
+          Blank()
+          if (v.buttons.length > 0) {
+            Stack() {
+              this.roundButton(v, 'plus', BIG_BUTTON + 8, v.buttons[0].enabled)
             }
-            if (v.wide && v.buttons.length > 1) {
-              this.pill(v, v.buttons[1], false)
-            }
+            .onClick(() => this.press(v, v.buttons[0]))
           }
-          .justifyContent(v.wide ? FlexAlign.Start : FlexAlign.End)
-          .width('100%')
         }
+        .width('100%')
         .layoutWeight(1)
-        .alignItems(v.wide ? HorizontalAlign.Start : HorizontalAlign.End)
-      }
-      .width('100%')
-      .layoutWeight(1)
-      if (!v.wide && v.caption.length > 0) {
-        Text(v.caption)
-          .fontSize(12)
-          .fontColor($r('sys.color.font_secondary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
+        if (v.caption.length > 0) {
+          Text(v.caption)
+            .fontSize(12)
+            .fontColor($r('sys.color.font_secondary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+      } else if (sizeOf(v) === 'w') {
+        // 2x4: ring left, caption right, buttons along the bottom.
+        Row({ space: 16 }) {
+          this.goalRing(v)
+          Text(v.caption)
+            .fontSize(16)
+            .fontColor($r('sys.color.font_secondary'))
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        this.buttonRow(v)
+      } else {
+        // 4x4: a big centred ring, the caption under it, buttons along the bottom.
+        Column() {
+          this.goalRing(v)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Center)
+        if (v.caption.length > 0) {
+          Text(v.caption)
+            .fontSize(16)
+            .fontColor($r('sys.color.font_secondary'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .textAlign(TextAlign.Center)
+            .width('100%')
+        }
+        this.buttonRow(v)
       }
       this.note(v)
     }
@@ -357,7 +436,7 @@ struct HarmoniserCard {
   timerLayout(v: CardView, r: CardRow) {
     Column() {
       this.header(v, '')
-      HeroTimer({ row: r, accent: v.accent, wide: v.wide })
+      HeroTimer({ row: r, accent: v.accent, wide: v.wide, cardSize: sizeOf(v) })
         .layoutWeight(1)
       this.note(v)
     }
@@ -408,14 +487,14 @@ struct HarmoniserCard {
       }
       Row() {
         Text(d.left)
-          .fontSize(big ? 34 : 24)
+          .fontSize(big ? (sizeOf(v) === 'l' ? 72 : (sizeOf(v) === 'w' ? 44 : 34)) : 24)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('sys.color.font_primary'))
           .layoutWeight(1)
           .textAlign(TextAlign.Center)
-        Text('–').fontSize(big ? 22 : 16).fontColor($r('sys.color.font_tertiary'))
+        Text('–').fontSize(big ? (sizeOf(v) === 'l' ? 40 : 22) : 16).fontColor($r('sys.color.font_tertiary'))
         Text(d.right)
-          .fontSize(big ? 34 : 24)
+          .fontSize(big ? (sizeOf(v) === 'l' ? 72 : (sizeOf(v) === 'w' ? 44 : 34)) : 24)
           .fontWeight(FontWeight.Bold)
           .fontColor($r('sys.color.font_primary'))
           .layoutWeight(1)
@@ -459,66 +538,57 @@ struct HarmoniserCard {
       .onClick(() => this.press(v, b))
   }
 
+  /** The first display line, as large as the card allows: a number, a score or a short line. */
+  @Builder
+  leadLine(v: CardView, d: CardDisplay) {
+    if (d.kind === 'number') {
+      this.hero(v, d.left, d.label)
+    } else if (d.kind === 'score') {
+      Column() {
+        this.scoreLine(v, d, true)
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+    } else {
+      Column() {
+        Text(d.text)
+          .fontSize(sizeOf(v) === 'l' ? 36 : (sizeOf(v) === 'w' ? 28 : 22))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(2)
+          .minFontSize(14)
+          .maxFontSize(sizeOf(v) === 'l' ? 36 : (sizeOf(v) === 'w' ? 28 : 22))
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.Center)
+          .width('100%')
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .justifyContent(FlexAlign.Center)
+    }
+  }
+
+  /**
+   * v1 cards: the first display line big and centred (it fills the space between header and buttons), then
+   * the other lines and any timers, then the buttons in one row along the bottom.
+   */
   @Builder
   logicLayout(v: CardView) {
     Column({ space: 6 }) {
       this.header(v, '')
-      if (v.wide) {
-        Row({ space: 12 }) {
-          Column({ space: 4 }) {
-            ForEach(v.displays.slice(0, 3), (d: CardDisplay, i: number) => {
-              if (d.kind === 'score') {
-                this.scoreLine(v, d, i === 0)
-              } else {
-                this.textLine(d, i === 0 || v.displays[0].kind === 'score')
-              }
-            }, (d: CardDisplay) => d.key)
-            ForEach(v.rows.slice(0, 2), (r: CardRow) => {
-              CompactRow({ row: r, accent: v.accent })
-            }, (r: CardRow) => r.key)
-          }
-          .layoutWeight(1)
-          .justifyContent(FlexAlign.Center)
-          .height('100%')
-
-          Column({ space: 8 }) {
-            ForEach(v.buttons.slice(0, 3), (b: CardButton, i: number) => {
-              this.pill(v, b, i === 0)
-            }, (b: CardButton) => `${b.index}:${b.enabled}`)
-          }
-          .width('38%')
-          .justifyContent(FlexAlign.Center)
-          .height('100%')
-        }
-        .width('100%')
-        .layoutWeight(1)
+      if (v.displays.length > 0) {
+        this.leadLine(v, v.displays[0])
       } else {
-        Column({ space: 2 }) {
-          ForEach(v.displays.slice(0, v.rows.length > 0 ? 1 : 2), (d: CardDisplay, i: number) => {
-            if (d.kind === 'score') {
-              this.scoreLine(v, d, i === 0)
-            } else {
-              this.textLine(d, i === 0 || v.displays[0].kind === 'score')
-            }
-          }, (d: CardDisplay) => d.key)
-          ForEach(v.rows.slice(0, 2), (r: CardRow) => {
-            CompactRow({ row: r, accent: v.accent })
-          }, (r: CardRow) => r.key)
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .justifyContent(FlexAlign.Center)
-        Row({ space: 8 }) {
-          ForEach(v.buttons.slice(0, 2), (b: CardButton, i: number) => {
-            Row() {
-              this.pill(v, b, i === 0)
-            }
-            .layoutWeight(1) // two buttons share the 2x2 width instead of pushing the second off the card
-          }, (b: CardButton) => `${b.index}:${b.enabled}`)
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.Center)
+        Blank().layoutWeight(1)
       }
+      ForEach(v.displays.slice(1, sizeOf(v) === 'l' ? 3 : (v.rows.length > 0 ? 1 : 2)), (d: CardDisplay) => {
+        this.textLine(d, false)
+      }, (d: CardDisplay) => d.key)
+      ForEach(v.rows.slice(0, sizeOf(v) === 'm' ? 1 : 2), (r: CardRow) => {
+        CompactRow({ row: r, accent: v.accent })
+      }, (r: CardRow) => r.key)
+      this.buttonRow(v)
     }
     .width('100%')
     .height('100%')
@@ -681,6 +751,8 @@ struct HeroTimer {
   @Prop row: CardRow;
   @Prop accent: string;
   @Prop wide: boolean;
+  /** m = 2x2, w = 2x4, l = 4x4. */
+  @Prop cardSize: string = 'm';
   @State leftMs: number = 0;
   private controller: TextTimerController = new TextTimerController();
   private finishedSent: boolean = false;
@@ -703,6 +775,11 @@ struct HeroTimer {
       return this.totalMs();
     }
     return Math.min(this.leftMs, this.totalMs());
+  }
+
+  /** The time inside the ring: ~22fp on 2x2, 28 on 2x4, 56 on 4x4. */
+  private timeSize(): number {
+    return this.cardSize === 'l' ? 56 : (this.cardSize === 'w' ? 28 : 22);
   }
 
   @Builder
@@ -731,51 +808,79 @@ struct HeroTimer {
     }
   }
 
-  build() {
-    Row({ space: 12 }) {
-      Stack() {
-        Progress({ value: this.fill(), total: this.totalMs(), type: ProgressType.Ring })
-          .width(this.wide ? 96 : 84)
-          .height(this.wide ? 96 : 84)
-          .color(this.accent)
-          .backgroundColor(tint(this.accent))
-          .style({ strokeWidth: 8 })
-        if (!this.wide) {
-          this.time(18)
-        } else {
-          SymbolGlyph($r('sys.symbol.timer')).fontSize(28).fontColor([this.accent])
-        }
-      }
-
-      Column({ space: 6 }) {
-        if (this.wide) {
-          Text(this.row.label)
-            .fontSize(14)
-            .fontColor($r('sys.color.font_secondary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          this.time(40)
-        }
-        if (this.row.canStart && !this.running()) {
-          Stack() {
-            SymbolGlyph($r('sys.symbol.play_fill')).fontSize(20).fontColor([$r('sys.color.font_on_primary')])
-          }
-          .width(BIG_BUTTON)
-          .height(BIG_BUTTON)
-          .borderRadius(BIG_BUTTON / 2)
-          .backgroundColor(this.accent)
-          .onClick(() => {
-            postCardAction(this, { action: 'message', params: { op: 'start', id: this.row.id, index: -1 } });
-          })
-        }
-      }
-      .layoutWeight(1)
-      .alignItems(this.wide ? HorizontalAlign.Start : HorizontalAlign.End)
-      .justifyContent(FlexAlign.End)
-      .height('100%')
+  /** The ring fills the height it is given; the time sits inside it. */
+  @Builder
+  ring() {
+    Stack() {
+      Progress({ value: this.fill(), total: this.totalMs(), type: ProgressType.Ring })
+        .width('100%')
+        .height('100%')
+        .color(this.accent)
+        .backgroundColor(tint(this.accent))
+        .style({ strokeWidth: this.cardSize === 'l' ? 14 : 8 })
+      this.time(this.timeSize())
     }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
+    .height('100%')
+    .aspectRatio(1)
+  }
+
+  @Builder
+  startButton(full: boolean) {
+    if (this.row.canStart && !this.running()) {
+      Row() {
+        SymbolGlyph($r('sys.symbol.play_fill')).fontSize(20).fontColor([$r('sys.color.font_on_primary')])
+      }
+      .width(full ? '100%' : BIG_BUTTON)
+      .height(BIG_BUTTON)
+      .borderRadius(BIG_BUTTON / 2)
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor(this.accent)
+      .onClick(() => {
+        postCardAction(this, { action: 'message', params: { op: 'start', id: this.row.id, index: -1 } });
+      })
+    }
+  }
+
+  build() {
+    if (this.cardSize === 'l') {
+      // 4x4: a big centred ring, the label under it, a full-width start button along the bottom.
+      Column({ space: 8 }) {
+        Column() {
+          this.ring()
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Center)
+        Text(this.row.label)
+          .fontSize(16)
+          .fontColor($r('sys.color.font_secondary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        this.startButton(true)
+      }
+      .width('100%')
+    } else {
+      // 2x2 / 2x4: the ring fills the height on the left; label and start button on the right.
+      Row({ space: 12 }) {
+        this.ring()
+        Column({ space: 6 }) {
+          if (this.wide) {
+            Text(this.row.label)
+              .fontSize(16)
+              .fontColor($r('sys.color.font_secondary'))
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          this.startButton(this.wide)
+        }
+        .layoutWeight(1)
+        .alignItems(this.wide ? HorizontalAlign.Start : HorizontalAlign.End)
+        .justifyContent(this.wide ? FlexAlign.Center : FlexAlign.End)
+        .height('100%')
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+    }
   }
 }
 
