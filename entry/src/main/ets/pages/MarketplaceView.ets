@@ -43,8 +43,17 @@ function keywordIcon(text: string): Resource | undefined {
   if (has(['score', 'match', 'tennis', 'game', 'versus', ' vs', 'ping', 'chess', 'tally', 'golf', 'basketball'])) {
     return $r('sys.symbol.flag_checkered');
   }
-  if (has(['quiz', 'trivia', 'flashcard', 'spelling', 'question', 'capital'])) {
+  if (has(['recipe', 'meal', 'chicken', 'rice', 'pasta', 'dinner', 'lunch', 'breakfast', 'food', 'snack'])) {
+    return $r('sys.symbol.fork_knife');
+  }
+  if (has(['flashcard', 'vocab', 'spelling', 'word'])) {
+    return $r('sys.symbol.book');
+  }
+  if (has(['flag'])) {
     return $r('sys.symbol.flag');
+  }
+  if (has(['quiz', 'trivia', 'question', 'capital', 'true or false'])) {
+    return $r('sys.symbol.questionmark_circle');
   }
   if (has(['habit', 'streak', 'medication', 'vitamin', 'reminder', 'daily'])) {
     return $r('sys.symbol.alarm');
