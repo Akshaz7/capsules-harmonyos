@@ -67,7 +67,7 @@ Every number here comes from the README, `docs/COMPLIANCE.md` or `AI_WORKFLOW.md
 
 **Title:** Intelligent, and on your side
 
-- **Local first:** rules and the on-device model need no network. In **On-device only** mode no request is sent to an AI provider. Two things can still leave the phone when they are configured: the marketplace search (the request text) and a send to another device.
+- **Local first:** rules and the on-device model need no network. In **On-device only** mode no request is sent to an AI provider. Two things can still leave the phone when they are configured: the marketplace search (the request text; on `main` at `bfa70f5` this happens in On-device only mode too, and PR #16 stops it there) and a send to another device.
 - **EU-first cloud:** used automatically only with Mistral (EU). Claude or OpenAI only if you enable non-EU providers. Each provider gets its own consent. For a typed request, only the request text and our fixed prompt are sent.
 - **Honest trade-off:** Mistral 14/15 tuning and 4/5 held-out; Claude 14/15 and 5/5. On hard logic requests Claude led 4/4 to 2/4. We default to EU anyway, and the validator catches the failures.
 - **Transparency:** every capsule shows how it was made: rules, on your phone (template), on-device, Mistral (EU), Claude, or from someone else.

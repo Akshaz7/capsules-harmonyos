@@ -59,7 +59,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 | What | Where it goes |
 | --- | --- |
-| Request text, tiers 0–1 | Stays on the device, **except** the live marketplace search: when `marketplace.baseUrl` is set, the template step sends the request text to the marketplace server (`GET /api/capsules?q=…`), without a consent notice and also in On-device only mode. Flagged in [COMPLIANCE.md](COMPLIANCE.md). |
+| Request text, tiers 0–1 | Stays on the device, **except** the live marketplace search: on `main` at `bfa70f5`, when `marketplace.baseUrl` is set, the template step sends the request text to the marketplace server (`GET /api/capsules?q=…`), without a consent notice and also in On-device only mode; PR #16 stops this search in On-device only mode (in Smart mode it is still sent, with no notice of its own). Flagged in [COMPLIANCE.md](COMPLIANCE.md). |
 | Photo (Snap button or a shared image) | Read by the system OCR on the phone. Only if no local build is possible: the OCR text is sent, or the photo itself if OCR found no text, to the chosen provider after the same consent as text; never to a non-EU provider unless that switch is on. |
 | Edit instruction ("Change it…"), cloud | Rule edits stay on the device. Otherwise the instruction and the capsule's definition (its JSON) go to the chosen provider under the same consent rules; the capsule's state values (counts, inputs) are never sent. |
 | Request text, tier 2 | Sent to the chosen provider, along with our fixed system prompt. **Nothing else**: no capsule data, no app state, no identifiers. A unit test checks that the HTTP body holds only the system prompt and the request. |
