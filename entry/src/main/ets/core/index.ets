@@ -28,6 +28,7 @@ import {
 } from './ModelProvider';
 import { getMarketOptions, getRequestCache, getTemplateLibrary } from './templates';
 import { LiveCapsuleSource } from './LiveCapsule';
+import { allowsNonEu, CLOUD_CLAUDE_ONLY, readyMessage, usableConfigs } from './CloudPolicy';
 import { WeatherAdapter } from '../adapters/WeatherAdapter';
 import { cityName, weatherLabel } from '../capabilities/WeatherData';
 import { CactusProvider, DeviceOcr, loadImage, OnDeviceStatus, runPhotoEvalIfRequested } from './providers/CactusProvider';
@@ -171,6 +172,15 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
     return false;
   }
   const loaded = parseModelConfigs(found.text);
+  // T4-31: Claude is the only cloud provider; other entries in the config are ignored.
+  const usable = usableConfigs(loaded.configs, CLOUD_CLAUDE_ONLY);
+  if (loaded.defaultConfig !== undefined && usable.length === 0) {
+    modelError = '';
+    status = {
+      configured: false, source: found.source, message: AI_NOT_CONFIGURED, providers: [], euAvailable: false, provider: 'none'
+    };
+    return false;
+  }
   if (loaded.defaultConfig === undefined) {
     modelError = loaded.error ?? 'unknown config error';
     status = {
@@ -179,8 +189,8 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
     };
     return false;
   }
-  const chosen = loaded.defaultConfig;
-  const ordered: ModelConfig[] = [chosen].concat(loaded.configs.filter((c: ModelConfig) => c !== chosen));
+  const chosen = usable.includes(loaded.defaultConfig) ? loaded.defaultConfig : usable[0];
+  const ordered: ModelConfig[] = [chosen].concat(usable.filter((c: ModelConfig) => c !== chosen));
   const transport = new NetworkTransport();
   models = ordered.map((c: ModelConfig) => new CapsuleModel(createProvider(c, transport)));
   modelConfigs = ordered;
@@ -190,7 +200,7 @@ export async function initCapsuleModel(context: common.Context): Promise<boolean
   const eu = ordered.some((c: ModelConfig) => isEuProvider(c.provider));
   status = {
     configured: true, source: found.source, providers: names, euAvailable: eu, provider: chosen.provider,
-    message: `Cloud AI ready: ${names.map((n: string) => isEuProvider(n as ProviderName) ? `${n} (EU)` : n).join(', ')}.`
+    message: readyMessage(names.map((n: string) => isEuProvider(n as ProviderName) ? `${n} (EU)` : n), CLOUD_CLAUDE_ONLY)
   };
   return true;
 }
@@ -255,7 +265,17 @@ export const LIVE_PROVIDER: string = 'anthropic';
  */
 export function routesLiveRequest(request: string, smart: boolean, allowNonEu: boolean): boolean {
   return smart && modelConfigs.some((c: ModelConfig) => c.provider === 'anthropic' && c.apiKey.length > 0) &&
-    routesLive(request, { mode: 'smart', allowNonEu: allowNonEu });
+    routesLive(request, { mode: 'smart', allowNonEu: allowsNonEu(allowNonEu, CLOUD_CLAUDE_ONLY) });
+}
+
+/** T4-31: with Claude only, the provider notice is the consent, so non-EU is allowed (see CloudPolicy). */
+function withPolicy(options?: GenerateOptions): GenerateOptions {
+  const o: GenerateOptions = options === undefined ? {} : options;
+  const out: GenerateOptions = {
+    mode: o.mode, allowNonEu: allowsNonEu(o.allowNonEu, CLOUD_CLAUDE_ONLY), allowCloud: o.allowCloud,
+    cloudOnly: o.cloudOnly, skipTemplates: o.skipTemplates, onStage: o.onStage
+  };
+  return out;
 }
 
 /** The on-device model fills template slots the rules missed; throws when it is not ready. */
@@ -274,7 +294,8 @@ async function onDeviceSlots(prompt: string): Promise<string> {
  * provider. Model-made capsules are cached for the same request; "Make it smarter" (cloudOnly) skips the cache
  * and replaces the cached capsule.
  */
-export async function generateCapsule(request: string, options?: GenerateOptions): Promise<GenerateResult> {
+export async function generateCapsule(request: string, opts?: GenerateOptions): Promise<GenerateResult> {
+  const options = withPolicy(opts);
   const cache = getRequestCache();
   const local: LocalSources = {
     cache: cache, library: getTemplateLibrary(), slotModel: onDeviceSlots, market: getMarketOptions(), live: liveSource()
@@ -294,7 +315,7 @@ export async function generateCapsule(request: string, options?: GenerateOptions
  * show the result on the consent screen like any capsule.
  */
 export async function generateCapsuleFromSharedText(text: string, options?: GenerateOptions): Promise<GenerateResult> {
-  return generateFromSharedTextWith(text, models, options);
+  return generateFromSharedTextWith(text, models, withPolicy(options));
 }
 
 /**
@@ -313,5 +334,6 @@ export async function generateCapsuleFromImage(imagePath: string, options?: Gene
   }
   const localText = (text: string): Promise<GenerateResult> => generateCapsuleWith(text, models, modelError, lazyOnDevice,
     { mode: 'on-device-only' }, { library: getTemplateLibrary(), slotModel: onDeviceSlots });
-  return generateFromImageWith(image, deviceOcr, localText, onDevice, models, modelConfigs, cloudTransport, options);
+  return generateFromImageWith(image, deviceOcr, localText, onDevice, models, modelConfigs, cloudTransport,
+    withPolicy(options));
 }

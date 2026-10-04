@@ -28,6 +28,7 @@ import voiceTextTest from './VoiceText.test';
 import timeTriggersTest from './TimeTriggers.test';
 import remindersTest from './Reminders.test';
 import failureHelpTest from './FailureHelp.test';
+import cloudPolicyTest from './CloudPolicy.test';
 import liveCapsuleTest from './LiveCapsule.test';
 
 export default function testsuite() {
@@ -61,5 +62,6 @@ export default function testsuite() {
   timeTriggersTest();
   remindersTest();
   failureHelpTest();
+  cloudPolicyTest();
   liveCapsuleTest();
 }

@@ -377,6 +377,8 @@ struct Index {
   @Local failedOnline: boolean = false;
   /** The request the failure card is about (T4-30: reason, alternative, "Try with cloud AI"). */
   @Local failedRequest: string = '';
+  /** T4-31: the request whose cloud notice was declined (button, Back, swipe, tap outside): it never goes to the cloud. */
+  private cloudDeclined: string = '';
   /** The request whose Claude notice was declined (built without Claude; not asked again for it). */
   private liveDeclined: string = '';
   /** When core refused a request by design: what it would need, e.g. ["contacts", "SMS"]. Else empty. */
@@ -1314,6 +1316,7 @@ struct Index {
       this.busy = false;
       this.showCloudNotice(() => this.createFrom(text), () => {
         this.liveDeclined = text; // build it without Claude, and don't ask again for this request
+        this.cloudDeclined = text; // ...nor send it to any other cloud (T4-31)
         this.createFrom(text);
       }, LIVE_PROVIDER);
       return;
@@ -1334,7 +1337,8 @@ struct Index {
       }
     }
     const smart = this.settings.aiMode === 'smart';
-    const consent = this.settings.hasCloudConsent(live ? LIVE_PROVIDER : this.cloudKey());
+    const consent = this.cloudDeclined !== text &&
+      this.settings.hasCloudConsent(live ? LIVE_PROVIDER : this.cloudKey());
     // Until core reports its stages (T4-25), the model step names the cloud only when it may be used.
     this.buildCloud = live && consent ? 'Claude' : smart && consent && this.cloudUsable() ? this.cloudName() : '';
     this.failedOnline = smart && consent && (live || this.cloudUsable());
@@ -1348,10 +1352,11 @@ struct Index {
     }
     this.busy = false;
     if (!result.ok && result.failure === undefined && !isUnsupportedLanguage(result) && smart && !consent &&
-      this.cloudUsable()) {
+      this.cloudUsable() && this.cloudDeclined !== text) {
       // The device couldn't build it and the cloud would be next: ask once before the first cloud request.
       hilog.info(0x0001, 'Index', 'on-device failed (%{public}s); showing the cloud notice', result.error ?? '');
       this.showCloudNotice(() => this.retryWithCloud(text), () => {
+        this.cloudDeclined = text;
         this.failedRequest = text;
         this.failed = true;
       });
@@ -1382,6 +1387,21 @@ struct Index {
   /** One-time notice before the first cloud request. OK retries with the cloud; the other choice switches modes. */
   private showCloudNotice(onOk: () => void, onDeclined: () => void, provider?: string): void {
     const key = provider ?? this.cloudKey(); // live requests name Claude, whatever smart mode's provider is
+    // T4-31: exactly one outcome. Only OK sends anything; Back, swipe or tap outside count as declining.
+    let decided = false;
+    const ok = (): void => {
+      if (!decided) {
+        decided = true;
+        this.settings.acceptCloudNotice(key);
+        onOk();
+      }
+    };
+    const declined = (): void => {
+      if (!decided) {
+        decided = true;
+        onDeclined();
+      }
+    };
     this.getUIContext().showAlertDialog({
       title: cloudNotice(key).title,
       message: cloudNotice(key).message,
@@ -1392,20 +1412,17 @@ struct Index {
         {
           value: 'OK',
           style: DialogButtonStyle.HIGHLIGHT,
-          action: () => {
-            this.settings.acceptCloudNotice(key);
-            onOk();
-          }
+          action: () => ok()
         },
         {
           value: 'On-device only',
           action: () => {
             this.settings.setAiMode('on-device');
-            onDeclined();
+            declined();
           }
         }
       ],
-      cancel: () => onDeclined()
+      cancel: () => declined() // Back or swipe (tap outside does not close it: autoCancel false)
     });
   }
 
@@ -2033,6 +2050,9 @@ struct Index {
 
   /** Whether smart mode may use a cloud provider: an EU one, or any one if non-EU providers are allowed. */
   private cloudUsable(): boolean {
+    if (Flags.CLOUD_CLAUDE_ONLY) {
+      return this.cloudConfigured; // T4-31: Claude only; the provider notice is the consent
+    }
     return this.euCloud || (this.cloudConfigured && this.settings.allowNonEu);
   }
 
