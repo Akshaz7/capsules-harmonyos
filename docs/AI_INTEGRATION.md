@@ -15,7 +15,7 @@ The safety principle behind the whole design: **no model output ever runs as cod
 | 2 | **Mistral `ministral-14b-latest`** (Mistral AI, EU), JSON output mode | Mistral API (EU) | Requests that need logic (maths, scoring, converters, quizzes, streaks, inputs), or ones tier 1 rejects. **Default cloud provider.** | Mistral API terms |
 | 0 | **System OCR** (Core Vision Kit `textRecognition`) | On the device | Photos: reads the text first, then the local tiers build from it | HarmonyOS platform API |
 | 2 | **Mistral `pixtral-12b-latest`** (Mistral AI, EU) | Mistral API (EU) | Photos only, when OCR found no text and the cloud is allowed | Mistral API terms |
-| 2 | **Claude `claude-haiku-4-5-20251001`** (Anthropic), with the web search tool | Anthropic API (outside the EU) | **Live capsules:** requests that need live information (weather, news, prices, opening hours, look-ups, or a trip or packing list for a bundled city), while **Allow non-EU providers** is on (the default). Gets the Open-Meteo forecast for bundled cities, otherwise may search the web (at most 2 searches). | Anthropic API terms |
+| 2 | **Claude `claude-haiku-4-5-20251001`** (Anthropic), with the web search tool | Anthropic API (outside the EU) | **Live capsules:** requests that need live information (weather, opening hours, events, look-ups, or a trip or packing list for a bundled city; live news and live prices are refused before any model), while **Allow non-EU providers** is on (the default). Gets the Open-Meteo forecast for bundled cities, otherwise may search the web (at most 2 searches). | Anthropic API terms |
 | 2 | **Claude `claude-sonnet-5-5`** (Anthropic) | Anthropic API (outside the EU) | Ordinary cloud builds only when no EU provider is configured, or for **Make it smarter**, while **Allow non-EU providers** is on | Anthropic API terms |
 | 2 | Any OpenAI-compatible endpoint | That provider | Same rule as Claude (non-EU unless it is Mistral) | Provider's terms |
 
@@ -33,7 +33,7 @@ request text (max 500 chars)
   ├─ Template library ── match (slots by rule / grounded on-device) ┤
   │                                                                  │
   ├─ refused actions (send SMS, calls, read contacts, email, websites, payments) ──► cloud first
-  ├─ needs live info (weather, news, trip…) and non-EU allowed? ── yes ─► Claude + forecast / web search ┤
+  ├─ needs live info (weather, trip, look-up…) and non-EU allowed? ── yes ─► Claude + forecast / web search ┤
   ├─ needs logic? ── yes ─► cloud (if allowed; otherwise needsCloud → app asks)
   │                 no ──► on-device LLM ── valid ─────────────────┤
   │                              └─ rejected / not installed ─► cloud (if allowed)
@@ -77,7 +77,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (356, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
+- **Unit tests (361, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
