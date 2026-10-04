@@ -1253,13 +1253,15 @@ struct Index {
   }
 
   /** Rules, then the on-device model, then the cloud model only when `allowCloud`. Never throws. */
-  private async generate(text: string, allowCloud: boolean, cloudOnly: boolean = false): Promise<GenerateResult> {
+  private async generate(text: string, allowCloud: boolean, cloudOnly: boolean = false,
+    skipTemplates: boolean = false): Promise<GenerateResult> {
     try {
       return await generateCapsule(text, {
         mode: this.settings.aiMode === 'on-device' ? 'on-device-only' : 'smart',
         allowNonEu: this.settings.allowNonEu,
         allowCloud: allowCloud,
-        cloudOnly: cloudOnly
+        cloudOnly: cloudOnly,
+        skipTemplates: skipTemplates // "Build fresh": no cache, templates or marketplace (T4 355746d)
       });
     } catch (e) {
       const failed: GenerateResult = { ok: false, error: `generateCapsule threw: ${(e as Error).message}`, details: [] };
@@ -1963,7 +1965,7 @@ struct Index {
             origin: this.pendingOrigin,
             originKind: originKindOf(this.pendingOriginRaw),
             builtFrom: this.pendingBuiltFrom,
-            canBuildFresh: this.pendingBuiltFrom.length > 0 && this.settings.aiMode === 'smart' && this.cloudUsable(),
+            canBuildFresh: this.pendingBuiltFrom.length > 0, // the cloud when usable, else the phone (skipTemplates)
             onBuildFresh: () => this.buildFresh(),
             onDecide: (allowed: Permission[]) => this.decide(allowed),
             onCancel: () => this.cancelPending()
@@ -2168,8 +2170,9 @@ struct Index {
   }
 
   /**
-   * "Not quite right? Build fresh" on a template's consent sheet: skip templates and ask the cloud for a capsule
-   * made for this request (after the cloud notice). Declining the notice brings the template back.
+   * "Not quite right? Build fresh" on a template's consent sheet: skip the cache, templates and marketplace and
+   * build a capsule for this request. With the cloud usable it asks the cloud (after the cloud notice; declining
+   * brings the template back); otherwise the phone's own model builds it.
    */
   private buildFresh(): void {
     const capsule = this.pending;
@@ -2178,13 +2181,21 @@ struct Index {
       return;
     }
     this.cancelPending();
+    const useCloud = this.settings.aiMode === 'smart' && this.cloudUsable();
     const run = async (): Promise<void> => {
+      const seq = ++this.createSeq;
+      this.buildCloud = useCloud ? this.cloudName() : '';
+      this.buildStage = 'model';
       this.busy = true;
-      const result = await this.generate(request, true, true);
+      const result = await this.generate(request, useCloud, useCloud, true);
+      if (seq !== this.createSeq) {
+        return; // cancelled
+      }
+      this.buildStage = 'checking';
       this.busy = false;
       this.finishCreate(request, result);
     };
-    if (this.settings.hasCloudConsent(this.cloudKey())) {
+    if (!useCloud || this.settings.hasCloudConsent(this.cloudKey())) {
       run();
     } else {
       this.showCloudNotice(() => run(), () => {
