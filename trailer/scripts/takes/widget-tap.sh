@@ -6,10 +6,10 @@
 set -eu
 . "$(dirname "$0")/_hdc.sh"
 
-home
-swipe 1150 1500 170 1500 900  # home page 1 -> page 2, where the widget sits
+# Start from the home screen page that holds the widgets (page 2 on the demo
+# device): the take must not swipe or press Home first, so the taps land right.
 hold 1.5
-tap 478 502 2                # first checklist row on the widget
-hold 2
-tap 478 668 2                # and the next one
+tap 893 1087 2               # "Start" on the small timer widget
+hold 2                       # the timer counts down
+tap 251 862 2                # tick the first row on the wide checklist widget
 hold 2

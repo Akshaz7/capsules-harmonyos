@@ -37,21 +37,26 @@ const WidgetGlyph: React.FC<{kind: string}> = ({kind}) => {
   );
 };
 
-/** HarmonyOS-style widget: light grey rounded card, icon circle, title and caption; "Harmoniser" label below. */
+/** The app's widget card: white, tinted icon tile + title + status dot, value and pill actions. */
 const Widget: React.FC<{i: number; frame: number; at: number; flood: number}> = ({i, frame, at, flood}) => {
   const w = S5.widgets[i];
   const s = slot(i);
   const fold = spring({frame: frame - at, fps: FPS, config: {damping: 13, mass: 0.7}, durationInFrames: 14});
   if (frame < at) return null;
-  const big = w.kind === 'timer' || w.kind === 'goal';
+  const dot = w.kind === 'checklist' ? '#12A150' : '#2F5BFF';
+  const row = 'rows' in w && w.rows ? w.rows[0] : '';
+  const more = 'more' in w ? w.more : '';
+  const label = 'label' in w ? w.label : '';
+  const action = 'action' in w ? w.action : '';
+  const action2 = 'action2' in w ? w.action2 : '';
   return (
     <div style={{position: 'absolute', left: s.x, top: s.y, width: W, perspective: 700}}>
       <div
         style={{
           height: H,
           borderRadius: 26,
-          background: '#F3F4F7',
-          boxShadow: '0 10px 24px rgba(27,34,54,0.12), 0 1px 2px rgba(27,34,54,0.06)',
+          background: '#FFFFFF',
+          boxShadow: '0 10px 26px rgba(27,34,54,0.14), 0 1px 2px rgba(27,34,54,0.06)',
           padding: 16,
           boxSizing: 'border-box',
           display: 'flex',
@@ -64,17 +69,33 @@ const Widget: React.FC<{i: number; frame: number; at: number; flood: number}> = 
           position: 'relative',
         }}
       >
-        <div style={{width: 42, height: 42, borderRadius: 21, background: COLORS.chipBg, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-          <WidgetGlyph kind={w.kind} />
-        </div>
-        <div style={{marginTop: 'auto', fontSize: 17, fontWeight: 700, color: COLORS.text}}>{w.title}</div>
-        <div style={{marginTop: 2, fontSize: big ? 32 : 18, fontWeight: big ? 800 : 600, color: big ? COLORS.text : COLORS.secondary, letterSpacing: big ? -0.5 : 0}}>{w.caption}</div>
-        {w.kind === 'goal' && (
-          <div style={{position: 'absolute', right: 14, bottom: 16, width: 40, height: 40, borderRadius: 20, background: COLORS.blue, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-            <svg width={18} height={18} viewBox="0 0 24 24">
-              <path d="M12 5v14M5 12h14" stroke="#fff" strokeWidth={2.6} strokeLinecap="round" />
-            </svg>
+        <div style={{display: 'flex', alignItems: 'center', gap: 9}}>
+          <div style={{width: 34, height: 34, borderRadius: 12, background: '#EEF3FF', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <WidgetGlyph kind={w.kind} />
           </div>
+          <div style={{flex: 1, fontSize: 17, fontWeight: 700, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{w.title}</div>
+          <div style={{width: 9, height: 9, borderRadius: 5, background: dot}} />
+        </div>
+        {w.kind === 'checklist' ? (
+          <>
+            <div style={{marginTop: 12, fontSize: 15, fontWeight: 600, color: COLORS.secondary}}>{w.caption}</div>
+            <div style={{marginTop: 10, display: 'flex', alignItems: 'center', gap: 9}}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="#B9C0CE" strokeWidth="2" />
+              </svg>
+              <span style={{fontSize: 15, fontWeight: 600, color: COLORS.text}}>{row}</span>
+            </div>
+            <div style={{marginTop: 'auto', fontSize: 13, fontWeight: 600, color: COLORS.secondary}}>{more}</div>
+          </>
+        ) : (
+          <>
+            <div style={{marginTop: 14, fontSize: 13, fontWeight: 600, color: COLORS.secondary}}>{label}</div>
+            <div style={{fontSize: 34, fontWeight: 800, letterSpacing: -0.5, color: COLORS.text}}>{w.caption}</div>
+            <div style={{marginTop: 'auto', display: 'flex', gap: 10}}>
+              <div style={{flex: 1, height: 44, borderRadius: 22, background: COLORS.blue, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700}}>{action}</div>
+              <div style={{flex: 1, height: 44, borderRadius: 22, background: '#DCE5FF', color: '#2A47C7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700}}>{action2}</div>
+            </div>
+          </>
         )}
       </div>
       <div style={{height: LABEL_H, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, fontSize: 13, fontWeight: 600, color: COLORS.text, opacity: fold}}>

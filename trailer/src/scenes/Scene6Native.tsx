@@ -30,8 +30,9 @@ const CodeLine: React.FC<{text: string}> = ({text}) => {
 export const Scene6Native: React.FC = () => {
   const frame = useCurrentFrame();
   const scroll = lerp(frame, [0, 180], [120, -560]);
-  const tapAt = F(S6.tapAt);
-  const calAt = F(S6.calendarAt);
+  const largeAt = S6.largeAt;
+  const tapAt = S6.tapAt;
+  const calAt = S6.calendarAt;
   return (
     <AbsoluteFill style={{background: COLORS.navy, fontFamily: FONT, overflow: 'hidden'}}>
       <AbsoluteFill style={{background: 'radial-gradient(60% 50% at 50% 0%, rgba(47,91,255,0.28), rgba(15,21,40,0) 70%)'}} />
@@ -49,6 +50,9 @@ export const Scene6Native: React.FC = () => {
         <Phone screenBg="#202638" style={{boxShadow: '0 40px 120px rgba(47,91,255,0.35)'}}>
           <Sequence durationInFrames={tapAt} layout="none">
             <FootageVideo name="widget-pin" />
+          </Sequence>
+          <Sequence from={largeAt} durationInFrames={tapAt - largeAt} layout="none">
+            <FootageVideo name="widget-pin-large" />
           </Sequence>
           <Sequence from={tapAt} durationInFrames={calAt - tapAt} layout="none">
             <FootageVideo name="widget-tap" />

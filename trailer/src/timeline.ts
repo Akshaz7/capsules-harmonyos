@@ -168,7 +168,7 @@ export const S3 = {
 export type BoardKey = 'quiz' | 'converter' | 'split' | 'pomodoro' | 'water' | 'tennis';
 export type FootageKey =
   | 'judge' | 'emma' | 'tyler' | 'friends' | 'olivia' | 'rose' | 'mike'
-  | 'widget-pin' | 'widget-tap' | 'calendar'
+  | 'widget-pin' | 'widget-pin-large' | 'widget-tap' | 'calendar'
   | 'options-phone' | 'options-ai' | 'options-market' | 'options-share';
 export type Moment = 'quiz' | 'krakow' | 'track' | 'toast' | 'dive' | 'water' | 'tennis';
 
@@ -242,10 +242,10 @@ export const S5 = {
   widgetLand: [1469, 1475, 1491, 1497], // each widget folds down and snaps in (thunk)
   floodAt: 1509,
   widgets: [
-    {kind: 'checklist', title: 'Checklist', caption: '0 / 3 done'},
-    {kind: 'timer', title: 'Pomodoro', caption: '50:00'},
-    {kind: 'goal', title: 'Water', caption: '6 / 8'},
-    {kind: 'score', title: 'Tennis', caption: 'Games 3 – 2'},
+    {kind: 'checklist', title: 'Chicken …', caption: '0 / 7 done', rows: ['Gather ingredients'], more: '+6 more'},
+    {kind: 'timer', title: 'Pomodoro', label: 'Focus', caption: '50:00', action: 'Sta…', action2: 'Sta…'},
+    {kind: 'goal', title: 'Water', label: 'Goal', caption: '6 / 8', action: '+1', action2: 'Edit'},
+    {kind: 'score', title: 'Tennis', label: 'Games', caption: '3 – 2', action: 'Point', action2: 'Undo'},
   ],
   widgetLabel: 'Harmoniser',
 };
@@ -254,9 +254,11 @@ export const S5 = {
 export const S6 = {
   label: 'ArkTS · ArkUI',
   codeFile: 'entry/src/main/ets/widget/pages/HarmoniserCard.ets',
-  pinUntil: vo('s6-tap').at,
-  tapAt: vo('s6-tap').at,
-  calendarAt: vo('s6-calendar').at,
+  // Scene 6 is 180 frames: pin small, pin large, tap the widgets, calendar.
+  pinAt: 0,
+  largeAt: 58,
+  tapAt: 116,
+  calendarAt: 146,
 };
 
 // ---------- Scene 7 ----------
