@@ -3,7 +3,7 @@ import {
   applyWidgetMessage, buildWidgetView, CapsuleState, declaredAction, GateFacts, initialState, parseState,
   parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow,
   BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact,
-  accentFor, capsuleForNewWidget, WidgetCheckItem, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
+  accentFor, capsuleForNewWidget, isWideSize, sizeForDimension, sizeOfBinding, summaryLine, WidgetCheckItem, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
 } from '../main/ets/core/WidgetModel';
 import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
 import { StateValues } from '../main/ets/core/CapsuleProgram';
@@ -420,6 +420,35 @@ export default function widgetModelTest() {
       const done = buildWidgetView(chicken, s, gate([], true, false), NOW, false);
       expect(done.rows[0].open.length).assertEqual(0);
       expect(done.caption).assertEqual('7 / 7 done');
+    });
+
+    it('widget sizes: 1x2, 2x2, 2x4 and 4x4 map to s/m/w/l; older bindings keep m/w (T4-22)', 0, () => {
+      expect([1, 2, 3, 4, 7].map((d: number) => sizeForDimension(d)).join('')).assertEqual('smwlm');
+      expect(sizeOfBinding({ formId: '1', capsuleId: '', wide: true })).assertEqual('w');
+      expect(sizeOfBinding({ formId: '1', capsuleId: '', wide: false })).assertEqual('m');
+      expect(sizeOfBinding({ formId: '1', capsuleId: '', wide: true, size: 'l' })).assertEqual('l');
+      expect(`${isWideSize('l')} ${isWideSize('w')} ${isWideSize('m')} ${isWideSize('s')}`).assertEqual('true true false false');
+      const kept = planWidgetAssignments([{ formId: '1', capsuleId: '', wide: false, size: 's' }], [], [], noneRemoved);
+      expect(kept.bindings[0].size).assertEqual('s');
+    });
+
+    it('the compact 1x2 card gets one summary line per layout (T4-22)', 0, () => {
+      const all = gate(['reminders'], true, false);
+      const counter = rules('count coffees');
+      expect(buildWidgetView(counter, initialState(counter), all, NOW, false).summary).assertEqual('0');
+      const tea = rules('tea 4 min');
+      expect(buildWidgetView(tea, initialState(tea), all, NOW, false).summary).assertEqual('4:00');
+      const running = applyWidgetMessage(tea, initialState(tea), msg('start', 'tea', -1), NOW);
+      expect(buildWidgetView(tea, running, all, NOW + 60000, false).summary).assertEqual('3:00 left');
+      const water = rules('water 8 glasses');
+      const goalValues3: StateValues = {};
+      goalValues3['count'] = 3;
+      expect(buildWidgetView(water, initialState(water), all, NOW, false, goalValues3).summary).assertEqual('3 / 8');
+      const tennis = capsuleOf(TENNIS_CAPSULE);
+      expect(buildWidgetView(tennis, initialState(tennis), all, NOW, false, tennisValues()).summary).assertEqual('Games 3 – 2');
+      const list = rules('checklist: passport, keys, charger');
+      expect(buildWidgetView(list, initialState(list), all, NOW, false).summary).assertEqual('0 / 3 done');
+      expect(summaryLine(emptyView(false), NOW)).assertEqual('Tap to choose a capsule');
     });
   });
 }

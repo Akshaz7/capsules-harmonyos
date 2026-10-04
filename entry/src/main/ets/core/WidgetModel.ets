@@ -384,6 +384,19 @@ export interface WidgetButton {
 
 export type WidgetStatus = 'ok' | 'empty' | 'removed';
 
+/** Card sizes: s = 1x2 (compact), m = 2x2, w = 2x4 (wide), l = 4x4 (large). */
+export type CardSize = 's' | 'm' | 'w' | 'l';
+
+/** formInfo.FormDimension -> card size (Dimension_1_2 = 1, 2_2 = 2, 2_4 = 3, 4_4 = 4; anything else 2x2). */
+export function sizeForDimension(dimension: number): CardSize {
+  return dimension === 1 ? 's' : (dimension === 3 ? 'w' : (dimension === 4 ? 'l' : 'm'));
+}
+
+/** The layouts that use the extra width/height (more items, side-by-side columns). */
+export function isWideSize(size: CardSize): boolean {
+  return size === 'w' || size === 'l';
+}
+
 export interface WidgetView {
   status: WidgetStatus;
   capsuleId: string;
@@ -406,6 +419,10 @@ export interface WidgetView {
   goal: number;
   displays: WidgetDisplay[];
   buttons: WidgetButton[];
+  /** The widget's size (set by the service from its binding; 'm'/'w' from `wide` until then). */
+  size: CardSize;
+  /** One line for the compact 1x2 card: the main value or status, e.g. "3", "3 / 8", "25:00", "2 / 5 done". */
+  summary: string;
 }
 
 export interface GateFacts {
@@ -467,7 +484,8 @@ export const BLANK_WIDGET_MESSAGE: string = 'Tap to choose a capsule';
 function baseView(status: WidgetStatus, capsuleId: string, title: string, message: string, wide: boolean): WidgetView {
   return {
     status: status, capsuleId: capsuleId, title: title, message: message, rows: [], wide: wide, layout: 'message',
-    icon: 'blank', colorTag: 0, accent: accentFor(0), caption: '', value: 0, goal: 0, displays: [], buttons: []
+    icon: 'blank', colorTag: 0, accent: accentFor(0), caption: '', value: 0, goal: 0, displays: [], buttons: [],
+    size: wide ? 'w' : 'm', summary: message
   };
 }
 
@@ -624,6 +642,36 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
   return view;
 }
 
+function clock(ms: number): string {
+  const total = Math.max(Math.ceil(ms / 1000), 0);
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+}
+
+/** The compact (1x2) card's one line: the main value or status of the view's layout. */
+export function summaryLine(view: WidgetView, now: number): string {
+  const first = view.rows.find((r: WidgetRow) => r.kind !== 'text');
+  if (view.layout === 'goal') {
+    return `${view.value} / ${view.goal}`;
+  }
+  if (view.layout === 'logic' && view.displays.length > 0) {
+    const d = view.displays[0];
+    return d.kind === 'score' ? `${d.label.length > 0 ? d.label + ' ' : ''}${d.left} – ${d.right}` : d.text;
+  }
+  if (first === undefined) {
+    return view.message;
+  }
+  if (first.kind === 'counter') {
+    return `${first.value}`;
+  }
+  if (first.kind === 'timer') {
+    return first.endAt > now ? `${clock(first.endAt - now)} left` : (first.endAt > 0 ? 'Done' : clock(first.minutes * 60000));
+  }
+  const done = first.items.filter((i: WidgetCheckItem) => i.checked).length;
+  return done === first.items.length ? 'All done' : `${done} / ${first.items.length} done`;
+}
+
 /**
  * Builds the card view. Only widget-suitable capsules are shown, and only components and
  * actions the gatekeeper allows: a component needing an ungranted permission is hidden, and a
@@ -665,6 +713,7 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
     });
     arrangeV0(view);
   }
+  view.summary = summaryLine(view, now);
   const hidden = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type !== 'button' &&
     !permitted(permissionForComponent(c), gate.granted)).length;
   if (hidden > 0) {
@@ -728,6 +777,12 @@ export interface WidgetBindingFact {
   addedAt?: number;
   /** The widget's palette slot (see WIDGET_PALETTE). Missing on older bindings: use stableColorTag(formId). */
   colorTag?: number;
+  /** The widget's size. Missing on older bindings: 'w' when wide, else 'm' (see sizeOfBinding). */
+  size?: CardSize;
+}
+
+export function sizeOfBinding(b: WidgetBindingFact): CardSize {
+  return b.size ?? (b.wide ? 'w' : 'm');
 }
 
 export class AssignmentPlan {
@@ -765,7 +820,7 @@ export function planWidgetAssignments(bindings: WidgetBindingFact[], saved: Caps
   const sorted = bindings.slice().sort(widgetOrder);
   sorted.forEach((b: WidgetBindingFact) => {
     const next: WidgetBindingFact = {
-      formId: b.formId, capsuleId: b.capsuleId, wide: b.wide, addedAt: b.addedAt, colorTag: b.colorTag
+      formId: b.formId, capsuleId: b.capsuleId, wide: b.wide, addedAt: b.addedAt, colorTag: b.colorTag, size: b.size
     };
     if (next.capsuleId.length > 0 && !aliveIds.includes(next.capsuleId)) {
       next.capsuleId = '';

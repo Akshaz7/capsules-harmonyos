@@ -66,6 +66,18 @@ interface CardView {
   goal: number;
   displays: CardDisplay[];
   buttons: CardButton[];
+  /** s = 1x2, m = 2x2, w = 2x4, l = 4x4 (older views: from `wide`). */
+  size?: string;
+  summary?: string;
+}
+
+function sizeOf(v: CardView): string {
+  return v.size ?? (v.wide ? 'w' : 'm');
+}
+
+/** How many checklist items a card shows before "+N more": 8 on 4x4, 4 on 2x4, 2 on 2x2. */
+function listMax(v: CardView): number {
+  return sizeOf(v) === 'l' ? 8 : (v.wide ? 4 : 2);
 }
 
 const MAX_TEXT_TIMER_MS: number = 86399000;
@@ -370,14 +382,14 @@ struct HarmoniserCard {
         .onClick(() => this.onTap())
       } else {
         Flex({ wrap: FlexWrap.Wrap }) {
-          ForEach(openItems(r).slice(0, v.wide ? 4 : 2), (item: CardCheckItem) => {
+          ForEach(openItems(r).slice(0, listMax(v)), (item: CardCheckItem) => {
             CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
           }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
         }
         .width('100%')
         .layoutWeight(1)
-        if (openItems(r).length > (v.wide ? 4 : 2)) {
-          Text(`+${openItems(r).length - (v.wide ? 4 : 2)} more`)
+        if (openItems(r).length > listMax(v)) {
+          Text(`+${openItems(r).length - listMax(v)} more`)
             .fontSize(11)
             .fontColor($r('sys.color.font_secondary'))
             .width('100%')
@@ -527,14 +539,14 @@ struct HarmoniserCard {
           } else if (r.kind === 'checklist') {
             // Several parts share the card: the first unticked items, then "+N more" (open the app for all).
             Flex({ wrap: FlexWrap.Wrap }) {
-              ForEach(openItems(r).slice(0, v.wide ? 2 : 1),
+              ForEach(openItems(r).slice(0, listMax(v) / 2),
                 (item: CardCheckItem) => {
                   CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
                 }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
             }
             .width('100%')
             Text(`${r.items.filter((i: CardCheckItem) => i.checked).length}/${r.items.length} done` +
-              (openItems(r).length > (v.wide ? 2 : 1) ? ` · +${openItems(r).length - (v.wide ? 2 : 1)} more` : ''))
+              (openItems(r).length > listMax(v) / 2 ? ` · +${openItems(r).length - listMax(v) / 2} more` : ''))
               .fontSize(11)
               .fontColor($r('sys.color.font_secondary'))
               .width('100%')
@@ -584,10 +596,48 @@ struct HarmoniserCard {
     .onClick(() => this.onTap()) // blank: choose a capsule; removed/app-only: open the app
   }
 
+  /** 1x2: icon, title and one summary line; the whole card opens the app (or the picker when blank). */
+  @Builder
+  compactLayout(v: CardView) {
+    Row({ space: 10 }) {
+      Stack() {
+        this.icon(v.icon, 18, v.accent)
+      }
+      .width(36)
+      .height(36)
+      .borderRadius(18)
+      .backgroundColor(tint(v.accent))
+
+      Column({ space: 2 }) {
+        Text(v.capsuleId.length > 0 ? v.title : (v.message.length > 0 ? v.message : v.title))
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        if (v.capsuleId.length > 0) {
+          Text(v.summary ?? v.caption)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(v.accent)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .height('100%')
+    .onClick(() => this.onTap())
+  }
+
   /** The layout for one view. */
   @Builder
   content(v: CardView) {
-    if (v.layout === 'counter' && v.rows.some((r: CardRow) => r.kind === 'counter')) {
+    if (sizeOf(v) === 's') {
+      this.compactLayout(v)
+    } else if (v.layout === 'counter' && v.rows.some((r: CardRow) => r.kind === 'counter')) {
       this.counterLayout(v, v.rows.filter((r: CardRow) => r.kind === 'counter')[0])
     } else if (v.layout === 'goal') {
       this.goalLayout(v)
@@ -615,7 +665,7 @@ struct HarmoniserCard {
     }
     .width('100%')
     .height('100%')
-    .padding(PAD)
+    .padding(sizeOf(parseView(this.viewJson)) === 's' ? 12 : PAD)
     .backgroundColor($r('sys.color.comp_background_primary'))
     .borderRadius($r('sys.float.ohos_id_corner_radius_card'))
     .clip(true)
