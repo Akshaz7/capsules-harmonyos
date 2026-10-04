@@ -14,6 +14,7 @@ import {
   allComponents,
   applyActions,
   ApplyResult,
+  finishListItem,
   initialState,
   inputText,
   isEnabled,
@@ -250,6 +251,18 @@ export class CapsuleRuntime {
     this.inputErrors = withKey(this.inputErrors, name, '');
     this.values = r.state;
     this.onChange?.();
+  }
+
+  /** T3-30: the user ticked list item `index`: it is finished, so it leaves the list (as on the widget). */
+  finishItem(source: string, index: number): boolean {
+    const r: ApplyResult = finishListItem(this.capsule, this.values, source, index);
+    if (!r.ok) {
+      hilog.warn(0x0001, 'CapsuleRuntime', 'finish item refused: %{public}s', r.error ?? '');
+      return false;
+    }
+    this.values = r.state;
+    this.onChange?.();
+    return true;
   }
 
   /** Replaces v1 values with saved ones (names and types that no longer match fall back to initial). */

@@ -22,6 +22,7 @@ import deviceComponentsTest from './DeviceComponents.test';
 import weatherTest from './Weather.test';
 import rowPairsTest from './RowPairs.test';
 import buildStagesTest from './BuildStages.test';
+import finishItemTest from './FinishItem.test';
 import voiceTextTest from './VoiceText.test';
 
 export default function testsuite() {
@@ -49,5 +50,6 @@ export default function testsuite() {
   weatherTest();
   rowPairsTest();
   buildStagesTest();
+  finishItemTest();
   voiceTextTest();
 }

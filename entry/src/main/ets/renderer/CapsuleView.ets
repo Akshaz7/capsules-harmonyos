@@ -461,12 +461,31 @@ export struct CapsuleNode {
           .width('100%')
           .height(48)
       } else {
-        ForEach(this.runtime.items(c.source), (item: string) => {
-          Text(item)
-            .fontSize($r('sys.float.Body_L'))
-            .fontColor($r('sys.color.font_primary'))
-            .width('100%')
-            .height(48)
+        ForEach(this.runtime.items(c.source), (item: string, i: number) => {
+          // T3-30: a tick circle per item; ticking finishes the task, which leaves the list (as on the widget).
+          Row({ space: 8 }) {
+            Stack() {
+              Circle()
+                .width(24)
+                .height(24)
+                .fill(Color.Transparent)
+                .stroke($r('sys.color.brand'))
+                .strokeWidth(2)
+            }
+            .width(44)
+            .height(44)
+            .margin({ left: -10 }) // the 24vp circle lines up with the card's text inset; the tap area is 44vp
+            .accessibilityText(`Finish ${item}`)
+            .onClick(() => {
+              this.runtime.finishItem(c.source, i);
+            })
+            Text(item)
+              .fontSize($r('sys.float.Body_L'))
+              .fontColor($r('sys.color.font_primary'))
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .constraintSize({ minHeight: 48 })
         }, (item: string, i: number) => `${i}-${item}`)
       }
     }
