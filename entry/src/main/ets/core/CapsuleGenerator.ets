@@ -22,6 +22,8 @@ import { validateCapsule } from './CapsuleValidator';
 import { parseRequest } from './RuleParser';
 import { CapsuleModel } from './CapsuleModel';
 import { emitStage, StageListener } from './BuildStage';
+import { isTaskList } from './CapsuleRouter';
+import { needsLiveInfo } from './LiveCapsule';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
 import { ambiguousTimes, TemplateLibrary, TemplateMatch } from './templates/TemplateLibrary';
 import { MarketOptions, matchTemplateAsync } from './templates/MarketMatch';
@@ -49,6 +51,17 @@ export interface LocalSources {
   slotModel?: SlotModel;
   /** The live marketplace, searched with the templates (1.5 s budget; skipped offline or without a base URL). */
   market?: MarketOptions;
+  /** Live-information capsules (weather, news, prices...): Claude with the forecast / web search (T4-23). */
+  live?: CapsuleSource;
+}
+
+/**
+ * True when smart routing sends this request to the live source: it needs live information, the cloud is
+ * allowed for it, and non-EU providers are allowed (the live source is Claude).
+ */
+export function routesLive(request: string, options?: GenerateOptions): boolean {
+  return needsLiveInfo(request) && (options?.mode ?? 'smart') === 'smart' && options?.allowCloud !== false &&
+    options?.allowNonEu === true;
 }
 
 export interface GenerateOptions {
@@ -187,17 +200,21 @@ async function generateRouted(request: string, cloud: CapsuleModel[],
   }
 
   const fresh = options?.skipTemplates === true;
-  if (local?.cache !== undefined && !fresh) {
+  const live = local?.live !== undefined && routesLive(request, options);
+  if (local?.cache !== undefined && !fresh && !live) {
     emitStage(onStage, 'cache');
   }
-  const cached = local?.cache !== undefined && !fresh ? local.cache.get(request) : null;
+  // Live capsules are never cached: today's weather must not come back tomorrow.
+  const cached = local?.cache !== undefined && !fresh && !live ? local.cache.get(request) : null;
   if (cached !== null) {
     return { ok: true, capsule: cached.capsule, origin: cached.origin as CapsuleOrigin, details: [] };
   }
 
+  // A live task list ("a to-do list using the weather in Kraków") goes to Claude, whose tasks fit the forecast;
+  // other live requests the rules answer ("weather in Kraków": the live weather card) stay on the phone.
   emitStage(onStage, 'rules');
   const fromRules = parseRequest(request);
-  if (fromRules !== null) {
+  if (fromRules !== null && !(live && isTaskList(fromRules))) {
     emitStage(onStage, 'validating');
     const v = validateCapsule(JSON.stringify(fromRules));
     if (v.ok) {
@@ -207,6 +224,13 @@ async function generateRouted(request: string, cloud: CapsuleModel[],
       return { ok: true, capsule: v.capsule, origin: 'rules', details: details };
     }
     // A rule produced an invalid capsule (a bug); fall through to the models rather than return it.
+  }
+
+  // Live information (weather, news, prices, opening hours): straight to the cloud, skipping the templates,
+  // the marketplace and the on-device model, which cannot know it.
+  if (live && local?.live !== undefined) {
+    emitStage(onStage, 'cloud', 'anthropic');
+    return local.live.generate(request);
   }
 
   // A built-in template or a marketplace capsule that explains the whole request, without a model.

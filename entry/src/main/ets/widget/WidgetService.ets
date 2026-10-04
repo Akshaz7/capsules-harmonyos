@@ -340,7 +340,11 @@ export async function handleWidgetMessage(ctx: common.Context, formId: string, m
     } else if (action.length > 0 && !gate.allowAction(capsule, action)) {
       // Blocked and logged by the gatekeeper.
     } else {
-      saveState(ctx, applyWidgetMessage(capsule, loadState(ctx, capsule), msg, Date.now()));
+      const state = loadState(ctx, capsule);
+      if (state.values === undefined && capsule.state !== undefined) {
+        state.values = restoreState(capsule, savedValues(ctx, capsule.id)); // a task list: start from the app's
+      }
+      saveState(ctx, applyWidgetMessage(capsule, state, msg, Date.now()));
     }
   }
   // Every widget showing this capsule redraws, not just the one tapped.

@@ -7,7 +7,7 @@
  * Schema v1 (state, computed or "do" buttons) fits a card in full with at most 3 display/text lines, 3 buttons,
  * 2 timers/counters/checklists and no inputs, lists or readings. Anything more is shown condensed (T4-19).
  */
-import { ButtonComponent, Capsule, CapsuleComponent } from './CapsuleTypes';
+import { ButtonComponent, Capsule, CapsuleComponent, DeviceComponent, InputComponent } from './CapsuleTypes';
 import { allComponents } from './CapsuleProgram';
 import { usesMotion } from '../capabilities/MotionConsumers';
 
@@ -39,6 +39,21 @@ export function usesV1Features(capsule: Capsule): boolean {
 
 function isV1(capsule: Capsule): boolean {
   return usesV1Features(capsule);
+}
+
+/**
+ * A task list (T4-23): one list, any text inputs (to add items in the app), at most one weather reading and
+ * nothing else that needs typing or a live reading. The rules "Tasks and weather" capsule and the live Claude
+ * one. The card shows the list (tap an item to finish it); the weather card and the typing stay in the app.
+ */
+export function isTaskList(capsule: Capsule): boolean {
+  const all = allComponents(capsule.ui);
+  const lists = all.filter((c: CapsuleComponent) => c.type === 'list').length;
+  const devices = all.filter((c: CapsuleComponent) => c.type === 'device');
+  const typing = all.filter((c: CapsuleComponent) => c.type === 'number' ||
+    (c.type === 'input' && (c as InputComponent).kind !== 'text'));
+  return lists === 1 && typing.length === 0 && devices.length <= 1 &&
+    devices.every((c: CapsuleComponent) => (c as DeviceComponent).bind === 'weather');
 }
 
 /** What a full card cannot draw: too many lines, buttons or parts, inputs, live readings or other components. */
@@ -107,6 +122,9 @@ export function routeCapsule(capsule: Capsule): CapsuleRoute {
   const drawable = allComponents(capsule.ui).filter((c: CapsuleComponent) => CARD_TYPES.includes(c.type)).length;
   if (drawable === 0) {
     return { widget: false, reason: 'Nothing here fits a card: live readings and inputs are shown in the app.' };
+  }
+  if (isV1(capsule) && isTaskList(capsule)) {
+    return { widget: true, condensed: false, reason: 'Widget: a task list (add tasks in the app).' };
   }
   const over = isV1(capsule) ? overflowV1(capsule) : overflowV0(capsule);
   if (over.length > 0) {

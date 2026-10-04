@@ -64,7 +64,7 @@ import { AddToHomeButton } from '../widget/AddToHomeButton'; // PROTECTED: owned
 import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
 import { ShareLaunch, shareLaunch } from './ShareLaunch';
 import {
-  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, LIMITS_TEXT, refusalWords
+  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, limitsText, refusalWords
 } from './CreateText';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
@@ -2360,7 +2360,7 @@ struct Index {
         .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
         .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))
         .width('100%')
-      Text(LIMITS_TEXT)
+      Text(limitsText())
         .fontSize($r('sys.float.Body_S'))
         .fontColor($r('sys.color.font_secondary'))
         .width('100%')

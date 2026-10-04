@@ -1,5 +1,5 @@
 import { AiMode, AppSettings } from './AppSettings';
-import { LIMITS_TEXT } from './CreateText';
+import { limitsText } from './CreateText';
 import { IconTile } from '../components';
 import { Flags } from '../theme/Flags';
 import { Palette } from '../theme/Tokens';
@@ -145,7 +145,7 @@ export struct SettingsView {
         .fontColor(NOTE_COLOR)
         .width('100%')
         .padding({ left: 4, right: 4 })
-      Text(LIMITS_TEXT)
+      Text(limitsText())
         .fontSize(CAPTION_SIZE)
         .fontColor(CAPTION_COLOR)
         .width('100%')

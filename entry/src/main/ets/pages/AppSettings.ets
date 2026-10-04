@@ -20,8 +20,8 @@ export type AiMode = 'smart' | 'on-device';
 @ObservedV2
 export class AppSettings {
   @Trace aiMode: AiMode = 'smart';
-  /** Advanced: allow cloud providers outside the EU. Off by default. */
-  @Trace allowNonEu: boolean = false;
+  /** Allow cloud providers outside the EU (Claude for live capsules, T4-23). On by default. */
+  @Trace allowNonEu: boolean = true;
   /** The cloud provider ('mistral', 'anthropic', ...) whose notice the user accepted; '' if none. */
   @Trace cloudConsentProvider: string = '';
   /** 'capsule': the sensor listens only while that capsule's page is open. 'app': any capsule in front. */
@@ -33,7 +33,7 @@ export class AppSettings {
       const options: preferences.Options = { name: STORE };
       this.prefs = preferences.getPreferencesSync(ctx, options);
       this.aiMode = (this.prefs.getSync(AI_MODE_KEY, 'smart') as string) === 'on-device' ? 'on-device' : 'smart';
-      this.allowNonEu = this.prefs.getSync(ALLOW_NON_EU_KEY, false) as boolean;
+      this.allowNonEu = this.prefs.getSync(ALLOW_NON_EU_KEY, true) as boolean;
       this.cloudConsentProvider = this.prefs.getSync(CLOUD_CONSENT_KEY, '') as string;
       this.motionScope = (this.prefs.getSync(MOTION_SCOPE_KEY, 'capsule') as string) === 'app' ? 'app' : 'capsule';
       if (this.cloudConsentProvider.length === 0 && (this.prefs.getSync(LEGACY_CLOUD_NOTICE_KEY, false) as boolean)) {

@@ -9,7 +9,10 @@ import {
   ChecklistComponent,
   CounterComponent,
   DisplayComponent,
+  InputComponent,
+  ListComponent,
   Permission,
+  Scalar,
   RowComponent,
   TextComponent,
   TimerComponent,
@@ -17,9 +20,9 @@ import {
   WhenComponent
 } from './CapsuleTypes';
 import { parseAction, permissionForAction, permissionForComponent } from './CapsuleValidator';
-import { routeCapsule, usesV1Features } from './CapsuleRouter';
+import { isTaskList, routeCapsule, usesV1Features } from './CapsuleRouter';
 import {
-  allComponents, applyActions, initialState as initialValues, isEnabled, isShown, renderTemplate, restoreState, StateValues
+  allComponents, applyActions, finishListItem, initialState as initialValues, isEnabled, isShown, renderTemplate, restoreState, StateValues
 } from './CapsuleProgram';
 
 type JsonValue = Object | null | undefined;
@@ -179,6 +182,29 @@ function hasButton(capsule: Capsule, action: string): boolean {
   return capsule.ui.some((c: CapsuleComponent) => c.type === 'button' && (c as ButtonComponent).action === action);
 }
 
+/** Row id prefix of a v1 list (a task list) on the card: "list:<state var>". */
+export const LIST_ROW: string = 'list:';
+
+function listOf(capsule: Capsule, rowId: string): ListComponent | undefined {
+  const source = rowId.substring(LIST_ROW.length);
+  return allComponents(capsule.ui).find((c: CapsuleComponent) => c.type === 'list' &&
+    (c as ListComponent).source === source) as ListComponent | undefined;
+}
+
+/** A v1 list as a card checklist: its items, none ticked; tapping one finishes (removes) it. */
+function listRow(l: ListComponent, i: number, values: StateValues): WidgetRow {
+  const r = row('checklist', `${LIST_ROW}${l.source}`, '');
+  const v = values[l.source];
+  const texts: string[] = Array.isArray(v) ? (v as Scalar[]).map((x: Scalar) => `${x}`) : [];
+  r.items = texts.map((text: string, n: number): WidgetCheckItem => {
+    const item: WidgetCheckItem = { index: n, text: text, checked: false };
+    return item;
+  });
+  r.open = r.items;
+  r.key = `${i}:list:${l.source}:${texts.join('\u0001')}`;
+  return r;
+}
+
 function component(capsule: Capsule, type: string, id: string): CapsuleComponent | undefined {
   return capsule.ui.find((c: CapsuleComponent) => c.type === type && (c as TimerComponent).id === id);
 }
@@ -203,6 +229,9 @@ export function declaredAction(capsule: Capsule, msg: WidgetMessage): string | n
       return b !== undefined ? '' : null; // its actions are checked one by one in pressWidgetButton
     }
     case 'toggle': {
+      if (msg.id.startsWith(LIST_ROW)) {
+        return listOf(capsule, msg.id) !== undefined && msg.index >= 0 ? '' : null; // a task: done = removed
+      }
       const list = component(capsule, 'checklist', msg.id);
       return list !== undefined && msg.index >= 0 && msg.index < (list as ChecklistComponent).items.length ? '' : null;
     }
@@ -225,6 +254,12 @@ export function applyWidgetMessage(capsule: Capsule, state: CapsuleState, msg: W
     const counter = next.counters.find((v: CounterValue) => v.id === msg.id);
     if (counter !== undefined) {
       counter.value += 1;
+    }
+  } else if (msg.op === 'toggle' && msg.id.startsWith(LIST_ROW)) {
+    const done = finishListItem(capsule, next.values ?? initialValues(capsule), msg.id.substring(LIST_ROW.length),
+      msg.index); // the same op as the app's tick circles (T4-26)
+    if (done.ok) {
+      next.values = done.state;
     }
   } else if (msg.op === 'toggle') {
     const list = next.checklists.find((l: ChecklistTicks) => l.id === msg.id);
@@ -662,6 +697,13 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
   const buttons = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'button');
   const shown: CapsuleComponent[] = [];
   shownComponents(capsule, values, capsule.ui, shown);
+  // Typed text stays in the app: text inputs and the buttons that use them (a task list's "Add") are not drawn.
+  const typed: string[] = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'input' &&
+    (c as InputComponent).kind === 'text').map((c: CapsuleComponent) => (c as InputComponent).bind);
+  const usesTyping = (b: ButtonComponent): boolean => {
+    const json = JSON.stringify(b);
+    return typed.some((bind: string) => new RegExp(`\\b${bind}\\b`).test(json));
+  };
   // Live display values first (scores, results), the capsule's static text lines after them: a card that
   // only fits one line shows what changes, not the instructions.
   const lines: string[] = [];
@@ -672,8 +714,13 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
       lines.push(renderTemplate(capsule, values, (c as DisplayComponent).text));
     } else if (c.type === 'text') {
       texts.push((c as TextComponent).text);
+    } else if (c.type === 'list') {
+      view.rows.push(listRow(c as ListComponent, i, values));
     } else if (c.type === 'button') {
       const b = c as ButtonComponent;
+      if (usesTyping(b)) {
+        return;
+      }
       view.buttons.push({ index: buttons.indexOf(c), label: b.label, enabled: isEnabled(capsule, values, b) });
       if (b.do !== undefined && b.do.length > 0) {
         stepped.push(buttons.indexOf(c));
@@ -690,7 +737,12 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
   view.buttons = mostImportant(view.buttons, stepped);
   view.rows.splice(MAX_CARD_PARTS);
   const goal = lines.length > 0 && view.rows.length === 0 ? goalOf(lines[0], values) : null;
-  if (goal !== null) {
+  if (isTaskList(capsule) && view.rows.some((r: WidgetRow) => r.id.startsWith(LIST_ROW))) {
+    view.layout = 'checklist'; // the tasks fill the card; "Tasks to do: 3" (and the plan) as the caption
+    view.icon = 'checklist';
+    view.rows = view.rows.filter((r: WidgetRow) => r.id.startsWith(LIST_ROW));
+    view.caption = lines.slice(0, 1).join('');
+  } else if (goal !== null) {
     view.layout = 'goal';
     view.icon = 'goal';
     view.value = goal.value;
@@ -747,6 +799,9 @@ export function summaryLine(view: WidgetView, now: number): string {
   }
   if (first.kind === 'timer') {
     return first.endAt > now ? `${clock(first.endAt - now)} left` : (first.endAt > 0 ? 'Done' : clock(first.minutes * 60000));
+  }
+  if (first.id.startsWith(LIST_ROW)) {
+    return first.items.length === 0 ? 'All done' : `${first.items.length} to do`;
   }
   const done = first.items.filter((i: WidgetCheckItem) => i.checked).length;
   return done === first.items.length ? 'All done' : `${done} / ${first.items.length} done`;

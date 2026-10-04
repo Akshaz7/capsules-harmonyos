@@ -27,6 +27,7 @@ import sendToDeviceTest from './SendToDevice.test';
 import voiceTextTest from './VoiceText.test';
 import timeTriggersTest from './TimeTriggers.test';
 import remindersTest from './Reminders.test';
+import liveCapsuleTest from './LiveCapsule.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -58,4 +59,5 @@ export default function testsuite() {
   voiceTextTest();
   timeTriggersTest();
   remindersTest();
+  liveCapsuleTest();
 }

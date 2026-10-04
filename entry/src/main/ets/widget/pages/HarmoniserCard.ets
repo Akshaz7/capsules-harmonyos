@@ -467,7 +467,7 @@ struct HarmoniserCard {
         Flex({ wrap: FlexWrap.Wrap }) {
           ForEach(openItems(r).slice(0, listMax(v)), (item: CardCheckItem) => {
             CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
-          }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
+          }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}-${item.text}`)
         }
         .width('100%')
         .layoutWeight(1)

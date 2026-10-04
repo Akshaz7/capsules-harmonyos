@@ -115,7 +115,7 @@ export default function weatherTest() {
       expect(text.includes('pedometer')).assertFalse();
     });
 
-    it('builds a task list with the weather in one capsule, by rule', 0, () => {
+    it('builds a task list with the weather in one capsule, by rule, widget-suitable', 0, () => {
       const inputs: string[] = [
         'a task list and the weather for Kraków',
         'task list and weather',
@@ -133,7 +133,8 @@ export default function weatherTest() {
         expect(`${req} list ${hasList}`).assertEqual(`${req} list true`);
         expect(c.state !== undefined).assertTrue();
         expect((c.state as Record<string, StateVar>)['tasks'] !== undefined).assertTrue();
-        expect(routeCapsule(c).condensed).assertTrue(); // the task count and Add on a widget (T4-19)
+        const tr = routeCapsule(c);
+        expect(`${tr.widget} ${tr.condensed}`).assertEqual('true false'); // the task list fills the card (T4-23)
       });
       const named = built('a task list and the weather for Kraków');
       expect((named.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent).city)

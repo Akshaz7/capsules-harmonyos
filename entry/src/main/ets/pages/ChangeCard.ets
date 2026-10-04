@@ -1,4 +1,4 @@
-import { LANGUAGE_MESSAGE, LIMITS_TEXT } from './CreateText';
+import { LANGUAGE_MESSAGE, limitsText } from './CreateText';
 
 /** The example the English-only note offers on a capsule page; tapping it fills the input. */
 export const CHANGE_EXAMPLE = 'make the timer 1 minute';
@@ -116,7 +116,7 @@ export struct ChangeCard {
         .fontSize($r('sys.float.Body_M'))
         .fontColor($r('sys.color.font_primary'))
         .width('100%')
-      Text(LIMITS_TEXT)
+      Text(limitsText())
         .fontSize($r('sys.float.Body_S'))
         .fontColor($r('sys.color.font_secondary'))
         .width('100%')

@@ -18,7 +18,8 @@ import { fileIo } from '@kit.CoreFileKit';
 import { GenerateResult } from './CapsuleTypes';
 import { CapsuleModel } from './CapsuleModel';
 import {
-  AI_NOT_CONFIGURED, CapsuleSource, GenerateOptions, generateCapsuleWith, generateFromSharedTextWith, pickCloud
+  AI_NOT_CONFIGURED, CapsuleSource, GenerateOptions, generateCapsuleWith, generateFromSharedTextWith, LocalSources, pickCloud,
+  routesLive
 } from './CapsuleGenerator';
 import { parseRequest } from './RuleParser';
 import {
@@ -26,9 +27,13 @@ import {
   parseModelConfigs
 } from './ModelProvider';
 import { getMarketOptions, getRequestCache, getTemplateLibrary } from './templates';
+import { LiveCapsuleSource } from './LiveCapsule';
+import { WeatherAdapter } from '../adapters/WeatherAdapter';
+import { cityName, weatherLabel } from '../capabilities/WeatherData';
 import { CactusProvider, DeviceOcr, loadImage, OnDeviceStatus, runPhotoEvalIfRequested } from './providers/CactusProvider';
 import { generateFromImageWith } from './providers/CloudVision';
 import { runSpeechEvalIfRequested } from './providers/SpeechInput';
+export { LIVE_MODEL, needsLiveInfo } from './LiveCapsule';
 
 export * from './CapsuleTypes';
 export { validateCapsule, validateCapsuleObject, parseAction, permissionForAction, permissionForComponent,
@@ -223,6 +228,23 @@ class LazyOnDevice implements CapsuleSource {
 
 const lazyOnDevice: LazyOnDevice = new LazyOnDevice();
 
+// ---- Live capsules (T4-23) ----
+
+const liveWeather: WeatherAdapter = new WeatherAdapter();
+
+/** The forecast line for the live prompt: "14°C, Light rain, wind 12 km/h"; null when offline. */
+async function forecastLine(cityId: string): Promise<string | null> {
+  const r = await liveWeather.refresh(cityId, Date.now());
+  const w = r.reading;
+  return w === null ? null : `${Math.round(w.tempC)}°C, ${weatherLabel(w.code)}, wind ${Math.round(w.windKmh)} km/h in ${cityName(cityId)}`;
+}
+
+/** Claude with the forecast / web search; with no Anthropic key it returns the rules capsule (see LiveCapsule). */
+function liveSource(): CapsuleSource {
+  const config = modelConfigs.find((c: ModelConfig) => c.provider === 'anthropic') ?? null;
+  return new LiveCapsuleSource(config, cloudTransport ?? new NetworkTransport(), forecastLine);
+}
+
 /** The on-device model fills template slots the rules missed; throws when it is not ready. */
 async function onDeviceSlots(prompt: string): Promise<string> {
   await onDevice.whenInitialised();
@@ -241,9 +263,12 @@ async function onDeviceSlots(prompt: string): Promise<string> {
  */
 export async function generateCapsule(request: string, options?: GenerateOptions): Promise<GenerateResult> {
   const cache = getRequestCache();
-  const r = await generateCapsuleWith(request, models, modelError, lazyOnDevice, options,
-    { cache: cache, library: getTemplateLibrary(), slotModel: onDeviceSlots, market: getMarketOptions() });
-  if (r.ok && r.capsule !== undefined && r.origin !== undefined && r.origin !== 'rules' && r.origin !== 'template') {
+  const local: LocalSources = {
+    cache: cache, library: getTemplateLibrary(), slotModel: onDeviceSlots, market: getMarketOptions(), live: liveSource()
+  };
+  const r = await generateCapsuleWith(request, models, modelError, lazyOnDevice, options, local);
+  if (r.ok && r.capsule !== undefined && r.origin !== undefined && r.origin !== 'rules' && r.origin !== 'template' &&
+    !routesLive(request, options)) { // live capsules are never cached
     cache.put(request, r.capsule, r.origin); // async; a failed write only means it is made again next time
   }
   return r;
