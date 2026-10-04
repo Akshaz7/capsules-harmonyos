@@ -31,7 +31,7 @@ export struct SettingsView {
   @Require @Param settings: AppSettings;
   @Param cloudStatus: string = '';
   /** Second line of the Smart option: which cloud provider Smart mode would use. */
-  @Param smartDetail: string = 'On-device + Mistral EU when needed';
+  @Param smartDetail: string = 'On-device + cloud AI when needed';
   /** Bumped when the user changes the motion scope, so the page can start or stop the sensor. */
   @Event onMotionScopeChange: () => void = () => {
   };

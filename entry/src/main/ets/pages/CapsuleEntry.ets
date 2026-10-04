@@ -1,5 +1,6 @@
 import { Capsule, CapsuleComponent, CapsuleRoute, CounterComponent } from '../core';
 import { CapsuleRuntime } from '../renderer/CapsuleRuntime';
+import { Flags } from '../theme/Flags';
 
 /** One saved, approved capsule plus its live runtime and widget route. */
 @ObservedV2
@@ -38,7 +39,7 @@ export function originShort(origin: string): string {
       return 'On phone';
     case 'cloud-eu:mistral':
     case 'cloud':
-      return 'Mistral (EU)';
+      return Flags.CLOUD_CLAUDE_ONLY ? 'Cloud AI' : 'Mistral (EU)';
     case 'cloud:anthropic':
       return 'Claude';
     case 'cloud:openai':
@@ -63,7 +64,7 @@ export function originBadge(origin: string): string {
       return 'Made on your phone · no internet';
     case 'cloud-eu:mistral':
     case 'cloud': // saved before core named the provider; only Mistral was used then
-      return 'Made with Mistral (EU)';
+      return Flags.CLOUD_CLAUDE_ONLY ? 'Made with cloud AI' : 'Made with Mistral (EU)';
     case 'cloud:anthropic':
       return 'Made with Claude';
     case 'cloud:openai':

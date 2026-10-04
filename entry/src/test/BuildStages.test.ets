@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { buildStageIndex, buildStageText, stageFromCore, StageUpdate } from '../main/ets/pages/BuildStages';
+import { Flags } from '../main/ets/theme/Flags';
 
 export default function buildStagesTest() {
   describe('T3-28 build step line', () => {
@@ -24,7 +25,7 @@ export default function buildStagesTest() {
       expect(at('marketplace')).assertEqual('templates/');
       expect(at('on-device')).assertEqual('model/');
       expect(at('cloud', 'anthropic')).assertEqual('model/Claude');
-      expect(at('cloud', 'mistral')).assertEqual('model/Mistral (EU)');
+      expect(at('cloud', 'mistral')).assertEqual(Flags.CLOUD_CLAUDE_ONLY ? 'model/cloud AI' : 'model/Mistral (EU)');
       expect(at('validating')).assertEqual('checking/');
       expect(at('retrying')).assertEqual('checking/');
       expect(at('done')).assertEqual('ready/');

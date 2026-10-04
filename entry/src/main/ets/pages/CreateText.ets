@@ -1,4 +1,5 @@
 import { GenerateResult, getModelStatus, UNSUPPORTED_LANGUAGE } from '../core';
+import { Flags } from '../theme/Flags';
 
 /** "a", "a and b", "a, b and c". */
 export function joinWords(words: string[]): string {
@@ -28,10 +29,14 @@ export function failureDetail(result: GenerateResult): string {
 /** What works without the cloud, shown in Settings and on the failure card (wording fixed by T3-8). */
 export const LIMITS_TEXT = 'Common apps are made on your phone. Unusual ones need cloud AI (Mistral EU).';
 
+/** T3-36 (Ash's wording): the cloud line when only Claude is offered (Flags.CLOUD_CLAUDE_ONLY). */
+export const CLOUD_LINE = 'Most requests are built on the phone. When one needs a cloud model, the app names the ' +
+  'provider first, which may be outside the EU.';
+
 /** The provider smart mode uses, as users know it (same rule as Index.cloudName: an EU provider first). */
 export function cloudProviderName(): string {
   const status = getModelStatus();
-  if (status.euAvailable) {
+  if (status.euAvailable && !Flags.CLOUD_CLAUDE_ONLY) {
     return 'Mistral EU';
   }
   const p = status.providers.length > 0 ? status.providers[0] : '';
@@ -40,6 +45,9 @@ export function cloudProviderName(): string {
 
 /** LIMITS_TEXT naming the provider actually in use (T4-23). */
 export function limitsText(): string {
+  if (Flags.CLOUD_CLAUDE_ONLY) {
+    return CLOUD_LINE;
+  }
   const name = cloudProviderName();
   return `Common apps are made on your phone. Unusual ones need cloud AI${name === 'cloud AI' ? '' : ` (${name})`}.`;
 }

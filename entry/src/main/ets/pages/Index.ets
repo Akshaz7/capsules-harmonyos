@@ -164,7 +164,7 @@ interface CloudNotice {
 
 /** The one-time notice names the provider that will actually get the request, and says if it is outside the EU. */
 function cloudNotice(provider: string): CloudNotice {
-  if (provider === 'mistral') {
+  if (provider === 'mistral' && !Flags.CLOUD_CLAUDE_ONLY) {
     return { title: 'Use Mistral AI (EU)?', message:
       'For advanced apps, Harmoniser sends only your request text to Mistral AI (EU). No personal data or app data.' };
   }
@@ -1570,7 +1570,7 @@ struct Index {
     }
     const replaced = this.entries.find((e: CapsuleEntry) => e.capsule.id === this.replacingId);
     if (replaced) {
-      this.undo(replaced, `Replaced ${replaced.capsule.name} with a version made with Mistral (EU)`);
+      this.undo(replaced, `Replaced ${replaced.capsule.name} with a version made with ${Flags.CLOUD_CLAUDE_ONLY ? 'Claude' : 'Mistral (EU)'}`);
     }
     this.replacingId = '';
     if (this.pendingOriginRaw === MARKETPLACE_ORIGIN && this.pendingMarketItem !== undefined) {
@@ -1687,7 +1687,7 @@ struct Index {
     if (!result.ok || !result.capsule || !isCloudOrigin(result.origin ?? '')) {
       hilog.error(0x0001, 'Index', 'make smarter failed for "%{private}s": origin %{public}s, %{public}s',
         text, result.origin ?? '-', result.error ?? '');
-      this.message = "Mistral couldn't improve this one right now.";
+      this.message = `${Flags.CLOUD_CLAUDE_ONLY ? 'Claude' : 'Mistral'} couldn't improve this one right now.`;
       return;
     }
     this.pending = this.uniqueCapsule(result.capsule);
@@ -2004,7 +2004,7 @@ struct Index {
 
   /** The provider smart mode will send cloud requests to: Mistral when an EU provider is set up, else the default. */
   private cloudKey(): string {
-    if (this.euCloud) {
+    if (this.euCloud && !Flags.CLOUD_CLAUDE_ONLY) {
       return 'mistral';
     }
     return this.cloudProviders.length > 0 ? this.cloudProviders[0] : '';
@@ -2012,7 +2012,7 @@ struct Index {
 
   /** Settings > Smart: names the provider Smart mode would actually use (BUG-3). */
   private smartModeDetail(): string {
-    if (this.euCloud) {
+    if (this.euCloud && !Flags.CLOUD_CLAUDE_ONLY) {
       return 'On-device + Mistral EU when needed';
     }
     if (!this.cloudConfigured) {
@@ -2024,7 +2024,7 @@ struct Index {
 
   /** The cloud provider smart mode will use, as users know it. Core prefers an EU provider. */
   private cloudName(): string {
-    if (this.euCloud) {
+    if (this.euCloud && !Flags.CLOUD_CLAUDE_ONLY) {
       return 'Mistral (EU)';
     }
     const p = this.cloudProviders.length > 0 ? this.cloudProviders[0] : '';
@@ -2041,8 +2041,11 @@ struct Index {
     if (this.settings.aiMode === 'on-device') {
       return `${this.onDeviceStatus} · On-device only`;
     }
-    if (this.euCloud) {
+    if (this.euCloud && !Flags.CLOUD_CLAUDE_ONLY) {
       return `${this.onDeviceStatus} · Mistral (EU) when needed`;
+    }
+    if (Flags.CLOUD_CLAUDE_ONLY && (this.cloudConfigured || this.euCloud)) {
+      return `${this.onDeviceStatus} · ${this.settings.allowNonEu ? 'Claude when needed' : 'Claude is off (outside the EU)'}`;
     }
     if (this.cloudConfigured) {
       return `${this.onDeviceStatus} · ${this.settings.allowNonEu ? 'Cloud AI when needed' : 'No EU cloud provider'}`;

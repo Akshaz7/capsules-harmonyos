@@ -2,6 +2,8 @@
  * T3-28: the live step line shown while a capsule is built. Pure, so it is unit-tested. Until core reports
  * stages (T4-25 GenerateOptions.onStage) Index moves the stage from what it already knows.
  */
+import { Flags } from '../theme/Flags';
+
 export type BuildStage = 'reading' | 'templates' | 'model' | 'checking' | 'ready';
 
 export const BUILD_STAGES: BuildStage[] = ['reading', 'templates', 'model', 'checking', 'ready'];
@@ -42,7 +44,7 @@ export function providerDisplayName(provider: string): string {
     case 'openai':
       return 'OpenAI';
     case 'mistral':
-      return 'Mistral (EU)';
+      return Flags.CLOUD_CLAUDE_ONLY ? 'cloud AI' : 'Mistral (EU)';
     default:
       return 'cloud AI';
   }
