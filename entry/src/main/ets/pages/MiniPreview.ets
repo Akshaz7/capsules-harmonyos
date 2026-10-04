@@ -28,6 +28,9 @@ export struct MiniPreview {
           Text(small)
             .fontSize(11)
             .fontColor($r('sys.color.font_secondary'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .constraintSize({ maxWidth: 56 }) // stays inside the 84vp ring's 8vp stroke
         }
       }
     }
@@ -36,8 +39,9 @@ export struct MiniPreview {
   build() {
     Column() {
       if (this.runtime.timers.length > 0) {
+        // T3-34: no label inside the ring: it ran into the stroke, and the tile's name below says it.
         this.ring(this.timerDone(this.runtime.timers[0]), this.runtime.timers[0].minutes * 60,
-          formatClock(this.runtime.timers[0].remainingSec), this.runtime.timers[0].label)
+          formatClock(this.runtime.timers[0].remainingSec), '')
       } else if (this.runtime.counters.length > 0) {
         Text(`${this.runtime.counters[0].value}`)
           .fontSize(44)

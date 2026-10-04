@@ -18,6 +18,10 @@ const CARD_COLOR: ResourceColor = NEW_LOOK ? Palette.surface : $r('sys.color.com
 const CARD_RADIUS: number = NEW_LOOK ? 22 : 20;
 const DIVIDER_COLOR: ResourceColor = NEW_LOOK ? Palette.line2 : $r('sys.color.comp_divider');
 const ACCENT: ResourceColor = NEW_LOOK ? Palette.blue : $r('sys.color.brand');
+// T3-34: tighter rows and gaps so the last card ("Allow non-EU providers") clears the floating tab bar.
+const ROW_PAD: number = NEW_LOOK ? 8 : 12;
+const HEADER_TOP: number = NEW_LOOK ? 10 : 16;
+const GAP: number = NEW_LOOK ? 6 : 8;
 
 /** Settings page (NavDestination). */
 @ComponentV2
@@ -76,7 +80,7 @@ export struct SettingsView {
         })
     }
     .width('100%')
-    .padding({ top: 12, bottom: 12 })
+    .padding({ top: ROW_PAD, bottom: ROW_PAD })
     .onClick(() => {
       this.settings.setMotionScope(scope === 'app' ? 'app' : 'capsule');
       this.onMotionScopeChange();
@@ -108,13 +112,13 @@ export struct SettingsView {
         })
     }
     .width('100%')
-    .padding({ top: 12, bottom: 12 })
+    .padding({ top: ROW_PAD, bottom: ROW_PAD })
     .onClick(() => this.settings.setAiMode(mode))
   }
 
   @Builder
   content() {
-    Column({ space: 8 }) {
+    Column({ space: GAP }) {
       Text('AI mode')
         .fontSize(HEADER_SIZE)
         .fontWeight(HEADER_WEIGHT)
@@ -152,7 +156,7 @@ export struct SettingsView {
         .fontWeight(HEADER_WEIGHT)
         .fontColor(HEADER_COLOR)
         .width('100%')
-        .padding({ left: 4, right: 4, top: 16 })
+        .padding({ left: 4, right: 4, top: HEADER_TOP })
       Column() {
         this.motionRow('capsule', 'While a capsule is open',
           'Only the capsule on screen reacts to shakes')
@@ -177,7 +181,7 @@ export struct SettingsView {
         .fontWeight(HEADER_WEIGHT)
         .fontColor(HEADER_COLOR)
         .width('100%')
-        .padding({ left: 4, right: 4, top: 16 })
+        .padding({ left: 4, right: 4, top: HEADER_TOP })
       Row({ space: 12 }) {
         Column({ space: 2 }) {
           Text('Allow non-EU providers')
