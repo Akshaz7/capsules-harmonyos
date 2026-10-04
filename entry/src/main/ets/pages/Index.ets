@@ -1378,6 +1378,11 @@ struct Index {
     }
   }
 
+  /** Wide windows (>= 600vp, NEW_WIDE): the capsule frame shows its extras in a side panel. */
+  private frameHasSide(): boolean {
+    return Flags.NEW_WIDE && this.wide;
+  }
+
   /** T3-29: partial then final dictated text replaces the prompt each time. */
   private onVoiceText(text: string): void {
     this.voiceError = '';
@@ -1985,6 +1990,7 @@ struct Index {
     } else if (name === MARKET_PAGE) {
       MarketplaceView({
         client: this.market,
+        wide: this.wide,
         onDeviceOnly: this.settings.aiMode === 'on-device',
         onOpenSettings: () => this.nav.pushPath({ name: SETTINGS_PAGE }),
         onInstall: (item: MarketItem) => this.installFromMarket(item)
@@ -2448,6 +2454,7 @@ struct Index {
       }
       .padding({ left: 16, right: 16, top: 8, bottom: 120 }) // room for the floating tab bar
       .width('100%')
+      .constraintSize({ maxWidth: Flags.NEW_WIDE && this.wide ? 640 : undefined })
     }
     .width('100%')
     .height('100%')
@@ -2856,6 +2863,7 @@ struct Index {
           MarketplaceView({
             client: this.market,
             embedded: true,
+            wide: this.wide,
             onDeviceOnly: this.settings.aiMode === 'on-device',
             onOpenSettings: () => this.selectTab(TAB_SETTINGS),
             onInstall: (item: MarketItem) => this.installFromMarket(item)
@@ -3079,6 +3087,7 @@ struct Index {
         originText: originBadge(entry.origin),
         originKind: originKindOf(entry.origin),
         wide: this.wide,
+        hasSidePanel: this.frameHasSide(),
         onClose: () => this.close(),
         onChangeIt: () => {
           this.changeOpenId = this.changeOpenId === entry.capsule.id ? '' : entry.capsule.id;
@@ -3086,6 +3095,9 @@ struct Index {
         onShare: () => this.shareFromFrame(entry),
         body: () => {
           this.frameBody(entry)
+        },
+        sidePanel: () => {
+          this.frameSide(entry)
         },
         addToHome: () => {
           this.frameAddToHome(entry)
@@ -3112,6 +3124,24 @@ struct Index {
       motionNote: this.motionNoteFor(entry.capsule),
       onPickCity: () => this.openCityPicker(entry.capsule.id)
     })
+    // Wide windows (NEW_WIDE): the rest goes in the frame's side panel (frameExtras), next to the capsule.
+    if (!this.frameHasSide()) {
+      this.frameExtras(entry)
+    }
+  }
+
+  /** The side panel on wide windows: the frame extras, stacked. */
+  @Builder
+  frameSide(entry: CapsuleEntry) {
+    Column({ space: 12 }) {
+      this.frameExtras(entry)
+    }
+    .width('100%')
+  }
+
+  /** Triggers, Make it smarter, devices, share, publish, remove and the log: under the capsule, or beside it. */
+  @Builder
+  frameExtras(entry: CapsuleEntry) {
     if ((entry.capsule.triggers ?? []).length > 0) {
       TriggerCard({
         triggers: entry.capsule.triggers ?? [],

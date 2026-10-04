@@ -25,6 +25,8 @@ export struct MarketplaceView {
   @Require @Param client: MarketplaceClient;
   /** T3-25: "On-device only" is on, so nothing is sent: the shipped examples and a note. */
   @Param onDeviceOnly: boolean = false;
+  /** Wide windows (NEW_WIDE): two columns of tiles. */
+  @Param wide: boolean = false;
   @Event onOpenSettings: () => void = () => {
   };
   @Event onInstall: (item: MarketItem) => void = () => {
@@ -336,6 +338,7 @@ export struct MarketplaceView {
           }
         }
         .layoutWeight(1)
+        .lanes(Flags.NEW_WIDE && this.wide ? 2 : 1, 10)
         .scrollBar(BarState.Off)
         .contentEndOffset(this.embedded ? 120 : 0)
       }

@@ -109,12 +109,17 @@ export struct CapsuleFrame {
           .height('100%')
           .align(Alignment.Top)
           .scrollBar(BarState.Off)
-          Column() {
-            this.sidePanel()
+          Scroll() {
+            Column() {
+              this.sidePanel()
+            }
+            .width('100%')
           }
           .width(280)
           .height('100%')
-          .padding({ top: Space.body, right: Space.body })
+          .align(Alignment.Top)
+          .scrollBar(BarState.Off)
+          .padding({ top: Space.body, right: Space.body, bottom: Space.body })
         }
         .layoutWeight(1)
         .width('100%')
