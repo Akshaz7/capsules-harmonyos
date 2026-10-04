@@ -36,7 +36,7 @@ function withoutFakeBox(text: string): string {
 const MAX_SEGMENTS: number = 24;
 
 /** Patterns that are finished and verified. Any other capsule renders through the classic CapsuleView path. */
-export const FINISHED_PATTERNS: PatternKind[] = ['record-list', 'versus', 'form', 'converter', 'timer-ring'];
+export const FINISHED_PATTERNS: PatternKind[] = ['record-list', 'versus', 'form', 'converter', 'timer-ring', 'goal-ring'];
 
 let lastCapsule: Capsule | undefined = undefined;
 let lastPlan: PatternPlan = new PatternPlan();
