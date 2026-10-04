@@ -130,6 +130,9 @@ export function libraryItems(libraryJson: string): MarketItem[] {
       if (typeof t['id'] !== 'string' || json === undefined || !validateCapsule(json).ok) {
         return;
       }
+      if (t['listed'] === false) {
+        return; // curated out of the marketplace list (plan h.1); Create still builds it
+      }
       const category = str(t, 'category');
       items.push({
         id: `example:${t['id'] as string}`, name: str(t, 'name'), description: str(t, 'description'),

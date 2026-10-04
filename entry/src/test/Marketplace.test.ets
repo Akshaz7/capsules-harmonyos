@@ -43,6 +43,8 @@ export default function marketplaceTest() {
       expect(matchesSearch(tea, '', 'games')).assertFalse();
       expect(matchesSearch(tea, 'pasta', '')).assertFalse();
       expect(libraryItems('not json').length).assertEqual(0);
+      const hidden = LIBRARY.replace('"id":"tea",', '"id":"tea","listed":false,');
+      expect(libraryItems(hidden).length).assertEqual(0); // listed:false stays out of the marketplace
     });
   });
 }
