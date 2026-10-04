@@ -2,6 +2,7 @@ import { abilityAccessCtrl, common, PermissionRequestResult, Permissions } from 
 import { BusinessError } from '@kit.BasicServicesKit';
 import { calendarManager } from '@kit.CalendarKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { DailyReminder, nextOccurrence, planReminderSync, reminderPrefix } from '../core/Reminders';
 
 const DOMAIN = 0x0001;
 const TAG = 'TimerAdapter';
@@ -35,10 +36,22 @@ export class TimerAdapter {
   }
 
   /** Asks for calendar access (once) and opens or creates the app's own calendar. */
-  async prepare(): Promise<boolean> {
+  prepare(): Promise<boolean> {
     if (this.calendar) {
-      return true;
+      return Promise.resolve(true);
     }
+    // Several capsules may ask at start-up: share one request so the user sees one permission prompt.
+    if (this.preparing === undefined) {
+      this.preparing = this.openCalendar().finally(() => {
+        this.preparing = undefined;
+      });
+    }
+    return this.preparing;
+  }
+
+  private preparing: Promise<boolean> | undefined = undefined;
+
+  private async openCalendar(): Promise<boolean> {
     try {
       const atManager = abilityAccessCtrl.createAtManager();
       const result: PermissionRequestResult = await atManager.requestPermissionsFromUser(this.ctx, PERMISSIONS);
@@ -127,6 +140,53 @@ export class TimerAdapter {
       const err = e as BusinessError;
       hilog.error(DOMAIN, TAG, 'cancelTimer failed: %{public}d %{public}s', err.code, err.message);
       return 0;
+    }
+  }
+
+  /**
+   * Makes the calendar hold exactly `wanted` for this capsule (T4-27): one recurring DAILY event per reminder,
+   * whose reminder rings at the time even while the app is closed. Adds missing ones, deletes stale ones and
+   * duplicates; calling it again changes nothing. Returns false if the calendar is not available.
+   */
+  async syncDailyReminders(capsuleId: string, wanted: DailyReminder[]): Promise<boolean> {
+    if (wanted.length === 0 && !this.calendar) {
+      return false; // nothing to add: do not ask for calendar access just to look for stale reminders
+    }
+    if (!(await this.prepare()) || !this.calendar) {
+      return false;
+    }
+    try {
+      const prefix = reminderPrefix(capsuleId);
+      const events = (await this.calendar.getEvents()).filter((ev: calendarManager.Event) =>
+        ev.id !== undefined && ev.identifier !== undefined && ev.identifier.startsWith(prefix));
+      const plan = planReminderSync(events.map((ev: calendarManager.Event) => ev.identifier as string), wanted);
+      // Stale reminders and extra copies of a kept one, by event id.
+      const ids: number[] = plan.removeAt.map((i: number) => events[i].id as number);
+      if (ids.length > 0) {
+        await this.calendar.deleteEvents(ids);
+      }
+      for (const r of plan.add) {
+        const start = nextOccurrence(r.at, Date.now());
+        const rule: calendarManager.RecurrenceRule = { recurrenceFrequency: calendarManager.RecurrenceFrequency.DAILY };
+        const event: calendarManager.Event = {
+          type: calendarManager.EventType.NORMAL,
+          title: r.title,
+          description: r.text,
+          startTime: start,
+          endTime: start + EVENT_LENGTH_MS,
+          reminderTime: [0],
+          recurrenceRule: rule,
+          identifier: r.key
+        };
+        await this.calendar.addEvent(event);
+      }
+      hilog.info(DOMAIN, TAG, 'daily reminders for %{public}s: +%{public}d -%{public}d', capsuleId, plan.add.length,
+        ids.length);
+      return true;
+    } catch (e) {
+      const err = e as BusinessError;
+      hilog.error(DOMAIN, TAG, 'syncDailyReminders failed: %{public}d %{public}s', err.code, err.message);
+      return false;
     }
   }
 

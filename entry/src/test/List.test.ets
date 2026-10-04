@@ -25,6 +25,7 @@ import buildStagesTest from './BuildStages.test';
 import finishItemTest from './FinishItem.test';
 import voiceTextTest from './VoiceText.test';
 import timeTriggersTest from './TimeTriggers.test';
+import remindersTest from './Reminders.test';
 
 export default function testsuite() {
   localUnitTest();
@@ -54,4 +55,5 @@ export default function testsuite() {
   finishItemTest();
   voiceTextTest();
   timeTriggersTest();
+  remindersTest();
 }

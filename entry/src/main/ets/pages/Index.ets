@@ -48,6 +48,8 @@ import {
   TimerScheduler,
   TimerState
 } from '../renderer/CapsuleRuntime';
+import { Notifier } from '../renderer/CapsuleRuntime';
+import { dailyReminders } from '../core/Reminders';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
 import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon, routeHeadline } from './CapsuleEntry';
@@ -218,6 +220,21 @@ class NotifyOnFinish implements TimerAlert {
 
   timerFinished(capsuleId: string, t: TimerState): void {
     this.adapter.publish(`${t.label} is done`, this.capsuleName);
+  }
+}
+
+/** notify:<text> from a button or trigger: a notification titled with the text (T4-27). */
+class NotifyText implements Notifier {
+  private adapter: NotificationAdapter;
+  private capsuleName: string;
+
+  constructor(adapter: NotificationAdapter, capsuleName: string) {
+    this.adapter = adapter;
+    this.capsuleName = capsuleName;
+  }
+
+  notify(capsuleId: string, text: string): void {
+    this.adapter.publish(text, this.capsuleName);
   }
 }
 
@@ -1109,6 +1126,18 @@ struct Index {
       if (this.gate.isAllowed(capsule, 'reminders') && this.timers && this.notifications) {
         rt.scheduler = new CalendarScheduler(this.timers);
         rt.alert = new NotifyOnFinish(this.notifications, capsule.name);
+      }
+      if (this.gate.isAllowed(capsule, 'notifications') && this.notifications) {
+        rt.notifier = new NotifyText(this.notifications, capsule.name); // asks to enable notifications once
+      }
+      // Daily notify triggers ring from the calendar, also while the app is closed (T4-27).
+      const reminders = this.gate.isAllowed(capsule, 'reminders') && this.gate.isAllowed(capsule, 'notifications') ?
+        dailyReminders(capsule) : [];
+      if (this.timers) {
+        // Adds, updates or removes; never duplicates. Until the calendar holds them, the app notifies itself.
+        this.timers.syncDailyReminders(capsule.id, reminders).then((ok: boolean) => {
+          rt.calendarReminders = ok && reminders.length > 0;
+        });
       }
     }
     if (this.store && capsule.state !== undefined) {
