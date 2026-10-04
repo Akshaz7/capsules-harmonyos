@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { LengthMetrics } from '@kit.ArkUI';
 import {
   ButtonComponent,
   ButtonStep,
@@ -495,6 +496,20 @@ struct CapsuleNode {
         }
         .width('100%')
       }
+    } else if (this.component.type === 'row' && (this.component as RowComponent).items.length >= 3) {
+      // 3+ children wrap at a usable minimum width instead of squeezing into equal slivers.
+      Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(12), cross: LengthMetrics.vp(12) } }) {
+        ForEach((this.component as RowComponent).items, (child: CapsuleComponent) => {
+          Column() {
+            CapsuleNode({
+              runtime: this.runtime, component: child, motionNote: this.motionNote, onPickCity: this.onPickCity
+            })
+          }
+          .flexGrow(1)
+          .flexBasis(140)
+        }, (child: CapsuleComponent, i: number) => `${i}-${child.type}`)
+      }
+      .width('100%')
     } else if (this.component.type === 'row') {
       Row({ space: 12 }) {
         ForEach((this.component as RowComponent).items, (child: CapsuleComponent) => {
