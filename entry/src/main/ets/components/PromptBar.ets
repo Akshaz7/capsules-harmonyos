@@ -1,8 +1,10 @@
 import { Palette, Space } from '../theme/Tokens';
 import { IconButton } from './Buttons';
+import { VoiceButton } from './VoiceButton';
+import { Flags } from '../theme/Flags';
 
 /**
- * The Create prompt bar, docked above the tab bar: Snap (camera) on the left, the request text in the middle
+ * The Create prompt bar, docked above the tab bar: the dictation mic (or Snap, with CREATE_SNAP) on the left, the request text in the middle
  * (the app's existing rotating placeholder), and a 44vp send circle on the right (blue, grey when empty,
  * a spinner while building). White, radius 28, soft shadow, at least 56 tall.
  */
@@ -19,6 +21,13 @@ export struct PromptBar {
   };
   @Event onFocusChange: (focused: boolean) => void = () => {
   };
+  /** T3-29: dictation (when CREATE_SNAP is off). */
+  @Event onVoiceText: (text: string) => void = () => {
+  };
+  @Event onVoiceError: (message: string) => void = () => {
+  };
+  @Event onListening: (listening: boolean) => void = () => {
+  };
 
   private canSend(): boolean {
     return !this.busy && this.text.trim().length > 0;
@@ -26,8 +35,17 @@ export struct PromptBar {
 
   build() {
     Row({ space: 8 }) {
-      IconButton({ icon: $r('sys.symbol.camera'), label: 'Snap', soft: true, onTap: () => this.onSnap() })
-        .enabled(!this.busy)
+      if (Flags.CREATE_SNAP) {
+        IconButton({ icon: $r('sys.symbol.camera'), label: 'Snap', soft: true, onTap: () => this.onSnap() })
+          .enabled(!this.busy)
+      } else {
+        VoiceButton({
+          onText: (t: string) => this.onVoiceText(t),
+          onError: (m: string) => this.onVoiceError(m),
+          onListening: (on: boolean) => this.onListening(on)
+        })
+          .enabled(!this.busy)
+      }
       TextArea({ text: this.text, placeholder: this.placeholder })
         .layoutWeight(1)
         .constraintSize({ minHeight: Space.touch, maxHeight: 120 })

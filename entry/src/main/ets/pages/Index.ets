@@ -87,6 +87,7 @@ import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../compone
 import { PromptBar } from '../components/PromptBar';
 import { BuildCard, BuildStep } from '../components/BuildCard';
 import { BuildSkeleton } from '../components/BuildSkeleton';
+import { VoiceButton } from '../components/VoiceButton';
 import { BuildStage, buildStageIndex, BUILD_STAGES, buildStageText } from './BuildStages';
 import { CapsuleTile } from '../components/CapsuleTile';
 import { EmptyState, ErrorCard } from '../components';
@@ -297,6 +298,10 @@ struct Index {
   @Local buildCloud: string = '';
   /** Bumped by every build and by Cancel; a result whose number is stale is dropped. */
   private createSeq: number = 0;
+  /** T3-29: the mic is listening (the prompt shows "Listening…"). */
+  @Local listening: boolean = false;
+  /** T3-29: why dictation stopped, shown as the standard error card; '' when fine. */
+  @Local voiceError: string = '';
   /** Redesign frame: the "Change it…" card shows after the footer pill is tapped (or while it has news). */
   @Local changeOpenId: string = '';
   /** UI-1: the placeholder as typed so far (types and erases the examples). */
@@ -1190,6 +1195,7 @@ struct Index {
 
   private async createFrom(text: string): Promise<void> {
     const seq = ++this.createSeq;
+    this.voiceError = '';
     this.buildStage = 'reading';
     this.buildCloud = '';
     this.dismissKeyboard();
@@ -1309,6 +1315,22 @@ struct Index {
       this.languageFailed = false;
         this.failed = true;
     }
+  }
+
+  /** T3-29: partial then final dictated text replaces the prompt each time. */
+  private onVoiceText(text: string): void {
+    this.voiceError = '';
+    this.request = text;
+  }
+
+  private onVoiceError(message: string): void {
+    this.listening = false;
+    this.voiceError = message;
+  }
+
+  /** The prompt's placeholder: "Listening…" while the mic is on, else the rotating examples. */
+  private promptPlaceholder(): string {
+    return this.listening ? 'Listening…' : this.placeholderText;
   }
 
   /** T3-28 Cancel: the build keeps running in core, but its result is ignored when it arrives. */
@@ -1956,7 +1978,7 @@ struct Index {
     Column({ space: 12 }) {
       // No inner padding here: the card's 16vp is the only inset, so the text lines up with the
       // Create button. Even a few vp of TextArea padding clipped the first glyph ("k", "W", "M").
-      TextArea({ placeholder: this.placeholderText, text: this.request })
+      TextArea({ placeholder: this.promptPlaceholder(), text: this.request })
         .height(96)
         .onFocus(() => {
           this.inputFocused = true;
@@ -1975,22 +1997,35 @@ struct Index {
           this.request = value;
         })
       Row() {
-        Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
-          SymbolGlyph($r('sys.symbol.camera'))
-            .fontSize(20)
-            .fontColor([Flags.NEW_CREATE_CLASSIC ? Palette.text : $r('sys.color.icon_primary')])
-            .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.cameraBounce)
+        if (Flags.CREATE_SNAP) {
+          Button({ type: ButtonType.Circle, buttonStyle: ButtonStyleMode.NORMAL }) {
+            SymbolGlyph($r('sys.symbol.camera'))
+              .fontSize(20)
+              .fontColor([Flags.NEW_CREATE_CLASSIC ? Palette.text : $r('sys.color.icon_primary')])
+              .symbolEffect(new BounceSymbolEffect(EffectScope.WHOLE, EffectDirection.UP), this.cameraBounce)
+          }
+          .width(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
+          .height(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
+          .backgroundColor(Flags.NEW_CREATE_CLASSIC ? Palette.softButton : undefined)
+          .enabled(!this.busy)
+          .accessibilityText('Snap')
+          .accessibilityDescription(SNAP_HINT)
+          .onClick(() => {
+            this.cameraBounce++;
+            this.snap();
+          })
+        } else {
+          // T3-29: dictation replaces Snap; the words land in the prompt as they are spoken.
+          VoiceButton({
+            diameter: Flags.NEW_CREATE_CLASSIC ? 44 : 40,
+            onText: (t: string) => this.onVoiceText(t),
+            onError: (m: string) => this.onVoiceError(m),
+            onListening: (on: boolean) => {
+              this.listening = on;
+            }
+          })
+            .enabled(!this.busy)
         }
-        .width(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
-        .height(Flags.NEW_CREATE_CLASSIC ? 44 : 40)
-        .backgroundColor(Flags.NEW_CREATE_CLASSIC ? Palette.softButton : undefined)
-        .enabled(!this.busy)
-        .accessibilityText('Snap')
-        .accessibilityDescription(SNAP_HINT)
-        .onClick(() => {
-          this.cameraBounce++;
-          this.snap();
-        })
         Blank()
         Button() {
           Row({ space: 6 }) {
@@ -2362,7 +2397,9 @@ struct Index {
   /** The create flow's cards (failure, language, snap, message): one at a time, as before. */
   @Builder
   createNotices() {
-    if (this.snapNeedsCloud) {
+    if (this.voiceError.length > 0) {
+      ErrorCard({ title: this.voiceError })
+    } else if (this.snapNeedsCloud) {
       this.snapCloudNote()
     } else if (this.languageFailed) {
       this.languageCard()
@@ -2453,7 +2490,7 @@ struct Index {
       .edgeEffect(EdgeEffect.Spring)
       PromptBar({
         text: this.request,
-        placeholder: this.placeholderText,
+        placeholder: this.promptPlaceholder(),
         busy: this.busy,
         onTextChange: (v: string) => {
           this.request = v;
@@ -2462,6 +2499,11 @@ struct Index {
         onSnap: () => {
           this.cameraBounce++;
           this.snap();
+        },
+        onVoiceText: (t: string) => this.onVoiceText(t),
+        onVoiceError: (m: string) => this.onVoiceError(m),
+        onListening: (on: boolean) => {
+          this.listening = on;
         },
         onFocusChange: (focused: boolean) => {
           this.inputFocused = focused;
