@@ -90,6 +90,11 @@ Stills (for any screen that does not need motion) come from the device itself:
 hdc shell snapshot_display -f /data/local/tmp/shot.jpeg && hdc file recv /data/local/tmp/shot.jpeg shot.jpeg
 ```
 
+`scripts/takes/demo-core.sh` records the unedited core flow for the separate
+"Demo" video (ask -> consent sheet -> run -> use it -> pin the widget -> tap the
+widget); `public/footage/demo-core.mp4` is the current stop-motion capture of
+it. Record it with `capture-emulator.sh` for a smooth version.
+
 App state for the takes: install fresh, create the capsules off camera
 (`pomodoro 50/10`, `make me a task list and the weather for Kraków`), allow the
 calendar and notification system prompts, and push a `config.local.json` with
