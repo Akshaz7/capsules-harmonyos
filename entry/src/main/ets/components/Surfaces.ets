@@ -1,8 +1,13 @@
 /**
  * Redesign surfaces (section 4): chips, cards, icon tiles, group headers, empty states, error cards.
  */
-import { Palette, Radius, Space } from '../theme/Tokens';
+import { Effects, Palette, Radius, Space } from '../theme/Tokens';
+import { Flags } from '../theme/Flags';
 import { PrimaryButton } from './Buttons';
+
+const POLISH_CARD_GRADIENT: LinearGradientOptions =
+  { angle: 180, colors: [[Palette.cardTintTop, 0], [Palette.cardTintBottom, 1]] };
+const CLEAR_GRADIENT: LinearGradientOptions = { angle: 180, colors: [[Color.Transparent, 0], [Color.Transparent, 1]] };
 
 /** Which origin chip icon to show: made on the phone, in the cloud, or from the community. */
 export type OriginKind = 'phone' | 'cloud' | 'community' | '';
@@ -44,17 +49,18 @@ export struct Chip {
     Row({ space: 4 }) {
       if (this.icon !== undefined) {
         SymbolGlyph(this.icon)
-          .fontSize(13)
+          .fontSize(Flags.NEW_POLISH ? 14 : 13)
           .fontColor([this.color])
       }
       Text(this.text)
         .fontSize(12)
-        .fontWeight(600)
+        .fontWeight(Flags.NEW_POLISH ? 700 : 600)
         .fontColor(this.color)
     }
-    .padding({ top: 2, right: 8, bottom: 2, left: this.icon !== undefined ? 6 : 8 })
-    .borderRadius(Radius.chip)
-    .backgroundColor(this.fill)
+    .padding(Flags.NEW_POLISH ? { top: 4, right: 10, bottom: 4, left: this.icon !== undefined ? 8 : 10 } :
+      { top: 2, right: 8, bottom: 2, left: this.icon !== undefined ? 6 : 8 })
+    .borderRadius(Flags.NEW_POLISH ? Radius.pill : Radius.chip)
+    .backgroundColor(Flags.NEW_POLISH && this.fill === Palette.chip ? Palette.tint : this.fill)
   }
 }
 
@@ -80,6 +86,8 @@ export struct IconTile {
   @Param iconSize: number = 22;
   @Param fill: ResourceColor = Palette.tint;
   @Param color: ResourceColor = Palette.blue;
+  /** Polish: a featured tile gets a tint -> indigoTint gradient. */
+  @Param featured: boolean = false;
 
   build() {
     Stack() {
@@ -89,8 +97,11 @@ export struct IconTile {
     }
     .width(this.tileSize)
     .height(this.tileSize)
-    .borderRadius(this.tileSize >= 42 ? Radius.iconTile : 10)
+    .borderRadius(Flags.NEW_POLISH ? Radius.tile : (this.tileSize >= 42 ? Radius.iconTile : 10))
     .backgroundColor(this.fill)
+    .linearGradient(Flags.NEW_POLISH && this.featured ?
+      { angle: 135, colors: [[Palette.tint, 0], [Palette.indigoTint, 1]] } :
+      { angle: 135, colors: [[Color.Transparent, 0], [Color.Transparent, 1]] })
   }
 }
 
@@ -102,14 +113,22 @@ export struct Card {
   @Param pad: number = 14;
   @BuilderParam content: () => void = emptyContent;
 
+  /** Polish surface (tint gradient, hairline, one soft shadow) only on default-filled cards. */
+  private polished(): boolean {
+    return Flags.NEW_POLISH && this.fill === Palette.card;
+  }
+
   build() {
     Column() {
       this.content()
     }
     .width('100%')
     .padding(this.pad)
-    .borderRadius(this.large ? Radius.cardLarge : Radius.card)
+    .borderRadius(this.polished() ? Radius.tileCard : (this.large ? Radius.cardLarge : Radius.card))
     .backgroundColor(this.fill)
+    .linearGradient(this.polished() ? POLISH_CARD_GRADIENT : CLEAR_GRADIENT)
+    .border(this.polished() ? { width: 1, color: Palette.hairline } : { width: 0 })
+    .shadow(this.polished() ? Effects.cardShadow : { radius: 0, color: Color.Transparent })
   }
 }
 

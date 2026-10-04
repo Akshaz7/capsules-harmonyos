@@ -1,4 +1,6 @@
-import { Palette } from '../theme/Tokens';
+import { Effects, Palette, Radius } from '../theme/Tokens';
+import { Flags } from '../theme/Flags';
+import { reduceMotion } from '../pages/Motion';
 import { IconTile, OriginChip, OriginKind } from './Surfaces';
 
 /**
@@ -17,10 +19,98 @@ export struct CapsuleTile {
   @Param originKind: OriginKind = 'phone';
   /** True when the capsule fits a home-screen widget ("Add to home screen"); else no hint (T4-19). */
   @Param widget: boolean = false;
+  /** Polish: one featured tile (e.g. the last-opened capsule) gets a gradient icon tile. */
+  @Param featured: boolean = false;
   @Event onOpen: () => void = () => {
   };
+  @Local pressed: boolean = false;
+  private still: boolean = reduceMotion();
 
   build() {
+    if (Flags.NEW_POLISH) {
+      this.polished()
+    } else {
+      this.classic()
+    }
+  }
+
+  /**
+   * Polish (4.3): icon top-left, live value pill top-right (tabular figures), name 15/700 bottom-left,
+   * origin chip and a small "Widget" badge in the bottom row. Same fixed height; pressed 0.97.
+   */
+  @Builder
+  polished() {
+    Column({ space: 8 }) {
+      Row({ space: 8 }) {
+        IconTile({ icon: this.icon, tileSize: 40, iconSize: 22, featured: this.featured })
+        Blank()
+        if (this.value.length > 0) {
+          Text(this.value)
+            .fontSize(12)
+            .fontWeight(700)
+            .fontColor(Palette.blue)
+            .fontFeature('"tnum" on')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .constraintSize({ maxWidth: 96 })
+            .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+            .borderRadius(Radius.pill)
+            .backgroundColor(Palette.tint)
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
+      Blank()
+      Text(this.name)
+        .fontSize(15)
+        .fontWeight(700)
+        .fontColor(Palette.text)
+        .maxLines(2)
+        .lineHeight(20)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      OriginChip({ text: this.originText, kind: this.originKind })
+      if (this.widget) {
+        Row({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.square_grid_2x2'))
+            .fontSize(12)
+            .fontColor([Palette.chipText])
+          Text('Widget')
+            .fontSize(11)
+            .fontWeight(700)
+            .fontColor(Palette.chipText)
+        }
+        .padding({ left: 6, right: 8, top: 2, bottom: 2 })
+        .borderRadius(Radius.pill)
+        .border({ width: 1, color: Palette.hairline })
+        .accessibilityText('Can be added to the home screen')
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .height(CAPSULE_TILE_HEIGHT)
+    .clip(true)
+    .padding(14)
+    .borderRadius(Radius.tileCard)
+    .backgroundColor(Palette.surface)
+    .linearGradient({ angle: 180, colors: [[Palette.cardTintTop, 0], [Palette.cardTintBottom, 1]] })
+    .border({ width: 1, color: Palette.hairline })
+    .shadow(Effects.cardShadow)
+    .scale({ x: this.pressed && !this.still ? Effects.pressedScale : 1,
+      y: this.pressed && !this.still ? Effects.pressedScale : 1 })
+    .animation({ duration: this.still ? 0 : Effects.pressMs, curve: Curve.EaseOut })
+    .onTouch((e: TouchEvent) => {
+      if (e.type === TouchType.Down) {
+        this.pressed = true;
+      } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+        this.pressed = false;
+      }
+    })
+    .accessibilityText(this.name)
+    .onClick(() => this.onOpen())
+  }
+
+  @Builder
+  classic() {
     Column({ space: 6 }) {
       IconTile({ icon: this.icon, tileSize: 36, iconSize: 20 })
       Text(this.name)
