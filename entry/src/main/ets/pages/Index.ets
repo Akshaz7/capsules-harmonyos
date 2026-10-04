@@ -87,7 +87,7 @@ import { CapsuleFrame, HostBar, originKindOf, TabBar, TabItem } from '../compone
 import { PromptBar } from '../components/PromptBar';
 import { BuildCard, BuildStep } from '../components/BuildCard';
 import { CapsuleTile } from '../components/CapsuleTile';
-import { EmptyState } from '../components';
+import { EmptyState, ErrorCard } from '../components';
 import { RecentRow, RecentTile, SuggestionChips } from '../components/CreateParts';
 import { shareCapsule } from '../sharing';
 import { MiniPreview } from './MiniPreview';
@@ -1549,6 +1549,20 @@ struct Index {
 
   @Builder
   snapCloudNote() {
+    if (Flags.NEW_SNAP) {
+      // Redesign: the standard error card; same text, same single action.
+      ErrorCard({
+        title: SNAP_NEEDS_CLOUD,
+        action: this.settings.aiMode === 'on-device' ? 'Switch AI mode to Smart in Settings' : '',
+        onAction: () => this.selectTab(TAB_SETTINGS)
+      })
+    } else {
+      this.snapCloudNoteOld()
+    }
+  }
+
+  @Builder
+  snapCloudNoteOld() {
     Row({ space: 12 }) {
       SymbolGlyph($r('sys.symbol.camera'))
         .fontSize(20)
