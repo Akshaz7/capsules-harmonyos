@@ -50,6 +50,8 @@ import {
 } from '../renderer/CapsuleRuntime';
 import { Notifier } from '../renderer/CapsuleRuntime';
 import { dailyReminders, notificationContent } from '../core/Reminders';
+import { CLOUD_EXPLAINER, failureHelp, FailureHelp, TRY_CLOUD_LABEL } from '../core/FailureHelp';
+import { SecondaryButton } from '../components/Buttons';
 import { CapsuleView } from '../renderer/CapsuleView';
 import { AppSettings } from './AppSettings';
 import { CapsuleEntry, capsuleIcon, isCloudOrigin, originBadge, originIcon } from './CapsuleEntry';
@@ -64,7 +66,7 @@ import { AddToHomeButton } from '../widget/AddToHomeButton'; // PROTECTED: owned
 import { WidgetLaunch, widgetLaunch } from './WidgetLaunch';
 import { ShareLaunch, shareLaunch } from './ShareLaunch';
 import {
-  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, limitsText, refusalWords
+  failureDetail, isUnsupportedLanguage, joinWords, LANGUAGE_EXAMPLE, LANGUAGE_MESSAGE, refusalWords
 } from './CreateText';
 import { loadState, saveState } from '../widget/WidgetStore';
 import { LogView } from './LogView';
@@ -380,6 +382,8 @@ struct Index {
   @Local failed: boolean = false;
   /** The failed build asked the cloud (FAILED_ONLINE_MESSAGE), not only the phone. */
   @Local failedOnline: boolean = false;
+  /** The request the failure card is about (T4-30: reason, alternative, "Try with cloud AI"). */
+  @Local failedRequest: string = '';
   /** The request whose Claude notice was declined (built without Claude; not asked again for it). */
   private liveDeclined: string = '';
   /** When core refused a request by design: what it would need, e.g. ["contacts", "SMS"]. Else empty. */
@@ -1355,6 +1359,7 @@ struct Index {
       // The device couldn't build it and the cloud would be next: ask once before the first cloud request.
       hilog.info(0x0001, 'Index', 'on-device failed (%{public}s); showing the cloud notice', result.error ?? '');
       this.showCloudNotice(() => this.retryWithCloud(text), () => {
+        this.failedRequest = text;
         this.failed = true;
       });
       return;
@@ -1364,12 +1369,12 @@ struct Index {
 
   /** Rules, then the on-device model, then the cloud model only when `allowCloud`. Never throws. */
   private async generate(text: string, allowCloud: boolean, cloudOnly: boolean = false,
-    skipTemplates: boolean = false): Promise<GenerateResult> {
+    skipTemplates: boolean = false, forceSmart: boolean = false): Promise<GenerateResult> {
     const seq = this.createSeq;
     try {
       return await generateCapsule(text, {
         onStage: (stage: CoreStage) => this.onCoreStage(seq, stage), // T3-32: the live step line
-        mode: this.settings.aiMode === 'on-device' ? 'on-device-only' : 'smart',
+        mode: this.settings.aiMode === 'on-device' && !forceSmart ? 'on-device-only' : 'smart',
         allowNonEu: this.settings.allowNonEu,
         allowCloud: allowCloud,
         cloudOnly: cloudOnly,
@@ -1411,14 +1416,29 @@ struct Index {
     });
   }
 
-  private async retryWithCloud(text: string): Promise<void> {
+  /** T4-30: a cloud is set up but this failed build didn't use it. The cloud is asked only after the notice. */
+  private canTryCloud(): boolean {
+    return !this.failedOnline && this.failedRequest.length > 0 && this.cloudUsable() && !isNotEnglish(this.failedRequest);
+  }
+
+  /** "Try with cloud AI": the provider notice first (named, may be outside the EU), then this one request. */
+  private tryCloud(): void {
+    const text = this.failedRequest;
+    const live = routesLiveRequest(text, true, this.settings.allowNonEu);
+    this.showCloudNotice(() => this.retryWithCloud(text, true, live ? 'Claude' : ''), () => {
+      // Declined: the failure card stays (showCloudNotice already switched to on-device).
+    }, live ? LIVE_PROVIDER : undefined);
+  }
+
+  private async retryWithCloud(text: string, forceSmart: boolean = false, cloudName: string = ''): Promise<void> {
     const seq = ++this.createSeq;
     this.failedOnline = true; // a failure from here was the cloud's, not "offline"
+    this.failed = false;
     this.coreStageSeen = false;
-    this.buildCloud = this.cloudName();
+    this.buildCloud = cloudName.length > 0 ? cloudName : this.cloudName();
     this.buildStage = 'model';
     this.busy = true;
-    const result = await this.generate(text, true);
+    const result = await this.generate(text, true, false, false, forceSmart);
     if (seq !== this.createSeq) {
       return; // cancelled
     }
@@ -1519,6 +1539,7 @@ struct Index {
       hilog.error(0x0001, 'Index', 'generateCapsule failed for "%{private}s": %{public}s [%{public}s]',
         text, result.error ?? 'no error', failureDetail(result));
       this.unsupported = refusalWords(result);
+      this.failedRequest = text;
       this.failed = true;
       return;
     }
@@ -2379,6 +2400,30 @@ struct Index {
     this.languageFailed = false;
   }
 
+  private failHelp(): FailureHelp {
+    return failureHelp(this.failedRequest);
+  }
+
+  @Builder
+  retryChip(label: string, icon: Resource, request: string) {
+    Row({ space: 6 }) {
+      SymbolGlyph(icon)
+        .fontSize(16)
+        .fontColor([$r('sys.color.icon_emphasize')])
+      Text(label)
+        .fontSize($r('sys.float.Body_M'))
+        .fontColor($r('sys.color.font_primary'))
+    }
+    .height(36)
+    .padding({ left: 14, right: 14 })
+    .borderRadius(18)
+    .backgroundColor(Flags.NEW_ERRORS ? Palette.surface : $r('sys.color.comp_background_tertiary'))
+    .onClick(() => {
+      this.request = request;
+      this.create();
+    })
+  }
+
   @Builder
   failedCard() {
     Column({ space: 12 }) {
@@ -2387,11 +2432,28 @@ struct Index {
         .fontWeight(Flags.NEW_ERRORS ? 700 : undefined)
         .fontColor(Flags.NEW_ERRORS ? Palette.orangeText : $r('sys.color.font_primary'))
         .width('100%')
-      Text(limitsText())
+      if (this.failHelp().reason.length > 0) {
+        Text(this.failHelp().reason)
+          .fontSize($r('sys.float.Body_M'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('sys.color.font_primary'))
+          .width('100%')
+      }
+      Text(CLOUD_EXPLAINER)
         .fontSize($r('sys.float.Body_S'))
         .fontColor($r('sys.color.font_secondary'))
         .width('100%')
         .onClick(() => this.selectTab(TAB_SETTINGS))
+      if (this.canTryCloud()) {
+        SecondaryButton({ label: TRY_CLOUD_LABEL, onTap: () => this.tryCloud() })
+      }
+      if (this.failHelp().alternative !== null) {
+        Text('Try instead')
+          .fontSize($r('sys.float.Body_S'))
+          .fontColor($r('sys.color.font_secondary'))
+        this.retryChip(this.failHelp().alternative?.label ?? '', $r('sys.symbol.checkmark_circle'),
+          this.failHelp().alternative?.request ?? '')
+      }
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach(RETRY_SUGGESTIONS, (chip: ExampleChip) => {
           Row({ space: 6 }) {

@@ -25,6 +25,7 @@ import { emitStage, StageListener } from './BuildStage';
 import { isTaskList } from './CapsuleRouter';
 import { needsLiveInfo } from './LiveCapsule';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
+import { CANT_BUILD_MESSAGE, cantBuild } from './FailureHelp';
 import { ambiguousTimes, TemplateLibrary, TemplateMatch } from './templates/TemplateLibrary';
 import { MarketOptions, matchTemplateAsync } from './templates/MarketMatch';
 import { fillUnclearSlots, SlotModel } from './templates/SlotFill';
@@ -60,8 +61,8 @@ export interface LocalSources {
  * allowed for it, and non-EU providers are allowed (the live source is Claude).
  */
 export function routesLive(request: string, options?: GenerateOptions): boolean {
-  return needsLiveInfo(request) && (options?.mode ?? 'smart') === 'smart' && options?.allowCloud !== false &&
-    options?.allowNonEu === true;
+  return needsLiveInfo(request) && !cantBuild(request) && (options?.mode ?? 'smart') === 'smart' &&
+    options?.allowCloud !== false && options?.allowNonEu === true;
 }
 
 export interface GenerateOptions {
@@ -177,6 +178,10 @@ async function generateRouted(request: string, cloud: CapsuleModel[],
   }
   if (isNotEnglish(request)) {
     return unsupportedLanguage(); // before the rules and every model: nothing is sent anywhere
+  }
+  if (cantBuild(request)) {
+    // Live news / prices (T4-30): no capsule can fetch them; the app shows why and one buildable alternative.
+    return { ok: false, failure: 'cant-build', error: CANT_BUILD_MESSAGE, details: [] };
   }
   const mode: GenerateMode = options?.mode ?? 'smart';
   const allowNonEu = options?.allowNonEu ?? false;
