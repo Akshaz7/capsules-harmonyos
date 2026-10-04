@@ -4,7 +4,8 @@ import {
 } from '../main/ets/core/SharedText';
 import { initialState, renderTemplate } from '../main/ets/core/CapsuleProgram';
 import {
-  Capsule, CapsuleComponent, ChecklistComponent, DisplayComponent, TextComponent, TimerComponent
+  ButtonComponent, Capsule, CapsuleComponent, ChecklistComponent, DisplayComponent, StateVar, TextComponent,
+  TimerComponent
 } from '../main/ets/core/CapsuleTypes';
 
 function shared(text: string, kind: string): Capsule {
@@ -29,7 +30,65 @@ function eachPays(c: Capsule): string {
   return renderTemplate(c, initialState(c), d.text);
 }
 
+function total(c: Capsule): number {
+  return (c.state as Record<string, StateVar>)['total'].initial as number;
+}
+
+function texts(c: Capsule): string {
+  return c.ui.filter((x: CapsuleComponent) => x.type === 'text').map((x: CapsuleComponent) => (x as TextComponent).text)
+    .join('|');
+}
+
 export default function sharedTextTest() {
+  describe('Shared text: receipts, rest and versus (T4-18, OCR-shaped)', () => {
+    it('a receipt with only a TOTAL line is a bill split for the total', 0, () => {
+      const c = shared('PIZZERIA ROMA\nMargherita 12.50\nDiavola 14.00\nCola 4.50\nTOTAL €31.00', 'bill');
+      expect(total(c)).assertEqual(31);
+    });
+
+    it('pairs a total label with the amount on the next line and never adds it to the items', 0, () => {
+      const c = shared('Bistro\nPasta\n€24.00\nSteak\n€38.50\nWine\n€5.00\nTotal\n€67.50\nCard\n€67.50', 'bill');
+      expect(total(c)).assertEqual(67.5);
+      const noTotal = shared('Receipt\nPasta €24.00\nSteak €38.50\nCash €100.00\nChange €37.50', 'bill');
+      expect(total(noTotal)).assertEqual(62.5); // payment lines are not items
+    });
+
+    it('takes TOTAL over SUBTOTAL, shows VAT and tip, and never adds them twice', 0, () => {
+      const c = shared('Cafe Nero\nLatte 3.80\nCroissant 2.70\nSUBTOTAL 6.50\nVAT 23% 1.22\nTIP 1.00\nTOTAL 7.50',
+        'bill');
+      expect(total(c)).assertEqual(7.5);
+      expect(texts(c)).assertContain('VAT 1.22');
+      expect(texts(c)).assertContain('tip 1');
+      const sub = shared('Lunch\nSoup €6.00\nSalad €8.00\nSubtotal\n€14.00\nTip\n€2.00\nsplit between 2', 'bill');
+      expect(total(sub)).assertEqual(16); // no TOTAL: subtotal + tip
+      expect(eachPays(sub)).assertEqual('Each pays: 8');
+    });
+
+    it('keeps "rest" in a workout as a rest timer, not cooking timers', 0, () => {
+      const c = shared('Leg day\n3x10 squats, rest 60 s\n3x12 lunges\nplank 45s', 'workout');
+      expect(checklist(c)).assertContain('3×10 squats, rest 60 s');
+      expect(timers(c)).assertContain('Rest 1');
+      expect(timers(c)).assertContain('Plank 0.75');
+      const own = shared('Workout\n4 sets of 8 push-ups\nRest 90 seconds', 'workout');
+      expect(timers(own)).assertEqual('Rest 1.5');
+      expect(shared('Rest the dough for 30 minutes, then bake for 20 minutes.', 'recipe').ui.length > 0).assertTrue();
+    });
+
+    it('turns "Tom vs Ana" into a two-player scoreboard; tennis uses the tennis template', 0, () => {
+      const c = shared('Tom vs Ana', 'score');
+      expect(c.name).assertEqual('Tom vs Ana');
+      expect(eachPays(c)).assertEqual('Score 0 - 0');
+      const labels = c.ui.filter((x: CapsuleComponent) => x.type === 'button')
+        .map((x: CapsuleComponent) => (x as ButtonComponent).label).join(',');
+      expect(labels).assertEqual('+1 Tom,+1 Ana,Reset');
+      expect(shared('Tom\nvs\nAna', 'score').name).assertEqual('Tom vs Ana'); // OCR line breaks
+      const tennis = shared('Tennis: Tom vs Ana', 'score');
+      expect(tennis.name).assertContain('Tennis');
+      expect(tennis.name).assertContain('Ana');
+      expect(capsuleFromSharedText('Anna: I paid €45 for pizza\nTom: €15 for drinks').kind).assertEqual('bill');
+    });
+  });
+
   describe('Shared text -> capsule', () => {
     it('turns a recipe into one timer per timed step', 0, () => {
       const c = shared('Banana bread\nPreheat the oven to 180°C.\nMix the batter for 2 minutes.\n' +

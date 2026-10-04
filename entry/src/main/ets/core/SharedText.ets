@@ -4,22 +4,26 @@
  *   recipe  cooking steps with durations ("Bake for 25 minutes")     -> one timer per timed step
  *   workout exercises ("3x10 squats", "plank 60s")                    -> checklist (+ timers for timed ones)
  *   list    bullet, numbered or comma-separated items                 -> checklist
+ *   score   "Tom vs Ana" (a short note or a photo of one)            -> two-player scoreboard (bill first,
+ *           score before the others)
  * Checked in that order. Anything else returns an error so the caller can try the cloud model.
  * Pure and deterministic; every capsule returned has passed the validator.
  */
 import {
   ButtonComponent, Capsule, CapsuleComponent, ChecklistComponent, DisplayComponent, InputComponent, Permission,
-  StateVar, TextComponent, TimerComponent
+  StateVar, StepObject, TextComponent, TimerComponent
 } from './CapsuleTypes';
 import { validateCapsuleObject } from './CapsuleValidator';
 import { slug } from './RuleParser';
+import { matchTemplateIn, TemplateLibrary } from './templates/TemplateLibrary';
+import { CORE_TEMPLATES } from './templates/CoreTemplates';
 
 export const MAX_SHARED_TEXT: number = 2000;
 export const SHARED_TOO_LONG: string = `That text is too long to turn into a capsule (max ${MAX_SHARED_TEXT} characters).`;
 export const SHARED_EMPTY: string = 'There is no text to turn into a capsule.';
 export const SHARED_NOT_RECOGNISED: string = 'No recipe, bill, workout or list found in that text.';
 
-export type SharedKind = 'recipe' | 'bill' | 'workout' | 'list';
+export type SharedKind = 'recipe' | 'bill' | 'workout' | 'list' | 'score';
 
 export interface SharedTextResult {
   ok: boolean;
@@ -92,27 +96,81 @@ function amountsIn(line: string): number[] {
   return out;
 }
 
+/** A receipt line's label: the grand total, a subtotal, tax or tip, payment lines to ignore, or an item. */
+type ReceiptRole = 'total' | 'subtotal' | 'vat' | 'tip' | 'payment' | 'item';
+
+const TOTAL_LABEL: RegExp = /\b(grand total|total( due| to pay| amount)?|amount due|balance due|to pay|sum)\b/i;
+const SUBTOTAL_LABEL: RegExp = /\b(sub-?\s?total|net)\b/i;
+const VAT_LABEL: RegExp = /\b(vat|tax|ptu|gst|mwst|iva)\b/i;
+const TIP_LABEL: RegExp = /\b(tip|gratuity|service( charge)?)\b/i;
+const PAYMENT_LABEL: RegExp = /\b(cash|change|card|visa|mastercard|paid by|tendered|contactless|rounding)\b/i;
+/** A bare price at the end of a receipt line: "Burger 12.50", "Pizza 12,50 A". */
+const BARE_PRICE: RegExp = /(?:^|\s)(\d{1,5}[.,]\d{2})\s*[A-Z]?\s*$/;
+
+function roleOf(line: string): ReceiptRole {
+  if (SUBTOTAL_LABEL.test(line)) {
+    return 'subtotal';
+  }
+  if (TOTAL_LABEL.test(line)) {
+    return 'total';
+  }
+  if (VAT_LABEL.test(line)) {
+    return 'vat';
+  }
+  if (TIP_LABEL.test(line)) {
+    return 'tip';
+  }
+  return PAYMENT_LABEL.test(line) ? 'payment' : 'item';
+}
+
+/** Amounts on a line; on a receipt also a bare price at the end ("Burger 12.50"). */
+function receiptAmounts(line: string, receipt: boolean): number[] {
+  const found = amountsIn(line);
+  if (found.length > 0 || !receipt) {
+    return found;
+  }
+  const bare = line.match(BARE_PRICE);
+  return bare !== null ? [parseFloat(bare[1].replace(',', '.'))] : [];
+}
+
 function billFrom(raw: string): Capsule | null {
   const all = lines(raw);
+  const receipt = /\b(total|subtotal|vat|tax|tip|gratuity|receipt|invoice)\b/i.test(raw);
   const paid = new Map<string, number>();
   let sum = 0;
   let total = 0;
+  let subtotal = 0;
+  let vat = 0;
+  let tip = 0;
   let found = 0;
+  // OCR often puts a label and its amount on separate lines ("Total" then "€67.50"): a label line without an
+  // amount gives its role to the next line that has one.
+  let pending: ReceiptRole = 'item';
   all.forEach((line: string) => {
-    const amounts = amountsIn(line);
+    const amounts = receiptAmounts(line, receipt);
+    const own = roleOf(line);
     if (amounts.length === 0) {
+      pending = own !== 'item' ? own : (/[a-z]{3}/i.test(line) ? 'item' : pending);
       return;
     }
+    const role = own !== 'item' ? own : pending;
+    pending = 'item';
     found += amounts.length;
     const lineSum = amounts.reduce((a: number, b: number) => a + b, 0);
-    if (/\btotal\b/i.test(line)) {
-      total = Math.max(total, Math.max(...amounts));
-      return;
-    }
-    sum += lineSum;
-    const who = line.match(SPEAKER);
-    if (who !== null) {
-      paid.set(who[1], (paid.get(who[1]) ?? 0) + lineSum);
+    if (role === 'total') {
+      total = Math.max(total, Math.max(...amounts)); // never added to the items
+    } else if (role === 'subtotal') {
+      subtotal = Math.max(subtotal, Math.max(...amounts));
+    } else if (role === 'vat') {
+      vat += Math.max(...amounts); // shown, not added again: prices and totals include it
+    } else if (role === 'tip') {
+      tip += Math.max(...amounts);
+    } else if (role === 'item') {
+      sum += lineSum;
+      const who = line.match(SPEAKER);
+      if (who !== null) {
+        paid.set(who[1], (paid.get(who[1]) ?? 0) + lineSum);
+      }
     }
   });
   const speakers = new Set<string>();
@@ -122,14 +180,15 @@ function billFrom(raw: string): Capsule | null {
       speakers.add(who[1]);
     }
   });
-  const talksMoney = /\b(split|owe|owes|paid|pay|bill|spent|cost|each|share)\b/i.test(raw);
+  const talksMoney = receipt || /\b(split|owe|owes|paid|pay|bill|spent|cost|each|share)\b/i.test(raw);
   if (found === 0 || (speakers.size < 2 && !talksMoney)) {
     return null;
   }
   const said = raw.match(/\b(?:between|among|for|split (?:it )?(?:in|into)?)\s+(\d{1,2})\s*(?:people|persons|of us|ways)?\b/i) ??
     raw.match(/\b(\d{1,2})\s+(?:people|persons|of us|ways)\b/i);
   const people = said !== null ? parseInt(said[1], 10) : Math.max(speakers.size, 2);
-  const amount = round2(total > 0 ? total : sum);
+  // The receipt's TOTAL wins; else the subtotal (or the items) plus the tip. VAT is never added on top.
+  const amount = round2(total > 0 ? total : (subtotal > 0 ? subtotal : sum) + tip);
   if (people <= 0 || amount <= 0) {
     return null;
   }
@@ -142,6 +201,16 @@ function billFrom(raw: string): Capsule | null {
   const people_: InputComponent = { type: 'input', bind: 'people', kind: 'number', label: 'People' };
   const each: DisplayComponent = { type: 'display', text: 'Each pays: {each}' };
   const ui: CapsuleComponent[] = [total_, people_, each];
+  const extras: string[] = [];
+  if (vat > 0) {
+    extras.push(`VAT ${round2(vat)}`);
+  }
+  if (tip > 0) {
+    extras.push(`tip ${round2(tip)}`);
+  }
+  if (extras.length > 0) {
+    ui.push(text(`Includes ${extras.join(' and ')}`));
+  }
   if (paid.size > 0) {
     const parts: string[] = [];
     paid.forEach((v: number, k: string) => {
@@ -163,6 +232,15 @@ const COOKING_VERBS: string[] = [
   'freeze', 'microwave', 'poach', 'reduce', 'brown', 'sear', 'braise', 'stew', 'blanch', 'caramelize', 'heat',
   'preheat', 'leave', 'let', 'refrigerate', 'set', 'beat', 'fold'
 ];
+/** Verbs that also appear outside kitchens (workouts, chats). */
+const AMBIGUOUS_VERBS: string[] = ['rest', 'set', 'let', 'leave', 'mix', 'cool', 'heat', 'beat', 'fold', 'reduce', 'stir'];
+
+/** Sets and reps ("3x10", "3 sets") or two exercise lines: workout text. */
+function isWorkoutText(raw: string): boolean {
+  const exercises = lines(raw).filter((l: string) => EXERCISE_WORDS.test(l)).length;
+  return exercises >= 2 || (exercises >= 1 && /(\d+\s*[x×]\s*\d+|\bsets?\b|\breps?\b|\bworkout\b)/i.test(raw));
+}
+
 const DURATION: RegExp =
   /(\d+(?:[.,]\d+)?)(?:\s*(?:-|–|to)\s*(\d+(?:[.,]\d+)?))?\s*(hours?|hrs?|h|minutes?|mins?|min|m|seconds?|secs?|s)\b/i;
 
@@ -188,9 +266,12 @@ function steps(raw: string): string[] {
 
 function recipeFrom(raw: string): Capsule | null {
   const lower = raw.toLowerCase();
-  const cooking = COOKING_VERBS.some((v: string) => new RegExp(`\\b${v}\\b`).test(lower)) ||
-    /\b(recipe|ingredients|oven|°c|°f|preheat|pan|pot)\b/.test(lower);
-  if (!cooking) {
+  const strong = /\b(recipe|ingredients|oven|°c|°f|preheat|pan|pot|bake|boil|simmer|roast|fry|saute|sauté|grill|steam|knead)\b/
+    .test(lower);
+  // "rest", "set", "mix"... alone are not cooking: "3x10 squats, rest 60 s" is a workout (T4-18).
+  const cooking = strong || COOKING_VERBS.some((v: string) => !AMBIGUOUS_VERBS.includes(v) &&
+    new RegExp(`\\b${v}\\b`).test(lower));
+  if (!cooking || (!strong && isWorkoutText(raw))) {
     return null;
   }
   const timers: TimerComponent[] = [];
@@ -231,6 +312,10 @@ function recipeFrom(raw: string): Capsule | null {
 }
 
 // ---- workout ----
+
+const EXERCISE_WORDS: RegExp =
+  /\b(squats?|push-?ups?|pull-?ups?|sit-?ups?|crunch(es)?|lunges?|burpees?|planks?|deadlifts?|bench|curls?|jumping jacks?|sprints?|mountain climbers?|dips?|wall sits?|kettlebell|chin-?ups?|leg raises?)\b/i;
+const REST: RegExp = /\brest(?:\s+for)?\s+(\d+(?:[.,]\d+)?)\s*(seconds?|secs?|s|minutes?|mins?|min|m)\b/i;
 
 const EXERCISES: RegExp =
   /\b(squats?|push-?ups?|pull-?ups?|sit-?ups?|crunch(es)?|lunges?|burpees?|planks?|deadlifts?|bench|press(es)?|curls?|rows?|jumping jacks?|run|jog|sprints?|mountain climbers?|dips?|stretch(es|ing)?|wall sits?|bridges?|kettlebell|skipping|jump rope|chin-?ups?|leg raises?|rest)\b/i;
@@ -275,6 +360,13 @@ function workoutFrom(raw: string): Capsule | null {
       timers.push({ type: 'timer', id: id, label: label, minutes: round2(w.seconds / 60) });
     }
   });
+  // "3x10 squats, rest 60 s": the rest is a timer inside the workout.
+  const rest = raw.match(REST);
+  if (rest !== null && !timers.some((t: TimerComponent) => t.id === 'rest') && timers.length < MAX_WORKOUT_TIMERS) {
+    const n = parseFloat(rest[1].replace(',', '.'));
+    const seconds = rest[2].toLowerCase().startsWith('m') ? n * 60 : n;
+    timers.push({ type: 'timer', id: 'rest', label: 'Rest', minutes: round2(seconds / 60) });
+  }
   timers.forEach((t: TimerComponent) => {
     ui.push(t);
     ui.push(button(`Start ${t.label.toLowerCase()}`, `startTimer:${t.id}`));
@@ -285,6 +377,53 @@ function workoutFrom(raw: string): Capsule | null {
   return {
     schemaVersion: 0, id: `shared-workout-${slug(name.length > 0 ? name : 'workout')}`,
     name: name.length > 0 ? name : 'Workout', permissions: permissions, ui: ui
+  };
+}
+
+// ---- score ----
+
+const VERSUS: RegExp = /^\s*(?:([\p{L} -]{0,30}?)\s*:\s*)?(\p{Lu}[\p{L}'-]{0,20})\s+(?:vs\.?|v\.?|versus|against)\s+(\p{Lu}[\p{L}'-]{0,20})\b/u;
+const SPORT: RegExp = /\b(tennis|squash|padel|badminton|ping ?pong|table tennis|darts|chess|pool|snooker|football|volleyball|basketball)\b/i;
+
+/**
+ * "Tom vs Ana" (OCR may break it over lines): a two-player scoreboard. A sport the bundled templates know
+ * (tennis) uses its template; anything else gets plain points with a button per player.
+ */
+function scoreFrom(raw: string): Capsule | null {
+  const joined = lines(raw).join(' ');
+  if (joined.length > 80) {
+    return null;
+  }
+  const m = joined.match(VERSUS);
+  if (m === null || m[2].toLowerCase() === m[3].toLowerCase()) {
+    return null;
+  }
+  const a = m[2];
+  const b = m[3];
+  const sport = joined.match(SPORT);
+  if (sport !== null) {
+    const t = matchTemplateIn(new TemplateLibrary(CORE_TEMPLATES), `${sport[1]} scoreboard ${a} vs ${b}`);
+    if (t !== null) {
+      return t.capsule;
+    }
+  }
+  const state: Record<string, StateVar> = {};
+  state['a'] = { type: 'number', initial: 0 };
+  state['b'] = { type: 'number', initial: 0 };
+  const score: DisplayComponent = { type: 'display', text: `Score {a} - {b}` };
+  const names: TextComponent = text(`${a} vs ${b}`);
+  const incA: StepObject = { set: 'a', to: 'a + 1' };
+  const incB: StepObject = { set: 'b', to: 'b + 1' };
+  const resetA: StepObject = { reset: 'a' };
+  const resetB: StepObject = { reset: 'b' };
+  const plusA: ButtonComponent = { type: 'button', label: `+1 ${a}`, action: '', do: [incA] };
+  const plusB: ButtonComponent = { type: 'button', label: `+1 ${b}`, action: '', do: [incB] };
+  const reset: ButtonComponent = {
+    type: 'button', label: 'Reset', action: '', enabledIf: 'a + b > 0', do: [resetA, resetB]
+  };
+  return {
+    schemaVersion: 1, id: `shared-score-${slug(`${a} ${b}`)}`, name: `${a} vs ${b}`, permissions: [], state: state,
+    ui: [score, names, plusA, plusB, reset]
   };
 }
 
@@ -336,6 +475,10 @@ export function capsuleFromSharedText(raw: string): SharedTextResult {
   const bill = billFrom(t);
   if (bill !== null) {
     return finish(bill, 'bill');
+  }
+  const score = scoreFrom(t);
+  if (score !== null) {
+    return finish(score, 'score');
   }
   const recipe = recipeFrom(t);
   if (recipe !== null) {
