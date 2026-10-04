@@ -348,6 +348,8 @@ export interface WidgetRow {
   value: number;
   canIncrement: boolean;
   items: WidgetCheckItem[];
+  /** Checklists: the items not ticked yet, in order. The card shows only these (ticked ones are hidden). */
+  open: WidgetCheckItem[];
 }
 
 /**
@@ -452,7 +454,7 @@ export function withColor(view: WidgetView, colorTag: number): WidgetView {
 function row(kind: WidgetRowKind, id: string, label: string): WidgetRow {
   return {
     key: '', kind: kind, id: id, label: label, minutes: 0, endAt: 0, canStart: false, value: 0, canIncrement: false,
-    items: []
+    items: [], open: []
   };
 }
 
@@ -509,6 +511,7 @@ function v0Row(capsule: Capsule, c: CapsuleComponent, i: number, state: CapsuleS
       };
       return item;
     });
+    r.open = r.items.filter((x: WidgetCheckItem) => !x.checked);
     r.key = `${i}:checklist:${l.id}:${r.items.map((x: WidgetCheckItem) => x.checked ? '1' : '0').join('')}`;
     return r;
   }

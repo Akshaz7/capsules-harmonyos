@@ -3,7 +3,7 @@ import {
   applyWidgetMessage, buildWidgetView, CapsuleState, declaredAction, GateFacts, initialState, parseState,
   parseWidgetMessage, pickCapsuleForNewWidget, SavedCapsule, WidgetMessage, WidgetRow,
   BLANK_WIDGET_MESSAGE, emptyView, firstBlank, planWidgetAssignments, WidgetBindingFact,
-  accentFor, capsuleForNewWidget, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
+  accentFor, capsuleForNewWidget, WidgetCheckItem, displayFor, PENDING_TTL_MS, PendingCapsule, pickColorTag, pressWidgetButton, applyV0Action, TimerRun, stableColorTag, WidgetButton, WidgetDisplay, WIDGET_PALETTE, withColor
 } from '../main/ets/core/WidgetModel';
 import { TENNIS_CAPSULE } from '../main/ets/core/V1Fixtures';
 import { StateValues } from '../main/ets/core/CapsuleProgram';
@@ -399,6 +399,27 @@ export default function widgetModelTest() {
       const pv = buildWidgetView(packing, initialState(packing), gate([], true, false), NOW, true);
       expect(`${pv.status} ${pv.layout}`).assertEqual('ok rows');
       expect(pv.rows.filter((r: WidgetRow) => r.kind === 'checklist').length).assertEqual(2);
+    });
+
+    it('the checklist widget shows only unticked items; all ticked = nothing left to show (T4-21)', 0, () => {
+      const chicken = capsuleOf('{"schemaVersion":0,"id":"chicken","name":"Chicken and rice","permissions":[],' +
+        '"ui":[{"type":"checklist","id":"steps","items":["Rinse rice","Boil water","Season chicken","Fry chicken",' +
+        '"Cook rice","Chop onions","Serve"]}]}');
+      let s = initialState(chicken);
+      s = applyWidgetMessage(chicken, s, msg('toggle', 'steps', 0), NOW);
+      s = applyWidgetMessage(chicken, s, msg('toggle', 'steps', 2), NOW);
+      const v = buildWidgetView(chicken, s, gate([], true, false), NOW, false);
+      expect(v.caption).assertEqual('2 / 7 done');
+      expect(v.rows[0].open.map((i: WidgetCheckItem) => i.text).join(',')).assertEqual('Boil water,Fry chicken,Cook rice,Chop onions,Serve');
+      expect(v.rows[0].open[0].index).assertEqual(1); // taps still toggle the right item
+      for (let i = 0; i < 7; i++) {
+        if (i !== 0 && i !== 2) {
+          s = applyWidgetMessage(chicken, s, msg('toggle', 'steps', i), NOW);
+        }
+      }
+      const done = buildWidgetView(chicken, s, gate([], true, false), NOW, false);
+      expect(done.rows[0].open.length).assertEqual(0);
+      expect(done.caption).assertEqual('7 / 7 done');
     });
   });
 }

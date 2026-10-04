@@ -26,6 +26,12 @@ interface CardRow {
   value: number;
   canIncrement: boolean;
   items: CardCheckItem[];
+  open?: CardCheckItem[];
+}
+
+/** A checklist's unticked items (views from older builds have no "open" field). */
+function openItems(r: CardRow): CardCheckItem[] {
+  return r.open ?? r.items.filter((i: CardCheckItem) => !i.checked);
 }
 
 interface CardDisplay {
@@ -347,22 +353,35 @@ struct HarmoniserCard {
     .height('100%')
   }
 
+  /** Only unticked items, in order; "+N more" counts the remaining unticked ones; "All done" at the end. */
   @Builder
   checklistLayout(v: CardView, r: CardRow) {
     Column({ space: 4 }) {
       this.header(v, v.caption)
-      Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(r.items.slice(0, v.wide ? 4 : 2), (item: CardCheckItem) => {
-          CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
-        }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
-      }
-      .width('100%')
-      .layoutWeight(1)
-      if (r.items.length > (v.wide ? 4 : 2)) {
-        Text(`+${r.items.length - (v.wide ? 4 : 2)} more`)
-          .fontSize(11)
-          .fontColor($r('sys.color.font_secondary'))
-          .width('100%')
+      if (openItems(r).length === 0) {
+        Column({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.checkmark_circle')).fontSize(32).fontColor([v.accent])
+          Text('All done').fontSize(16).fontWeight(FontWeight.Medium).fontColor($r('sys.color.font_primary'))
+          Text('Tap to open').fontSize(11).fontColor($r('sys.color.font_secondary'))
+        }
+        .width('100%')
+        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => this.onTap())
+      } else {
+        Flex({ wrap: FlexWrap.Wrap }) {
+          ForEach(openItems(r).slice(0, v.wide ? 4 : 2), (item: CardCheckItem) => {
+            CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
+          }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
+        }
+        .width('100%')
+        .layoutWeight(1)
+        if (openItems(r).length > (v.wide ? 4 : 2)) {
+          Text(`+${openItems(r).length - (v.wide ? 4 : 2)} more`)
+            .fontSize(11)
+            .fontColor($r('sys.color.font_secondary'))
+            .width('100%')
+        }
       }
     }
     .width('100%')
@@ -508,15 +527,14 @@ struct HarmoniserCard {
           } else if (r.kind === 'checklist') {
             // Several parts share the card: the first unticked items, then "+N more" (open the app for all).
             Flex({ wrap: FlexWrap.Wrap }) {
-              ForEach(r.items.filter((i: CardCheckItem) => !i.checked).slice(0, v.wide ? 2 : 1),
+              ForEach(openItems(r).slice(0, v.wide ? 2 : 1),
                 (item: CardCheckItem) => {
                   CheckRow({ listId: r.id, item: item, wide: v.wide, accent: v.accent })
                 }, (item: CardCheckItem) => `${r.id}-${item.index}-${item.checked}`)
             }
             .width('100%')
             Text(`${r.items.filter((i: CardCheckItem) => i.checked).length}/${r.items.length} done` +
-              (r.items.filter((i: CardCheckItem) => !i.checked).length > (v.wide ? 2 : 1) ?
-                ` · +${r.items.filter((i: CardCheckItem) => !i.checked).length - (v.wide ? 2 : 1)} more` : ''))
+              (openItems(r).length > (v.wide ? 2 : 1) ? ` · +${openItems(r).length - (v.wide ? 2 : 1)} more` : ''))
               .fontSize(11)
               .fontColor($r('sys.color.font_secondary'))
               .width('100%')
