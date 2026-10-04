@@ -79,7 +79,7 @@ Generated code was accepted only after it passed the gates below. Product-visibl
 ### Testing and debugging
 
 - **Type-check and build:** `devecocli check arkts` on changed files, because hvigor only compiles files that something imports. Then `devecocli build --modules entry`.
-- **Unit tests:** `hvigorw … test` (Hypium), 278 tests at the time of writing. They cover the validator, rule parser, routing policy, cloud providers with fake transports, the v1 interpreter, widgets, sharing and shared text. Deliberately broken assertions were used once to confirm that failures are reported.
+- **Unit tests:** `hvigorw … test` (Hypium), 297 tests at the time of writing. They cover the validator, rule parser, routing policy, cloud providers with fake transports, the v1 interpreter, widgets, sharing and shared text. Deliberately broken assertions were used once to confirm that failures are reported.
 - **Emulator:** install with `hdc`, launch with `aa start`, read `hilog`, take screenshots with `devecocli ui screenshot`. Several sessions share one emulator, so automated runs use `aa start --ps` parameters and result files instead of UI taps.
 - **Model evaluation:** `scripts/eval-providers.mjs` makes real provider calls with the app's own prompt, validator and interpreter. It has tuning, held-out, refusal and hard-logic sets. There is also an on-device eval on the emulator.
 - **Security checks:** byte scans of built `.hap` files for API keys, and a git-history scan for secrets before publishing.

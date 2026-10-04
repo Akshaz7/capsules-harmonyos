@@ -2,7 +2,7 @@
 
 > AI-assisted desk research (a Claude Code sub-agent, 2026-10-04, about 01:00–01:30). Read from the rules, this repository at `origin/main` and public sources. Nothing was run on a device or emulator and no code was changed. Line references are to the commit named in the text and will drift as work lands.
 
-> **Status since writing (re-checked against the code on 2026-10-04):** findings 3 and 4 still hold and are now flagged in `docs/DEMO_SCRIPT.md` (beat 4 hits the `km-to-miles` template; `track pages I read` is a prompt example). Finding 8 is out of date: a weather component exists now (PR #12), but no compound "task list and weather" rule. Live listing counts change; check before quoting them.
+> **Status since writing (re-checked against the code on 2026-10-04):** findings 3 and 4 still hold and are now flagged in `docs/DEMO_SCRIPT.md` (beat 4 hits the `km-to-miles` template; `track pages I read` is a prompt example). Finding 8 is out of date: a weather component exists (PR #12), and `a task list and the weather for Kraków` is now one capsule by rule (PR #14). Live listing counts change; check before quoting them.
 
 **Written:** Sunday 2026-10-04, about 01:30. Submission 11:00. Finalist pitches about 16:00.
 

@@ -1,6 +1,6 @@
 # Compliance audit
 
-Checked against the official [`hackathon_challenge.md`](https://github.com/onirodeveloper/hackyeah2026-challenge/blob/main/hackathon_challenge.md) first on 2026-10-03; re-checked against the code on 2026-10-04 at commit `5d23269` (main, local). Owners: **Ash** (team lead), **T1** (coordination, builds, phones), **T2** (docs), **T3** (app UI), **T4** (core), **T5** (Cactus).
+Checked against the official [`hackathon_challenge.md`](https://github.com/onirodeveloper/hackyeah2026-challenge/blob/main/hackathon_challenge.md) first on 2026-10-03; re-checked against the code on 2026-10-04 (main, local, up to `15a7008`). Owners: **Ash** (team lead), **T1** (coordination, builds, phones), **T2** (docs), **T3** (app UI), **T4** (core), **T5** (Cactus).
 
 Status key: ✅ met · ⚠️ partly met or at risk · ❌ missing. Still missing: the recorded demo and a final release `.hap`.
 
@@ -47,14 +47,14 @@ The jury checks that "claims should be backed by the code, the demo, logs or tes
 | Template reminders (habit, vitamin, medication with a time) fire a daily trigger whose only step is `notify:<text>`, and the runtime ignores `notify`, so no notification appears. | `core/templates/TemplateLibrary.ets` (trigger `do: notify:…`); `renderer/CapsuleRuntime.ets` (`case 'notify'` does nothing) | **T3/T4**: deliver `notify` through the notification adapter, or don't promise reminders |
 | The schema has `location` and `widget` permissions that nothing uses | `SCHEMA.md` | **Ash** decides (SCHEMA is the contract). The README already says so. |
 | No screenshots | README | **Ash**: `docs/screenshots/` (widget, gatekeeper sheet, Calendar, tennis; dark mode is off while the redesign locks light mode); T2 adds the section |
-| The live marketplace search sends the request text to the marketplace server with no consent notice in **Smart** mode. **Fixed for On-device only:** PR #16 (`b54cbfe`) skips the search in that mode (unit-tested); the Marketplace tab gate is T3-25 | `core/CapsuleGenerator.ets`, `core/templates/MarketMatch.ets` | **Ash**: a consent notice for Smart mode, if wanted |
+| The live marketplace search sends the request text to the marketplace server with no consent notice in **Smart** mode. **Fixed for On-device only:** the search is skipped in that mode, and the Marketplace tab then shows only the shipped examples and sends nothing (both unit-tested) | `core/CapsuleGenerator.ets`, `core/templates/MarketMatch.ets` | **Ash**: a consent notice for Smart mode, if wanted |
 
 ## Reproducibility
 
 | Item | Status | Notes and owner |
 | --- | --- | --- |
 | Tool versions | ✅ | DevEco Studio 6.1.1, SDK API 24 (min API 20), `devecocli` 1.3.4, Node 18+ for the eval |
-| Unit tests | ✅ | 278 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
+| Unit tests | ✅ | 297 pass (`hvigorw … test`; the README gives the exact command, including `DEVECO_SDK_HOME`) |
 | On-device model | ✅ | URL, tag and sha256 in `docs/THIRD_PARTY.md`; `scripts/push-model.sh` |
 | Rebuilding `libcactus_engine.so` | ✅ | `cactus/BUILD.md` and `cactus/build-engine.sh`; a clean rebuild matches the committed `.so` apart from the build ID |
 | Untracked `.cache/` folder | ✅ | Ignored in `.gitignore` |

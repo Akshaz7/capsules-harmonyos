@@ -58,7 +58,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 | What | Where it goes |
 | --- | --- |
-| Request text, tiers 0–1 | Stays on the device, **except** the live marketplace search: when `marketplace.baseUrl` is set, the template step sends the request text to the marketplace server (`GET /api/capsules?q=…`), without a consent notice and also in On-device only mode. Flagged in [COMPLIANCE.md](COMPLIANCE.md). |
+| Request text, tiers 0–1 | Stays on the device, **except** the live marketplace search: in Smart mode, when `marketplace.baseUrl` is set, the template step sends the request text to the marketplace server (`GET /api/capsules?q=…`) without a consent notice. On-device only mode skips it. Flagged in [COMPLIANCE.md](COMPLIANCE.md). |
 | Photo (Snap button or a shared image) | Read by the system OCR on the phone. Only if no local build is possible: the OCR text is sent, or the photo itself if OCR found no text, to the chosen provider after the same consent as text; never to a non-EU provider unless that switch is on. |
 | Edit instruction ("Change it…"), cloud | Rule edits stay on the device. Otherwise the instruction and the capsule's definition (its JSON) go to the chosen provider under the same consent rules; the capsule's state values (counts, inputs) are never sent. |
 | Weather capsules | Only the chosen city's coordinates (from a bundled 12-city list) go to Open-Meteo, after the capsule's own consent; no request text, no identifiers. |
@@ -72,7 +72,7 @@ Timeouts are 30 s per HTTP call, output is capped at 8192 tokens, and the user r
 
 ## Validation approach
 
-- **Unit tests (278, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
+- **Unit tests (297, all passing):** the validator (bad JSON, unknown components, actions and permissions, expressions, limits, placeholders), the rule parser, routing policy (EU-only, `allowNonEu`, `on-device-only`, `needsCloud`, refusals, request-only HTTP body), the cloud model with fake transports, the v1 interpreter (a full tennis scoreboard, a live bill split, all-or-nothing steps), widgets, sharing, shared text, capsule editing and the photo path.
 - **Provider eval** (`scripts/eval-providers.mjs`): sends real requests through the app's own prompt, validator and interpreter, and checks *correctness*, not just validity. It has tuning, held-out and refusal sets, plus a hard-logic set.
 - **On-device eval:** 15 requests run on the emulator with the app's provider code.
 - **Emulator checks:** recorded in the [`AI_WORKFLOW.md`](../AI_WORKFLOW.md) work log (for example: Mistral built a v1 capsule in the app; "Make it smarter" rebuilt a capsule with Claude).
