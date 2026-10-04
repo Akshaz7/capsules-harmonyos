@@ -1,11 +1,11 @@
 /**
- * Decides whether a capsule can live on the home screen as a widget or only in the app.
+ * Decides how a capsule appears on a home-screen widget: in full, or condensed (T4-19).
  * Counted over all components (rows flattened). Checklists of any length fit: the card shows the first
  * items and "+N more".
- * Schema v0 widget-suitable: only timer/counter/checklist/text/button (in rows too), no number inputs, at most
+ * Schema v0 fits in full with only timer/counter/checklist/text/button (in rows too), no number inputs, at most
  * 3 text lines, 3 buttons and 3 timers/counters/checklists.
- * Schema v1 (state, computed or "do" buttons) widget-suitable when it fits a card: at most 3 display/text
- * lines, at most 3 buttons, at most 2 timers/counters/checklists, and no inputs or lists (they need typing).
+ * Schema v1 (state, computed or "do" buttons) fits a card in full with at most 3 display/text lines, 3 buttons,
+ * 2 timers/counters/checklists and no inputs, lists or readings. Anything more is shown condensed (T4-19).
  */
 import { ButtonComponent, Capsule, CapsuleComponent } from './CapsuleTypes';
 import { allComponents } from './CapsuleProgram';
@@ -20,6 +20,8 @@ const WIDGET_TYPES: string[] = ['timer', 'counter', 'checklist', 'text', 'button
 export const MAX_WIDGET_LINES: number = 3;
 export const MAX_WIDGET_BUTTONS: number = 3;
 const MAX_WIDGET_PARTS: number = 2;
+/** What a card can draw: anything else (readings, inputs, lists) is left to the app. */
+const CARD_TYPES: string[] = ['timer', 'counter', 'checklist', 'text', 'button', 'display'];
 const V1_INPUT_TYPES: string[] = ['number', 'input', 'list'];
 
 function isV1(capsule: Capsule): boolean {
@@ -28,80 +30,77 @@ function isV1(capsule: Capsule): boolean {
       ((c as ButtonComponent).do !== undefined || (c as ButtonComponent).enabledIf !== undefined));
 }
 
-/** A v1 capsule fits a card when its lines, buttons and parts are few and nothing needs typing. */
-function routeV1(capsule: Capsule): CapsuleRoute {
+/** What a full card cannot draw: too many lines, buttons or parts, inputs, live readings or other components. */
+function overflowV1(capsule: Capsule): string {
   const all = allComponents(capsule.ui);
   const count = (types: string[]): number => all.filter((c: CapsuleComponent) => types.includes(c.type)).length;
   const typed = all.find((c: CapsuleComponent) => V1_INPUT_TYPES.includes(c.type));
   if (typed !== undefined) {
-    return { widget: false, reason: `App only: ${typed.type} components need typing, which widgets cannot do.` };
+    return `${typed.type} components are edited in the app`;
   }
-  const lines = count(['display', 'text']);
-  if (lines > MAX_WIDGET_LINES) {
-    return { widget: false, reason: `App only: ${lines} lines of text (a widget fits at most ${MAX_WIDGET_LINES}).` };
+  if (count(['device']) > 0) {
+    return 'live readings are shown in the app';
   }
-  const buttons = count(['button']);
-  if (buttons > MAX_WIDGET_BUTTONS) {
-    return { widget: false, reason: `App only: ${buttons} buttons (a widget fits at most ${MAX_WIDGET_BUTTONS}).` };
+  if (count(['display', 'text']) > MAX_WIDGET_LINES) {
+    return `${count(['display', 'text'])} lines (the card shows ${MAX_WIDGET_LINES})`;
   }
-  const parts = count(['timer', 'counter', 'checklist']);
-  if (parts > MAX_WIDGET_PARTS) {
-    return { widget: false, reason: `App only: ${parts} timers, counters or checklists (a widget fits at most ${MAX_WIDGET_PARTS}).` };
+  if (count(['button']) > MAX_WIDGET_BUTTONS) {
+    return `${count(['button'])} buttons (the card shows ${MAX_WIDGET_BUTTONS})`;
   }
-  return { widget: true, reason: `Widget-suitable: ${lines} lines, ${buttons} buttons (schema v1).` };
+  if (count(['timer', 'counter', 'checklist']) > MAX_WIDGET_PARTS) {
+    return `${count(['timer', 'counter', 'checklist'])} timers, counters or checklists (the card shows ${MAX_WIDGET_PARTS})`;
+  }
+  return '';
 }
 
-/** A v0 capsule fits a card when its parts, text lines and buttons are few (rows are flattened). */
-function routeV0(capsule: Capsule): CapsuleRoute {
+function overflowV0(capsule: Capsule): string {
   const all = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type !== 'row');
-  for (const c of all) {
-    if (c.type === 'number') {
-      return { widget: false, reason: 'App only: number inputs are not supported on widgets.' };
-    }
-    if (!WIDGET_TYPES.includes(c.type)) {
-      return { widget: false, reason: `App only: ${c.type} components are not supported on widgets.` };
-    }
+  const odd = all.find((c: CapsuleComponent) => !WIDGET_TYPES.includes(c.type));
+  if (odd !== undefined) {
+    return odd.type === 'number' ? 'number inputs are edited in the app' : `${odd.type} components are shown in the app`;
   }
   const count = (type: string): number => all.filter((c: CapsuleComponent) => c.type === type).length;
   const parts = count('timer') + count('counter') + count('checklist');
   if (parts > MAX_V0_PARTS) {
-    return { widget: false, reason: `App only: ${parts} timers, counters or checklists (a widget fits at most ${MAX_V0_PARTS}).` };
+    return `${parts} timers, counters or checklists (the card shows ${MAX_V0_PARTS})`;
   }
   if (count('text') > MAX_WIDGET_LINES) {
-    return { widget: false, reason: `App only: ${count('text')} lines of text (a widget fits at most ${MAX_WIDGET_LINES}).` };
+    return `${count('text')} lines (the card shows ${MAX_WIDGET_LINES})`;
   }
   if (count('button') > MAX_WIDGET_BUTTONS) {
-    return { widget: false, reason: `App only: ${count('button')} buttons (a widget fits at most ${MAX_WIDGET_BUTTONS}).` };
+    return `${count('button')} buttons (the card shows ${MAX_WIDGET_BUTTONS})`;
   }
-  const types = all.map((c: CapsuleComponent) => c.type).join(', ');
-  return { widget: true, reason: `Widget-suitable: ${all.length} components (${types}).` };
+  return '';
 }
 
 export interface CapsuleRoute {
   widget: boolean;
   /** Why the capsule is or is not widget-suitable. */
   reason: string;
+  /** True when the card shows a condensed view (the top values and buttons; "Open for more"). */
+  condensed?: boolean;
 }
 
+/**
+ * Every capsule with components fits a widget (T4-19): one that a card cannot draw in full gets a condensed
+ * view (top 3 values, up to 3 buttons, "Open for more" / "Open to edit values"). Off widgets: motion capsules
+ * (they count while the capsule is open) and capsules with nothing a card can draw (only live readings).
+ */
 export function routeCapsule(capsule: Capsule): CapsuleRoute {
   if (capsule.ui.length === 0) {
-    return { widget: false, reason: 'App only: the capsule has no components.' };
+    return { widget: false, reason: 'The capsule has no components yet.' };
   }
   if (usesMotion(capsule)) {
-    return {
-      widget: false,
-      reason: 'App only: motion counters and triggers run while the capsule is open in the app.'
-    };
+    return { widget: false, reason: 'Counts motion only while the capsule is open, so it stays in the app.' };
   }
-  const readings: number = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type === 'device').length;
-  if (readings > 0) {
-    return {
-      widget: false,
-      reason: 'App only: live readings such as the battery are shown in the app.'
-    };
+  const drawable = allComponents(capsule.ui).filter((c: CapsuleComponent) => CARD_TYPES.includes(c.type)).length;
+  if (drawable === 0) {
+    return { widget: false, reason: 'Nothing here fits a card: live readings and inputs are shown in the app.' };
   }
-  if (isV1(capsule)) {
-    return routeV1(capsule);
+  const over = isV1(capsule) ? overflowV1(capsule) : overflowV0(capsule);
+  if (over.length > 0) {
+    return { widget: true, condensed: true, reason: `Widget, condensed: ${over}.` };
   }
-  return routeV0(capsule);
+  const n = allComponents(capsule.ui).filter((c: CapsuleComponent) => c.type !== 'row').length;
+  return { widget: true, condensed: false, reason: `Widget: all ${n} components fit the card.` };
 }

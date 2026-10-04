@@ -133,7 +133,7 @@ export default function weatherTest() {
         expect(`${req} list ${hasList}`).assertEqual(`${req} list true`);
         expect(c.state !== undefined).assertTrue();
         expect((c.state as Record<string, StateVar>)['tasks'] !== undefined).assertTrue();
-        expect(routeCapsule(c).widget).assertFalse();
+        expect(routeCapsule(c).condensed).assertTrue(); // the task count and Add on a widget (T4-19)
       });
       const named = built('a task list and the weather for Kraków');
       expect((named.ui.find((x: CapsuleComponent) => x.type === 'device') as DeviceComponent).city)

@@ -142,11 +142,13 @@ export default function widgetModelTest() {
       expect(buildWidgetView(c, initialState(c), gate([], true, true), NOW, false).status).assertEqual('removed');
     });
 
-    it('never draws a capsule that is not widget-suitable', 0, () => {
+    it('draws a capsule too big for the card condensed: the first parts and "Open for more" (T4-19)', 0, () => {
       const c = rules('4 timers a 1 b 2 c 3 d 4');
       const v = buildWidgetView(c, initialState(c), gate(['reminders'], true, false), NOW, false);
-      expect(v.status).assertEqual('empty');
-      expect(v.rows.length).assertEqual(0);
+      expect(`${v.status} ${v.rows.length} ${v.hint}`).assertEqual('ok 3 Open for more');
+      const small = rules('count coffees');
+      expect(buildWidgetView(small, initialState(small), gate([], true, false), NOW, false).hint === undefined)
+        .assertTrue();
     });
 
     it('maps taps to declared actions only', 0, () => {
@@ -195,13 +197,15 @@ export default function widgetModelTest() {
       const saved: SavedCapsule[] = [
         { capsule: rules('count coffees'), savedAt: 1 },
         { capsule: rules('medication 8am and 8pm'), savedAt: 2 },
-        { capsule: rules('split 84 between 4'), savedAt: 3 }, // v1 with inputs: app only
-        { capsule: rules('4 timers a 1 b 2 c 3 d 4'), savedAt: 5 }, // too many components
-        { capsule: rules('split 84 between 4'), savedAt: 4 } // v1: app only
+        { capsule: rules('count my shakes'), savedAt: 3 }, // motion: app only
+        { capsule: rules('phone battery'), savedAt: 5 }, // only a live reading: nothing to draw
+        { capsule: rules('count my shakes'), savedAt: 4 } // motion: app only
       ];
       expect(pickCapsuleForNewWidget(saved, (id: string) => false)?.id).assertEqual('schedule-medication');
       expect(pickCapsuleForNewWidget(saved, (id: string) => id === 'schedule-medication')?.id)
         .assertEqual('count-coffees');
+      const big: SavedCapsule[] = [{ capsule: rules('4 timers a 1 b 2 c 3 d 4'), savedAt: 6 }];
+      expect(pickCapsuleForNewWidget(saved.concat(big), (id: string) => false)?.id).assertEqual('timers-a-b-c-d');
       expect(pickCapsuleForNewWidget([], (id: string) => false)).assertNull();
     });
   });
@@ -246,7 +250,7 @@ export default function widgetModelTest() {
     });
 
     it('skips app-only capsules, capsules already shown, and existing capsules on the first run', 0, () => {
-      const water = rules('split 84 between 4'); // v1 with inputs: app only
+      const water = rules('count my shakes'); // motion: app only
       const coffees = rules('count coffees');
       const appOnly = planWidgetAssignments([blank('1')], [water], [], never);
       expect(shown(appOnly.bindings)).assertEqual('1=-');
@@ -337,6 +341,46 @@ export default function widgetModelTest() {
         '"{glasses} glasses"},{"type":"button","label":"+1","do":[{"set":"glasses","to":"glasses + 1"}]}]}');
       const g = buildWidgetView(goal, initialState(goal), gate([], true, false), 0, false);
       expect(`${g.layout} ${g.value}/${g.goal} ${g.caption}`).assertEqual('goal 2/8 glasses');
+    });
+
+    it('every logic capsule fits a widget, condensed when it is too big (T4-19)', 0, () => {
+      const none = gate([], true, false);
+      const tennis = capsuleOf(TENNIS_CAPSULE);
+      const tv = buildWidgetView(tennis, initialState(tennis), none, 0, true, tennisValues());
+      expect(`${routeCapsule(tennis).condensed} ${tv.buttons.length} ${tv.hint === undefined}`).assertEqual('false 3 true');
+      const pomodoro = rules('pomodoro');
+      expect(routeCapsule(pomodoro).widget).assertTrue();
+      // Tip calculator / bill split: inputs stay in the app, the card shows the result.
+      const split = rules('split 84 between 4');
+      const sv = buildWidgetView(split, initialState(split), none, 0, false);
+      expect(`${sv.status} ${sv.hint}`).assertEqual('ok Open to edit values');
+      expect(sv.displays.length > 0).assertTrue();
+      expect(sv.displays.map(displaySummary).join(' | ')).assertContain('21');
+      // km converter: an input, a computed display and preset buttons.
+      const km = capsuleOf('{"schemaVersion":1,"id":"km","name":"km to miles","permissions":[],"state":{"km":' +
+        '{"type":"number","initial":10}},"computed":{"miles":"round(km * 0.621371, 2)"},"ui":[' +
+        '{"type":"input","bind":"km","kind":"number","label":"Kilometres"},{"type":"display","text":"{km} km = {miles} miles"},' +
+        '{"type":"button","label":"5 km","do":[{"set":"km","to":"5"}]},{"type":"button","label":"10 km","do":[{"set":"km","to":"10"}]}]}');
+      const kv = buildWidgetView(km, initialState(km), none, 0, false);
+      expect(`${kv.hint} ${kv.displays[0].text} ${kv.buttons.length}`).assertEqual('Open to edit values 10 km = 6.21 miles 2');
+      // Quiz: 5 lines and 5 buttons -> the top 3 lines and the 3 most important buttons ("do" steps first).
+      const d = (t: string): string => `{"type":"display","text":"${t}"}`;
+      const quiz = capsuleOf('{"schemaVersion":1,"id":"quiz","name":"Capitals quiz","permissions":["notifications"],"state":{"q":' +
+        '{"type":"number","initial":0},"score":{"type":"number","initial":0}},"ui":[' +
+        `${d('Score: {score}')},${d('Question {q + 1} of 5')},${d('Capital of France?')},${d('Pick one')},${d('Good luck')},` +
+        '{"type":"button","label":"Help","action":"notify:Think of the Eiffel Tower"},' +
+        '{"type":"button","label":"Paris","do":[{"set":"score","to":"score + 1"},{"set":"q","to":"q + 1"}]},' +
+        '{"type":"button","label":"Lyon","do":[{"set":"q","to":"q + 1"}]},' +
+        '{"type":"button","label":"Nice","do":[{"set":"q","to":"q + 1"}]},' +
+        '{"type":"button","label":"Restart","do":[{"reset":"score"},{"reset":"q"}]}]}');
+      expect(routeCapsule(quiz).condensed).assertTrue();
+      const qv = buildWidgetView(quiz, initialState(quiz), none, 0, true);
+      expect(qv.displays.length).assertEqual(3);
+      expect(qv.displays[0].text).assertEqual('Score: 0');
+      expect(qv.buttons.map((b: WidgetButton) => `${b.index}:${b.label}`).join(',')).assertEqual('1:Paris,2:Lyon,3:Nice');
+      expect(qv.hint).assertEqual('Open for more');
+      const press = pressWidgetButton(quiz, initialState(quiz), 1, 0, allowAll); // the card's "Paris"
+      expect(press.ok).assertTrue();
     });
 
     it('score lines only for short values on both sides', 0, () => {

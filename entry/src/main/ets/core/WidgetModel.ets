@@ -430,6 +430,8 @@ export interface WidgetView {
   /** The widget's palette slot (stable per widget) and its accent colour. */
   colorTag: number;
   accent: string;
+  /** Condensed cards (T4-19): "Open for more" or "Open to edit values" beside the title; '' otherwise. */
+  hint?: string;
   /** Small text under the hero: a checklist's "2 / 3 done", a goal's "5 to go", a capsule's text line. */
   caption: string;
   /** Layout "goal": the current value and the goal (progress = value / goal). */
@@ -664,6 +666,7 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
   // only fits one line shows what changes, not the instructions.
   const lines: string[] = [];
   const texts: string[] = [];
+  const stepped: number[] = [];
   shown.forEach((c: CapsuleComponent, i: number) => {
     if (c.type === 'display') {
       lines.push(renderTemplate(capsule, values, (c as DisplayComponent).text));
@@ -672,6 +675,9 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
     } else if (c.type === 'button') {
       const b = c as ButtonComponent;
       view.buttons.push({ index: buttons.indexOf(c), label: b.label, enabled: isEnabled(capsule, values, b) });
+      if (b.do !== undefined && b.do.length > 0) {
+        stepped.push(buttons.indexOf(c));
+      }
     } else if (permitted(permissionForComponent(c), gate.granted)) {
       const r = v0Row(capsule, c, i, state, gate);
       if (r !== null) {
@@ -680,6 +686,9 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
     }
   });
   texts.forEach((t: string) => lines.push(t));
+  lines.splice(MAX_CARD_LINES); // condensed: the top values (live displays come first)
+  view.buttons = mostImportant(view.buttons, stepped);
+  view.rows.splice(MAX_CARD_PARTS);
   const goal = lines.length > 0 && view.rows.length === 0 ? goalOf(lines[0], values) : null;
   if (goal !== null) {
     view.layout = 'goal';
@@ -693,6 +702,24 @@ function buildLogicView(capsule: Capsule, state: CapsuleState, values: StateValu
     view.displays = lines.map((t: string, n: number) => displayFor(`${n}:${t}`, t));
   }
   return view;
+}
+
+const MAX_CARD_LINES: number = 3;
+const MAX_CARD_BUTTONS: number = 3;
+const MAX_CARD_PARTS: number = 2;
+const MAX_CARD_ROWS: number = 3;
+export const HINT_MORE: string = 'Open for more';
+export const HINT_EDIT: string = 'Open to edit values';
+
+/** Up to 3 buttons, those with "do" steps first, shown in the capsule's order. */
+function mostImportant(all: WidgetButton[], stepped: number[]): WidgetButton[] {
+  if (all.length <= MAX_CARD_BUTTONS) {
+    return all;
+  }
+  const first = all.filter((b: WidgetButton) => stepped.includes(b.index));
+  const rest = all.filter((b: WidgetButton) => !stepped.includes(b.index));
+  const keep = first.concat(rest).slice(0, MAX_CARD_BUTTONS).map((b: WidgetButton) => b.index);
+  return all.filter((b: WidgetButton) => keep.includes(b.index));
 }
 
 function clock(ms: number): string {
@@ -738,7 +765,7 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
   }
   const route = routeCapsule(capsule);
   if (!route.widget) {
-    // Not drawn on the card: the name, why (for motion, which only runs in the open app) and a tap into the app.
+    // Only motion capsules (counted while open) and empty ones: the name, why, and a tap into the app.
     const motion = allComponents(capsule.ui).some((c: CapsuleComponent) => c.type === 'counter' &&
       (c as CounterComponent).source === 'motion') || (capsule.triggers ?? []).some((t: Trigger) => t.on === 'motion');
     const why = motion ? 'Counts motion only while the capsule is open. Tap to open.' : 'Tap to open';
@@ -764,7 +791,14 @@ export function buildWidgetView(capsule: Capsule, state: CapsuleState, gate: Gat
         view.rows.push(r);
       }
     });
+    if (route.condensed === true) {
+      view.rows.splice(MAX_CARD_ROWS); // the first parts; the rest in the app
+    }
     arrangeV0(view);
+  }
+  if (route.condensed === true) {
+    view.hint = allComponents(capsule.ui).some((c: CapsuleComponent) => c.type === 'input' || c.type === 'number') ?
+      HINT_EDIT : HINT_MORE;
   }
   view.icon = themedIcon(capsule.name, view.icon); // water -> drop, tennis -> trophy
   view.summary = summaryLine(view, now);

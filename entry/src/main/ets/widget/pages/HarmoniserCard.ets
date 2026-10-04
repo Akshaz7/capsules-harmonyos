@@ -69,6 +69,8 @@ interface CardView {
   /** s = 1x2, m = 2x2, w = 2x4, l = 4x4 (older views: from `wide`). */
   size?: string;
   summary?: string;
+  /** Condensed cards: "Open for more" / "Open to edit values" beside the title (T4-19). */
+  hint?: string;
 }
 
 function sizeOf(v: CardView): string {
@@ -228,8 +230,8 @@ struct HarmoniserCard {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
-      if (trailing.length > 0) {
-        Text(trailing)
+      if (trailing.length > 0 || (v.hint ?? '').length > 0) {
+        Text(trailing.length > 0 ? trailing : (v.hint ?? ''))
           .fontSize(12)
           .fontWeight(FontWeight.Medium)
           .fontColor(v.accent)
