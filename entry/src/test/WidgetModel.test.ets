@@ -213,21 +213,26 @@ export default function widgetModelTest() {
   describe('Widget assignment', () => {
     const never = (id: string): boolean => false;
 
-    it('fills blank widgets with new capsules, oldest new capsule first, in widget order', 0, () => {
+    it('never fills blank widgets with new capsules by itself (T4-12)', 0, () => {
       const coffees = rules('count coffees');
       const meds = rules('medication 8am and 8pm');
-      // Two blank widgets; nothing seen yet except what existed before.
-      // Form ids are not ordered: '20' was added first even though '3428806' is shorter.
       const first = planWidgetAssignments([blank('3428806', 200), blank('20', 100)], [coffees], [], never);
-      expect(shown(first.bindings)).assertEqual('20=count-coffees 3428806=-');
-      expect(first.changed.join()).assertEqual('20');
-      // Second capsule created (saved list is newest first).
-      const second = planWidgetAssignments(first.bindings, [meds, coffees], first.seen, never);
-      expect(shown(second.bindings)).assertEqual('20=count-coffees 3428806=schedule-medication');
-      expect(second.changed.join()).assertEqual('3428806');
-      // Nothing new: nothing changes.
-      const again = planWidgetAssignments(second.bindings, [meds, coffees], second.seen, never);
-      expect(again.changed.length).assertEqual(0);
+      expect(shown(first.bindings)).assertEqual('20=- 3428806=-');
+      expect(first.changed.length).assertEqual(0);
+      const bound: WidgetBindingFact[] = [{ formId: '1', capsuleId: 'count-coffees', wide: false }, blank('2')];
+      const second = planWidgetAssignments(bound, [meds, coffees], first.seen, never);
+      expect(shown(second.bindings)).assertEqual('1=count-coffees 2=-'); // existing widget untouched, blank stays blank
+      expect(second.changed.length).assertEqual(0);
+    });
+
+    it('a pending capsule goes on the next new widget only; existing widgets keep theirs (T4-12)', 0, () => {
+      const pending: PendingCapsule = { capsuleId: 'count-coffees', at: NOW };
+      expect(capsuleForNewWidget(pending, NOW + 1000, availableExceptGone)).assertEqual('count-coffees');
+      expect(capsuleForNewWidget(pending, NOW + PENDING_TTL_MS + 1, availableExceptGone)).assertEqual('');
+      expect(capsuleForNewWidget(null, NOW, availableExceptGone)).assertEqual('');
+      const bound: WidgetBindingFact[] = [{ formId: '1', capsuleId: 'schedule-medication', wide: false }];
+      const after = planWidgetAssignments(bound, [rules('count coffees'), rules('medication 8am and 8pm')], [], never);
+      expect(shown(after.bindings)).assertEqual('1=schedule-medication');
     });
 
     it('blanks a widget when its capsule is removed, and keeps it blank', 0, () => {
@@ -252,7 +257,7 @@ export default function widgetModelTest() {
     it('skips app-only capsules, capsules already shown, and existing capsules on the first run', 0, () => {
       const water = rules('count my shakes'); // motion: app only
       const coffees = rules('count coffees');
-      const appOnly = planWidgetAssignments([blank('1')], [water], [], never);
+      const appOnly = planWidgetAssignments([blank('1')], [water, coffees], [], never);
       expect(shown(appOnly.bindings)).assertEqual('1=-');
       const already = planWidgetAssignments([{ formId: '1', capsuleId: 'count-coffees', wide: false }, blank('2')],
         [coffees], [], never);

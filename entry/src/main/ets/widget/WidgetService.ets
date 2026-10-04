@@ -19,7 +19,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { Capsule, Permission } from '../core/CapsuleTypes';
 import { restoreState } from '../core/CapsuleProgram';
 import {
-  applyWidgetMessage, buildWidgetView, declaredAction, emptyView, firstBlank, GateFacts, parseWidgetMessage,
+  accentFor, applyWidgetMessage, buildWidgetView, declaredAction, emptyView, firstBlank, GateFacts, parseWidgetMessage,
   capsuleForNewWidget, CardSize, isWideSize, pickColorTag, sizeOfBinding, pressWidgetButton, planWidgetAssignments, stableColorTag, WidgetView, withColor
 } from '../core/WidgetModel';
 import { Gatekeeper } from '../gatekeeper/Gatekeeper';
@@ -46,8 +46,14 @@ export interface WidgetInfo {
   /** null when the widget is blank ("Tap to choose a capsule"). */
   capsuleId: string | null;
   size: WidgetSize;
-  /** The widget's stable accent slot (WIDGET_PALETTE index), shown as its colour. */
+  /** The widget's stable accent slot (WIDGET_PALETTE index), shown as its colour and a dot on the card. */
   colorTag: number;
+  /** The accent colour of colorTag ("#RRGGBB"), for the dot in the app's widget list. */
+  accent: string;
+  /** The capsule's name; '' when blank. */
+  capsuleName: string;
+  /** Preview: the card's one-line summary ("3 / 8", "4:59 left", "All done"); '' when blank. */
+  preview: string;
 }
 
 /**
@@ -212,8 +218,8 @@ export async function pushForm(ctx: common.Context, binding: FormBinding): Promi
 }
 
 /**
- * Applies planWidgetAssignments to the stored bindings: blanks widgets whose capsule is gone and puts
- * new widget-suitable capsules on blank widgets. Returns all bindings and the formIds that changed.
+ * Applies planWidgetAssignments to the stored bindings: blanks widgets whose capsule is gone (new capsules are
+ * never put on widgets by themselves, T4-12). Returns all bindings and the formIds that changed.
  */
 function syncAssignments(ctx: common.Context): SyncResult {
   const gate = freshGate(ctx);
@@ -249,22 +255,25 @@ export async function refreshCapsuleWidgets(ctx: common.Context, capsuleId?: str
   }
 }
 
-function infoOf(b: FormBinding): WidgetInfo {
+function infoOf(ctx: common.Context, b: FormBinding): WidgetInfo {
+  const blank = b.capsuleId.length === 0;
+  const view = blank ? null : viewFor(ctx, b);
   return {
-    formId: b.formId, capsuleId: b.capsuleId.length > 0 ? b.capsuleId : null, size: SIZE_NAMES[sizeOfBinding(b)],
-    colorTag: colorTagOf(b)
+    formId: b.formId, capsuleId: blank ? null : b.capsuleId, size: SIZE_NAMES[sizeOfBinding(b)],
+    colorTag: colorTagOf(b), accent: accentFor(colorTagOf(b)), capsuleName: view !== null ? view.title : '',
+    preview: view !== null ? (view.summary ?? '') : ''
   };
 }
 
 /** Every placed Harmoniser widget, in the order they were added, with assignments brought up to date. */
 export function listWidgets(ctx: common.Context): WidgetInfo[] {
-  return syncAssignments(ctx).bindings.map((b: FormBinding) => infoOf(b));
+  return syncAssignments(ctx).bindings.map((b: FormBinding) => infoOf(ctx, b));
 }
 
 /** The first blank widget (in the order widgets were added), or null if every widget shows a capsule. */
 export function firstBlankWidget(ctx: common.Context): WidgetInfo | null {
   const blank = firstBlank(syncAssignments(ctx).bindings);
-  return blank === null ? null : infoOf(blank);
+  return blank === null ? null : infoOf(ctx, blank as FormBinding);
 }
 
 /**

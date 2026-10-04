@@ -892,21 +892,17 @@ function widgetOrder(a: WidgetBindingFact, b: WidgetBindingFact): number {
 }
 
 /**
- * Keeps widgets in step with the saved capsules:
- *  1. A widget whose capsule is no longer saved (or was removed) goes blank ("Tap to choose a capsule").
- *  2. Each new widget-suitable capsule (not seen before, not shown anywhere) fills the first blank widget,
- *     oldest new capsule first.
- * `saved` is newest first. With `seen` null (first run) every saved capsule counts as already seen, so
- * existing capsules are not pushed onto widgets the user left blank.
+ * Keeps widgets in step with the saved capsules: a widget whose capsule is no longer saved (or was removed)
+ * goes blank ("Tap to choose a capsule"). New capsules are NOT put on blank widgets (T4-12): a widget shows a
+ * capsule only when the user assigns one, or adds a widget with a pending capsule ("Add to home screen").
+ * `seen` is kept for callers; with null (first run) every saved capsule counts as seen.
  */
 export function planWidgetAssignments(bindings: WidgetBindingFact[], saved: Capsule[], seen: string[] | null,
   isRemoved: (capsuleId: string) => boolean): AssignmentPlan {
   const plan = new AssignmentPlan();
-  const alive = saved.filter((c: Capsule) => !isRemoved(c.id));
-  const aliveIds = alive.map((c: Capsule) => c.id);
+  const aliveIds = saved.filter((c: Capsule) => !isRemoved(c.id)).map((c: Capsule) => c.id);
   const known = seen ?? saved.map((c: Capsule) => c.id);
-  const sorted = bindings.slice().sort(widgetOrder);
-  sorted.forEach((b: WidgetBindingFact) => {
+  bindings.slice().sort(widgetOrder).forEach((b: WidgetBindingFact) => {
     const next: WidgetBindingFact = {
       formId: b.formId, capsuleId: b.capsuleId, wide: b.wide, addedAt: b.addedAt, colorTag: b.colorTag, size: b.size
     };
@@ -915,18 +911,6 @@ export function planWidgetAssignments(bindings: WidgetBindingFact[], saved: Caps
       plan.changed.push(next.formId);
     }
     plan.bindings.push(next);
-  });
-  const shown = plan.bindings.map((b: WidgetBindingFact) => b.capsuleId);
-  const fresh = alive.filter((c: Capsule) => !known.includes(c.id) && !shown.includes(c.id) && routeCapsule(c).widget)
-    .reverse(); // oldest new capsule first
-  fresh.forEach((c: Capsule) => {
-    const blank = plan.bindings.find((b: WidgetBindingFact) => b.capsuleId.length === 0);
-    if (blank !== undefined) {
-      blank.capsuleId = c.id;
-      if (!plan.changed.includes(blank.formId)) {
-        plan.changed.push(blank.formId);
-      }
-    }
   });
   const all = known.concat(saved.map((c: Capsule) => c.id));
   plan.seen = all.filter((id: string, i: number) => all.indexOf(id) === i && saved.some((c: Capsule) => c.id === id));

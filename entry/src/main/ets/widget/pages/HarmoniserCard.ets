@@ -237,6 +237,8 @@ struct HarmoniserCard {
           .fontColor(v.accent)
           .maxLines(1)
       }
+      // The widget's own colour (colorTag, T4-12): matches its dot in the app's widget list.
+      Circle({ width: 8, height: 8 }).fill(v.accent)
     }
     .width('100%')
     .height(28)
