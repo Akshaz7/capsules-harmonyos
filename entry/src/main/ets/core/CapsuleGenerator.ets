@@ -23,7 +23,7 @@ import { parseRequest } from './RuleParser';
 import { CapsuleModel } from './CapsuleModel';
 import { emitStage, StageListener } from './BuildStage';
 import { isNotEnglish, UNSUPPORTED_LANGUAGE_MESSAGE } from './Language';
-import { TemplateLibrary, TemplateMatch } from './templates/TemplateLibrary';
+import { ambiguousTimes, TemplateLibrary, TemplateMatch } from './templates/TemplateLibrary';
 import { MarketOptions, matchTemplateAsync } from './templates/MarketMatch';
 import { fillUnclearSlots, SlotModel } from './templates/SlotFill';
 import { RequestCache } from './templates/RequestCache';
@@ -201,7 +201,10 @@ async function generateRouted(request: string, cloud: CapsuleModel[],
     emitStage(onStage, 'validating');
     const v = validateCapsule(JSON.stringify(fromRules));
     if (v.ok) {
-      return { ok: true, capsule: v.capsule, origin: 'rules', details: [] };
+      const bare = (v.capsule?.triggers ?? []).length > 0 ? ambiguousTimes(request) : [];
+      const details: string[] = bare.length > 0 ? [`Reminder set for ${bare.join(' and ')}. ` +
+        `For the evening, say "${Number(bare[0].substring(0, 2))}pm".`] : [];
+      return { ok: true, capsule: v.capsule, origin: 'rules', details: details };
     }
     // A rule produced an invalid capsule (a bug); fall through to the models rather than return it.
   }

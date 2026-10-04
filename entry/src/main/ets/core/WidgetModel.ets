@@ -17,7 +17,7 @@ import {
   WhenComponent
 } from './CapsuleTypes';
 import { parseAction, permissionForAction, permissionForComponent } from './CapsuleValidator';
-import { routeCapsule } from './CapsuleRouter';
+import { routeCapsule, usesV1Features } from './CapsuleRouter';
 import {
   allComponents, applyActions, initialState as initialValues, isEnabled, isShown, renderTemplate, restoreState, StateValues
 } from './CapsuleProgram';
@@ -55,7 +55,7 @@ export interface CapsuleState {
 }
 
 function isV1(capsule: Capsule): boolean {
-  return capsule.schemaVersion === 1 || capsule.state !== undefined || capsule.computed !== undefined;
+  return usesV1Features(capsule); // not schemaVersion alone: a v0 capsule with time triggers keeps its v0 card
 }
 
 export function initialState(capsule: Capsule): CapsuleState {

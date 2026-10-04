@@ -24,10 +24,21 @@ const MAX_WIDGET_PARTS: number = 2;
 const CARD_TYPES: string[] = ['timer', 'counter', 'checklist', 'text', 'button', 'display'];
 const V1_INPUT_TYPES: string[] = ['number', 'input', 'list'];
 
+const V1_ONLY_TYPES: string[] = ['display', 'input', 'list', 'when', 'device'];
+
+/**
+ * True when the capsule uses v1 features a card draws differently: state, computed values, v1 components or
+ * "do"/"enabledIf" buttons. "schemaVersion": 1 alone does not count: a v0-shaped capsule that only gained time
+ * triggers (T4-16) keeps its v0 card.
+ */
+export function usesV1Features(capsule: Capsule): boolean {
+  return capsule.state !== undefined || capsule.computed !== undefined ||
+    allComponents(capsule.ui).some((c: CapsuleComponent) => V1_ONLY_TYPES.includes(c.type) || (c.type === 'button' &&
+      ((c as ButtonComponent).do !== undefined || (c as ButtonComponent).enabledIf !== undefined)));
+}
+
 function isV1(capsule: Capsule): boolean {
-  return capsule.schemaVersion === 1 || capsule.state !== undefined || capsule.computed !== undefined ||
-    allComponents(capsule.ui).some((c: CapsuleComponent) => c.type === 'button' &&
-      ((c as ButtonComponent).do !== undefined || (c as ButtonComponent).enabledIf !== undefined));
+  return usesV1Features(capsule);
 }
 
 /** What a full card cannot draw: too many lines, buttons or parts, inputs, live readings or other components. */
